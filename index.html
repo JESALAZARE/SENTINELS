@@ -427,21 +427,21 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
         <span class="sntl-eyebrow"><span class="sntl-eyebrow__tick"></span>Request a benchmark</span>
       </div>
       <h3 class="mk-modal__title">Tell us about your load.</h3>
-      <form class="mk-modal__form" onsubmit="submitModal(event)">
+      <form class="mk-modal__form" id="sntl-form" onsubmit="submitToFormspree(event)">
         <div class="mk-modal__row">
           <div class="field">
             <label for="f-company">Company</label>
-            <input id="f-company" type="text" placeholder="Acme Steel" required>
+            <input id="f-company" name="company" type="text" placeholder="Acme Steel" required>
           </div>
           <div class="field">
             <label for="f-email">Work email</label>
-            <input id="f-email" type="email" placeholder="name@company.com" required>
+            <input id="f-email" name="email" type="email" placeholder="name@company.com" required>
           </div>
         </div>
         <div class="mk-modal__row">
           <div class="field">
             <label for="f-vertical">Vertical</label>
-            <select id="f-vertical">
+            <select id="f-vertical" name="vertical">
               <option value="" disabled selected>Choose…</option>
               <option>Manufacturing</option>
               <option>Data Centers</option>
@@ -452,12 +452,12 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
           </div>
           <div class="field">
             <label for="f-gwh">Annual consumption (GWh/yr)</label>
-            <input id="f-gwh" type="number" placeholder="0">
+            <input id="f-gwh" name="consumption_gwh" type="number" placeholder="0">
           </div>
         </div>
         <div class="field">
           <label for="f-tariff">Current tariff</label>
-          <select id="f-tariff">
+          <select id="f-tariff" name="current_tariff">
             <option value="" disabled selected>Choose…</option>
             <option>CFE-GDMTH</option>
             <option>CFE-DIST</option>
@@ -467,7 +467,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
           </select>
         </div>
         <label class="checkbox-field">
-          <input type="checkbox" checked>
+          <input type="checkbox" name="digest" value="yes" checked>
           <span>Send me the monthly market intelligence digest</span>
         </label>
         <div class="mk-modal__actions">
@@ -528,10 +528,29 @@ function closeModal() {
   document.getElementById('mk-modal').setAttribute('hidden', '');
   document.body.style.overflow = '';
 }
-function submitModal(e) {
+async function submitToFormspree(e) {
   e.preventDefault();
-  document.getElementById('mk-form-view').style.display = 'none';
-  document.getElementById('mk-done-view').style.display = '';
+  const form = document.getElementById('sntl-form');
+  const btn  = form.querySelector('[type="submit"]');
+  btn.textContent = 'Sending...';
+  btn.disabled = true;
+  try {
+    const res = await fetch('https://formspree.io/f/mlgknepp', {
+      method: 'POST',
+      body: new FormData(form),
+      headers: { 'Accept': 'application/json' }
+    });
+    if (res.ok) {
+      document.getElementById('mk-form-view').style.display = 'none';
+      document.getElementById('mk-done-view').style.display = '';
+    } else {
+      btn.textContent = 'Error — try again';
+      btn.disabled = false;
+    }
+  } catch {
+    btn.textContent = 'Error — try again';
+    btn.disabled = false;
+  }
 }
 // Close modal on Escape
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
