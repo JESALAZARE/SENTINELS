@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel Energy Partners</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Libre+Baskerville:wght@700;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   SENTINEL ENERGY PARTNERS · DESIGN SYSTEM
+   Praestites Sumus — "We are the Guardians"
+   ============================================================ */
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;scroll-behavior:smooth}
+body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;line-height:1.65;color:#0B0D0F;background:#fff}
+::selection{background:#0B0D0F;color:#fff}
+
+/* ---- Tokens ---------------------------------------------- */
+:root{
+  --ink-900:#0B0D0F;--ink-800:#14171A;--ink-700:#1E2227;--ink-600:#2C3138;
+  --graphite-500:#444B53;--steel-400:#646C75;--silver-300:#8C949D;
+  --silver-200:#B4BBC2;--platinum-150:#D2D7DC;--mist-100:#E6E9EC;
+  --paper-50:#F4F5F6;--white:#FFFFFF;
+  --metal-silver:linear-gradient(150deg,#EDEFF1 0%,#C7CCD0 26%,#9AA0A7 52%,#C9CED2 74%,#E4E7E9 100%);
+  --signal-positive:#3E6B53;--signal-positive-soft:#E7EEEA;
+  --signal-negative:#8C3A36;--signal-notice:#8A6D3B;
+  --border-subtle:#E3E6E8;--border-default:#D2D7DC;
+  --border-inverse:rgba(255,255,255,0.14);
+  --font-serif:'Cormorant Garamond','Hoefler Text',Georgia,serif;
+  --font-sans:'Hanken Grotesk',system-ui,-apple-system,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+  --tracking-crest:0.34em;--tracking-wider:0.12em;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;
+  --space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;
+  --space-9:96px;--space-10:128px;--space-11:192px;
+  --radius-md:4px;--radius-lg:8px;
+  --ease-out:cubic-bezier(0.16,1,0.3,1);
+  --duration-base:200ms;--duration-slow:360ms;
+  --shadow-md:0 6px 18px rgba(11,13,15,0.08),0 2px 6px rgba(11,13,15,0.05);
+  --shadow-xl:0 36px 80px rgba(11,13,15,0.18),0 12px 28px rgba(11,13,15,0.08);
+}
+
+/* ---- Layout ---------------------------------------------- */
+.mk-wrap{max-width:1320px;margin:0 auto;padding:0 var(--space-7)}
+.mk-section{padding:var(--space-10) 0}
+.mk-section__head{max-width:760px;margin-bottom:var(--space-8)}
+.mk-section__title{font-family:var(--font-serif);font-weight:600;font-size:clamp(32px,3.5vw,48px);line-height:1.08;letter-spacing:-0.015em;margin:var(--space-4) 0 0;color:#0B0D0F}
+
+/* ---- Eyebrow --------------------------------------------- */
+.sntl-eyebrow{display:inline-flex;align-items:center;gap:var(--space-2);font-family:var(--font-sans);font-weight:600;font-size:12px;letter-spacing:var(--tracking-wider);text-transform:uppercase;color:var(--steel-400)}
+.sntl-eyebrow--dark{color:var(--silver-300)}
+.sntl-eyebrow__tick{width:22px;height:2px;background:var(--metal-silver);flex:none}
+
+/* ---- Header ---------------------------------------------- */
+.mk-header{position:sticky;top:0;z-index:100;background:rgba(11,13,15,0.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border-inverse)}
+.mk-header__inner{max-width:1320px;margin:0 auto;padding:0 var(--space-7);height:68px;display:flex;align-items:center;gap:var(--space-6)}
+.mk-header__brand{display:flex;align-items:center;gap:var(--space-3);text-decoration:none;margin-right:auto}
+.mk-header__shield{height:36px;width:auto;display:block}
+.mk-header__words{font-family:'Libre Baskerville',serif;font-weight:700;letter-spacing:0.2em;font-size:13px;color:var(--mist-100);text-transform:uppercase}
+.mk-header__nav{display:flex;gap:var(--space-6)}
+.mk-header__link{font-family:var(--font-sans);font-size:14px;font-weight:500;color:var(--silver-300);text-decoration:none;transition:color var(--duration-base)}
+.mk-header__link:hover{color:#fff}
+.mk-header__btn{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 var(--space-4);font-family:var(--font-sans);font-size:13px;font-weight:600;letter-spacing:0.02em;border:1px solid rgba(255,255,255,0.28);background:transparent;color:var(--mist-100);border-radius:var(--radius-md);cursor:pointer;transition:background var(--duration-base),border-color var(--duration-base)}
+.mk-header__btn:hover{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.45)}
+.mk-header__burger{display:none;background:none;border:0;color:var(--mist-100);width:38px;height:38px;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.mk-header__burger svg{width:22px;height:22px}
+.mk-header__mobile{display:none;flex-direction:column;padding:var(--space-3) var(--space-7) var(--space-5);background:var(--ink-900);border-top:1px solid var(--border-inverse)}
+.mk-header__mlink{padding:var(--space-3) 0;color:var(--mist-100);text-decoration:none;font-family:var(--font-sans);font-size:18px;border-bottom:1px solid var(--border-inverse)}
+
+/* ---- Hero ------------------------------------------------ */
+.mk-hero{position:relative;background:var(--ink-900);color:var(--mist-100);overflow:hidden;min-height:680px;display:flex;align-items:center}
+.mk-hero__bg{position:absolute;inset:0;background:radial-gradient(ellipse at 70% 50%,rgba(44,49,56,0.6) 0%,rgba(11,13,15,0.95) 55%)}
+.mk-hero__content{position:relative;max-width:1320px;margin:0 auto;padding:var(--space-10) var(--space-7);width:100%}
+.mk-hero__eyebrow{margin-bottom:var(--space-4)}
+.mk-hero__title{font-family:var(--font-serif);font-weight:600;font-size:clamp(38px,5.2vw,70px);line-height:1.05;letter-spacing:-0.02em;margin:var(--space-5) 0 var(--space-5);color:#fff;max-width:560px}
+.mk-hero__lede{font-family:var(--font-sans);font-size:18px;line-height:1.6;color:var(--silver-200);max-width:40ch;margin:0 0 var(--space-7)}
+.mk-hero__cta{display:flex;gap:var(--space-3);flex-wrap:wrap;margin-bottom:var(--space-7)}
+.mk-hero__motto{font-family:var(--font-serif);font-style:italic;font-size:22px;color:var(--mist-100);display:inline-flex;align-items:center;gap:var(--space-4);letter-spacing:0.03em}
+.mk-hero__motto::before{content:"";width:48px;height:2px;background:var(--metal-silver)}
+/* Geometric guardian crest background element */
+.mk-hero__crest-bg{position:absolute;right:8%;top:50%;transform:translateY(-50%);width:42%;max-width:520px;opacity:0.06;pointer-events:none}
+.mk-hero__crest-bg svg{width:100%;height:auto}
+
+/* ---- Buttons --------------------------------------------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);font-family:var(--font-sans);font-weight:600;letter-spacing:0.02em;border-radius:var(--radius-md);cursor:pointer;border:0;transition:all var(--duration-base)}
+.btn--foil{background:var(--metal-silver);color:var(--ink-900);padding:0 var(--space-7);height:52px;font-size:15px}
+.btn--foil:hover{filter:brightness(1.06)}
+.btn--ghost-inv{background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.28);padding:0 var(--space-7);height:52px;font-size:15px}
+.btn--ghost-inv:hover{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.5)}
+.btn--primary{background:var(--ink-900);color:#fff;padding:0 var(--space-6);height:44px;font-size:14px}
+.btn--primary:hover{background:var(--ink-700)}
+.btn--ghost{background:transparent;color:var(--ink-900);border:1px solid var(--border-default);padding:0 var(--space-5);height:44px;font-size:14px}
+.btn--ghost:hover{background:var(--paper-50)}
+.btn svg{width:18px;height:18px}
+
+/* ---- Services -------------------------------------------- */
+.mk-services{background:#fff}
+.mk-services__grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-4)}
+.mk-card{padding:var(--space-6);border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:#fff;position:relative}
+.mk-card--crested::before{content:"";position:absolute;top:0;left:var(--space-6);width:48px;height:2px;background:var(--metal-silver)}
+.mk-card--inverse{background:var(--ink-800);border-color:var(--border-inverse)}
+.mk-card--interactive{cursor:pointer;transition:border-color var(--duration-base),box-shadow var(--duration-base)}
+.mk-card--interactive:hover{border-color:rgba(255,255,255,0.35);box-shadow:var(--shadow-md)}
+.mk-service{display:flex;flex-direction:column;min-height:184px}
+.mk-service__n{font-family:var(--font-mono);font-size:13px;color:var(--steel-400);margin-bottom:var(--space-4)}
+.mk-service__t{font-family:var(--font-serif);font-weight:600;font-size:22px;margin:0 0 var(--space-2);color:#0B0D0F}
+.mk-service__d{font-family:var(--font-sans);font-size:13px;line-height:1.55;color:var(--graphite-500);margin:0}
+.mk-service--cta{justify-content:space-between}
+.mk-service__link{display:inline-flex;align-items:center;gap:var(--space-2);font-family:var(--font-sans);font-weight:600;font-size:13px;color:var(--mist-100);margin-top:var(--space-4);text-decoration:none}
+.mk-service__link svg{width:16px;height:16px}
+
+/* ---- Proof ----------------------------------------------- */
+.mk-proof{background:var(--ink-900);color:var(--mist-100)}
+.mk-proof__head{display:grid;grid-template-columns:1.4fr 1fr;gap:var(--space-7);align-items:end;margin-bottom:var(--space-8)}
+.mk-proof__title{font-family:var(--font-serif);font-weight:600;font-size:clamp(28px,3vw,46px);line-height:1.08;letter-spacing:-0.015em;margin:var(--space-4) 0 0;color:#fff}
+.mk-proof__note{font-family:var(--font-sans);font-size:16px;line-height:1.6;color:var(--silver-200);margin:0}
+.mk-proof__note strong{color:#fff;font-weight:600}
+.mk-chart{border:1px solid var(--border-inverse);border-radius:var(--radius-md);padding:var(--space-6);background:var(--ink-800)}
+.mk-chart__legend{display:flex;align-items:center;gap:var(--space-5);margin-bottom:var(--space-5)}
+.mk-chart__key{display:inline-flex;align-items:center;gap:var(--space-2);font-family:var(--font-sans);font-size:12px;color:var(--silver-200)}
+.mk-chart__sw{width:12px;height:12px;border-radius:2px;display:inline-block}
+.mk-chart__sw--cfe{background:var(--steel-400)}
+.mk-chart__sw--mem{background:linear-gradient(135deg,#EDEFF1,#C7CCD0)}
+.mk-chart__axislabel{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--steel-400)}
+.mk-chart__plot{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--space-3);height:220px;align-items:end}
+.mk-chart__col{display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end}
+.mk-chart__bars{display:flex;gap:3px;align-items:flex-end;height:100%;width:100%;justify-content:center}
+.mk-chart__bar{width:38%;border-radius:1px 1px 0 0}
+.mk-chart__bar--cfe{background:var(--steel-400)}
+.mk-chart__bar--mem{background:linear-gradient(to top,#C7CCD0,#EDEFF1)}
+.mk-chart__x{font-family:var(--font-mono);font-size:10px;color:var(--steel-400);margin-top:var(--space-2)}
+.mk-proof__stats{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-6);margin-top:var(--space-8)}
+.sntl-stat{display:flex;flex-direction:column;gap:var(--space-2);position:relative;padding-top:var(--space-4)}
+.sntl-stat::before{content:"";position:absolute;top:0;left:0;width:48px;height:2px;background:var(--metal-silver)}
+.sntl-stat__label{font-family:var(--font-sans);font-weight:600;font-size:11px;letter-spacing:var(--tracking-wider);text-transform:uppercase;color:var(--silver-300)}
+.sntl-stat__value{font-family:var(--font-mono);font-weight:500;font-size:44px;line-height:1;letter-spacing:-0.01em;color:var(--mist-100);display:flex;align-items:baseline;gap:var(--space-2)}
+.sntl-stat__unit{font-size:18px;font-weight:400;color:var(--silver-300)}
+.sntl-stat__caption{font-family:var(--font-sans);font-size:12px;color:var(--steel-400)}
+
+/* ---- Clients --------------------------------------------- */
+.mk-clients__grid{display:grid;grid-template-columns:1fr 1.05fr;gap:var(--space-9);align-items:center}
+.mk-clients__media{border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--border-subtle);aspect-ratio:4/5;background:var(--graphite-500);display:flex;align-items:center;justify-content:center}
+.mk-clients__media svg{opacity:0.25;width:60%}
+.mk-clients__lede{font-family:var(--font-sans);font-size:16px;line-height:1.6;color:var(--graphite-500);max-width:48ch;margin:var(--space-5) 0 var(--space-6)}
+.mk-clients__list{list-style:none;margin:0 0 var(--space-6);padding:0}
+.mk-client{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-4);padding:var(--space-4) 0;border-top:1px solid var(--border-subtle)}
+.mk-client:last-child{border-bottom:1px solid var(--border-subtle)}
+.mk-client__t{font-family:var(--font-serif);font-weight:600;font-size:22px;color:#0B0D0F}
+.mk-client__d{font-family:var(--font-sans);font-size:13px;color:var(--steel-400);text-align:right}
+.mk-clients__tags{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;height:28px;padding:0 var(--space-3);font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:0.04em;border-radius:var(--radius-md);border:1px solid var(--border-default);color:var(--graphite-500);background:transparent}
+
+/* ---- Footer ---------------------------------------------- */
+.mk-footer{background:var(--ink-900);color:var(--mist-100);padding:var(--space-9) 0 var(--space-6)}
+.mk-footer__cta{display:flex;align-items:center;justify-content:space-between;gap:var(--space-6);padding-bottom:var(--space-8);border-bottom:1px solid var(--border-inverse);flex-wrap:wrap}
+.mk-footer__title{font-family:var(--font-serif);font-weight:600;font-size:clamp(28px,3vw,46px);margin:0;color:#fff;letter-spacing:-0.015em}
+.mk-footer__sub{font-family:var(--font-sans);color:var(--silver-200);margin:var(--space-2) 0 0}
+.mk-footer__grid{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:var(--space-6);padding:var(--space-8) 0}
+.mk-footer__col{display:flex;flex-direction:column;gap:var(--space-2)}
+.mk-footer__h{font-family:var(--font-sans);font-weight:700;font-size:11px;letter-spacing:var(--tracking-wider);text-transform:uppercase;color:var(--silver-300);margin-bottom:var(--space-1)}
+.mk-footer__col a,.mk-footer__col span{font-family:var(--font-sans);font-size:14px;color:var(--silver-200);text-decoration:none}
+.mk-footer__col a:hover{color:#fff}
+.mk-footer__base{display:flex;justify-content:space-between;align-items:center;padding-top:var(--space-5);border-top:1px solid var(--border-inverse);font-family:var(--font-sans);font-size:12px;color:var(--steel-400)}
+.u-motto{font-family:var(--font-serif);font-style:italic;letter-spacing:0.05em}
+/* Crest stacked in footer */
+.sntl-crest-stacked{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-3)}
+.sntl-crest-stacked__shield{width:64px;height:auto}
+.sntl-crest-stacked__words{font-family:var(--font-serif);font-weight:500;text-transform:uppercase;letter-spacing:var(--tracking-crest);line-height:1.18;color:var(--mist-100);font-size:16px}
+.sntl-crest-stacked__rule{width:44px;height:2px;background:var(--metal-silver);margin:var(--space-1) 0}
+.sntl-crest-stacked__motto{font-family:var(--font-serif);font-style:italic;font-size:13px;color:var(--silver-300);letter-spacing:0.05em}
+
+/* ---- Modal ----------------------------------------------- */
+.mk-modal{position:fixed;inset:0;z-index:1100;background:rgba(11,13,15,0.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:var(--space-5);animation:mk-fade 200ms ease}
+.mk-modal[hidden]{display:none}
+.mk-modal__panel{position:relative;width:100%;max-width:560px;background:#fff;border-radius:var(--radius-md);box-shadow:var(--shadow-xl);padding:var(--space-8);animation:mk-rise 360ms var(--ease-out)}
+.mk-modal__close{position:absolute;top:var(--space-4);right:var(--space-4);background:none;border:0;color:var(--steel-400);cursor:pointer;width:32px;height:32px;display:flex;align-items:center;justify-content:center;padding:0;border-radius:var(--radius-md);transition:color var(--duration-base)}
+.mk-modal__close:hover{color:var(--ink-900)}
+.mk-modal__close svg{width:20px;height:20px}
+.mk-modal__eyebrow{margin-bottom:var(--space-2)}
+.mk-modal__title{font-family:var(--font-serif);font-weight:600;font-size:28px;margin:var(--space-2) 0 var(--space-6)}
+.mk-modal__form{display:flex;flex-direction:column;gap:var(--space-4)}
+.mk-modal__row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)}
+.mk-modal__actions{display:flex;justify-content:flex-end;gap:var(--space-3);margin-top:var(--space-2)}
+.mk-modal__done{text-align:center;padding:var(--space-4) 0}
+.mk-modal__done .sntl-crest-stacked{align-items:center;margin-bottom:var(--space-4)}
+.mk-modal__sub{font-family:var(--font-sans);color:var(--graphite-500);max-width:40ch;margin:0 auto var(--space-6)}
+/* Form controls */
+.field{display:flex;flex-direction:column;gap:var(--space-2)}
+.field label{font-family:var(--font-sans);font-size:13px;font-weight:600;color:var(--ink-800)}
+.field input,.field select{height:40px;padding:0 var(--space-4);border:1px solid var(--border-default);border-radius:var(--radius-md);font-family:var(--font-sans);font-size:14px;color:var(--ink-900);background:#fff;outline:none;transition:border-color var(--duration-base)}
+.field input:focus,.field select:focus{border-color:var(--ink-900)}
+.checkbox-field{display:flex;align-items:center;gap:var(--space-3);cursor:pointer}
+.checkbox-field input{width:16px;height:16px;accent-color:var(--ink-900);cursor:pointer}
+.checkbox-field span{font-family:var(--font-sans);font-size:13px;color:var(--graphite-500)}
+
+@keyframes mk-fade{from{opacity:0}to{opacity:1}}
+@keyframes mk-rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+/* ---- Responsive ------------------------------------------ */
+@media(max-width:980px){
+  .mk-header__nav{display:none}
+  .mk-header__burger{display:inline-flex}
+  .mk-services__grid{grid-template-columns:repeat(2,1fr)}
+  .mk-proof__stats{grid-template-columns:repeat(2,1fr)}
+  .mk-proof__head{grid-template-columns:1fr}
+  .mk-footer__grid{grid-template-columns:1fr 1fr}
+  .mk-clients__grid{grid-template-columns:1fr;gap:var(--space-7)}
+  .mk-clients__media{display:none}
+}
+@media(max-width:600px){
+  .mk-wrap{padding:0 var(--space-5)}
+  .mk-services__grid{grid-template-columns:1fr}
+  .mk-modal__row{grid-template-columns:1fr}
+  .mk-proof__stats{grid-template-columns:1fr}
+  .mk-footer__grid{grid-template-columns:1fr}
+  .mk-footer__cta{flex-direction:column;align-items:flex-start}
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<header class="mk-header" id="mk-header">
+  <div class="mk-header__inner">
+    <a class="mk-header__brand" href="#top" onclick="scrollTo({top:0,behavior:'smooth'});return false">
+      <!-- Shield crest mark (SVG inline) -->
+      <svg class="mk-header__shield" viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M24 2L44 10V28C44 40 34 50 24 54C14 50 4 40 4 28V10L24 2Z" stroke="#C9CED2" stroke-width="2.5" stroke-linejoin="round"/>
+        <path d="M24 18V38M16 26H32" stroke="#8C949D" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span class="mk-header__words">Sentinel Energy Partners</span>
+    </a>
+    <nav class="mk-header__nav" aria-label="Primary">
+      <a class="mk-header__link" href="#services" onclick="mkNav('services');return false">Services</a>
+      <a class="mk-header__link" href="#proof" onclick="mkNav('proof');return false">Benchmarking</a>
+      <a class="mk-header__link" href="#clients" onclick="mkNav('clients');return false">Clients</a>
+      <a class="mk-header__link" href="#about" onclick="mkNav('about');return false">About</a>
+    </nav>
+    <div class="mk-header__actions">
+      <button class="mk-header__btn" onclick="openModal()">Become a client</button>
+      <button class="mk-header__burger" aria-label="Toggle menu" onclick="toggleMobile()" aria-expanded="false" id="mk-burger">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="mk-header__mobile" id="mk-mobile" style="display:none">
+    <a class="mk-header__mlink" href="#services" onclick="mkNav('services');closeMobile();return false">Services</a>
+    <a class="mk-header__mlink" href="#proof" onclick="mkNav('proof');closeMobile();return false">Benchmarking</a>
+    <a class="mk-header__mlink" href="#clients" onclick="mkNav('clients');closeMobile();return false">Clients</a>
+    <a class="mk-header__mlink" href="#about" onclick="mkNav('about');closeMobile();return false">About</a>
+  </div>
+</header>
+
+<!-- ============================================================
+     HERO
+     ============================================================ -->
+<section class="mk-hero" id="top">
+  <div class="mk-hero__bg"></div>
+  <!-- Decorative background crest -->
+  <div class="mk-hero__crest-bg" aria-hidden="true">
+    <svg viewBox="0 0 400 460" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M200 20L370 85V230C370 340 290 420 200 450C110 420 30 340 30 230V85L200 20Z" stroke="white" stroke-width="8" stroke-linejoin="round"/>
+      <path d="M200 120V340M120 220H280" stroke="white" stroke-width="10" stroke-linecap="round"/>
+      <circle cx="200" cy="220" r="60" stroke="white" stroke-width="5" opacity="0.5"/>
+      <path d="M200 40L355 100V225C355 330 278 408 200 436C122 408 45 330 45 225V100L200 40Z" stroke="white" stroke-width="3" stroke-linejoin="round" opacity="0.4"/>
+    </svg>
+  </div>
+  <div class="mk-hero__content">
+    <div class="mk-hero__eyebrow">
+      <span class="sntl-eyebrow sntl-eyebrow--dark">
+        <span class="sntl-eyebrow__tick"></span>
+        Premium Energy Procurement
+      </span>
+    </div>
+    <h1 class="mk-hero__title">We are the guardians of every energy decision</h1>
+    <p class="mk-hero__lede">Energy procurement and market intelligence for industrial consumers, utilities and private funds. We simplify a fragmented market into measurable savings and managed risk.</p>
+    <div class="mk-hero__cta">
+      <button class="btn btn--foil" onclick="openModal()">Become a client</button>
+      <button class="btn btn--ghost-inv" onclick="mkNav('services')">
+        Explore services
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+      </button>
+    </div>
+    <div class="mk-hero__motto">Praestites Sumus</div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SERVICES
+     ============================================================ -->
+<section class="mk-section mk-services" id="services">
+  <div class="mk-wrap">
+    <div class="mk-section__head">
+      <span class="sntl-eyebrow"><span class="sntl-eyebrow__tick"></span>Our Services</span>
+      <h2 class="mk-section__title">Seven disciplines, one mandate —<br>procure energy with confidence.</h2>
+    </div>
+    <div class="mk-services__grid">
+      <div class="mk-card mk-card--crested mk-service">
+        <div class="mk-service__n">01</div>
+        <h3 class="mk-service__t">PPA Origination</h3>
+        <p class="mk-service__d">Power Purchase Agreement structuring, origination and counterparty matching.</p>
+      </div>
+      <div class="mk-card mk-card--crested mk-service">
+        <div class="mk-service__n">02</div>
+        <h3 class="mk-service__t">Energy Strategy</h3>
+        <p class="mk-service__d">A roadmap from current contract to optimised, lower-risk supply.</p>
+      </div>
+      <div class="mk-card mk-card--crested mk-service">
+        <div class="mk-service__n">03</div>
+        <h3 class="mk-service__t">Market Intelligence</h3>
+        <p class="mk-service__d">Benchmarks and forward views across the Mexican wholesale market.</p>
+      </div>
+      <div class="mk-card mk-card--crested mk-service">
+        <div class="mk-service__n">04</div>
+        <h3 class="mk-service__t">Contract Advisory</h3>
+        <p class="mk-service__d">Term sheets, hedges and clauses read with an operator's eye.</p>
+      </div>
+      <div class="mk-card mk-card--crested mk-service">
+        <div class="mk-service__n">05</div>
+        <h3 class="mk-service__t">Procurement Process</h3>
+        <p class="mk-service__d">We run the full procurement cycle end to end on your behalf.</p>
+      </div>
+      <div class="mk-card mk-card--crested mk-service">
+        <div class="mk-service__n">06</div>
+        <h3 class="mk-service__t">Price Benchmarking</h3>
+        <p class="mk-service__d">Your rate set against AVG MEM and CFE tariffs, monthly.</p>
+      </div>
+      <div class="mk-card mk-card--crested mk-service">
+        <div class="mk-service__n">07</div>
+        <h3 class="mk-service__t">Permit Support</h3>
+        <p class="mk-service__d">CENACE, CFE and CNE permitting, applications and follow-up.</p>
+      </div>
+      <div class="mk-card mk-card--inverse mk-card--interactive mk-service mk-service--cta" onclick="openModal()" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openModal()">
+        <h3 class="mk-service__t" style="color:var(--mist-100)">Not sure where to start?</h3>
+        <p class="mk-service__d" style="color:var(--silver-300)">Begin with a complimentary load analysis and benchmark.</p>
+        <span class="mk-service__link">Request a benchmark
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+        </span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     PROOF — Benchmarking chart + stats
+     ============================================================ -->
+<section class="mk-section mk-proof" id="proof">
+  <div class="mk-wrap">
+    <div class="mk-proof__head">
+      <div>
+        <span class="sntl-eyebrow sntl-eyebrow--dark"><span class="sntl-eyebrow__tick"></span>Sentinel Benchmarking</span>
+        <h2 class="mk-proof__title">A measurable gap between<br>CFE tariffs and the market.</h2>
+      </div>
+      <p class="mk-proof__note">Our benchmarking sets the AVG MEM qualified-user rate in Monterrey roughly <strong>12–15% below</strong> CFE-GDMTH Golfo Norte and Golfo Centro.</p>
+    </div>
+    <div class="mk-chart">
+      <div class="mk-chart__legend">
+        <span class="mk-chart__key"><i class="mk-chart__sw mk-chart__sw--cfe"></i>CFE-GDMTH</span>
+        <span class="mk-chart__key"><i class="mk-chart__sw mk-chart__sw--mem"></i>Sentinel · AVG MEM</span>
+        <span class="mk-chart__axislabel">MXN/kWh</span>
+      </div>
+      <div class="mk-chart__plot" id="mk-chart-plot">
+        <!-- Rendered by JS below -->
+      </div>
+    </div>
+    <div class="mk-proof__stats">
+      <div class="sntl-stat">
+        <div class="sntl-stat__label">Avg. Savings</div>
+        <div class="sntl-stat__value">12<span class="sntl-stat__unit">–15%</span></div>
+        <div class="sntl-stat__caption">vs. CFE-GDMTH, Monterrey</div>
+      </div>
+      <div class="sntl-stat">
+        <div class="sntl-stat__label">Clients Served</div>
+        <div class="sntl-stat__value">40<span class="sntl-stat__unit">+</span></div>
+        <div class="sntl-stat__caption">Industrial consumers</div>
+      </div>
+      <div class="sntl-stat">
+        <div class="sntl-stat__label">GWh Managed</div>
+        <div class="sntl-stat__value">1.2<span class="sntl-stat__unit">TWh</span></div>
+        <div class="sntl-stat__caption">Annual energy volume</div>
+      </div>
+      <div class="sntl-stat">
+        <div class="sntl-stat__label">PPAs Originated</div>
+        <div class="sntl-stat__value">18<span class="sntl-stat__unit"></span></div>
+        <div class="sntl-stat__caption">Long-term agreements</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CLIENTS
+     ============================================================ -->
+<section class="mk-section mk-clients" id="clients">
+  <div class="mk-wrap mk-clients__grid">
+    <div class="mk-clients__media" aria-hidden="true">
+      <!-- Industrial abstract SVG placeholder -->
+      <svg viewBox="0 0 300 380" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="300" height="380" fill="#2C3138"/>
+        <rect x="40" y="200" width="30" height="140" fill="#444B53"/>
+        <rect x="80" y="160" width="30" height="180" fill="#646C75"/>
+        <rect x="120" y="220" width="30" height="120" fill="#444B53"/>
+        <rect x="160" y="140" width="30" height="200" fill="#8C949D" opacity="0.7"/>
+        <rect x="200" y="180" width="30" height="160" fill="#646C75"/>
+        <rect x="240" y="120" width="30" height="220" fill="#8C949D" opacity="0.5"/>
+        <path d="M0 280 Q75 240 150 260 Q225 280 300 250" stroke="#B4BBC2" stroke-width="1.5" fill="none" opacity="0.4"/>
+        <circle cx="150" cy="80" r="30" stroke="#8C949D" stroke-width="2" fill="none" opacity="0.4"/>
+        <path d="M150 50 L150 20 M150 110 L150 140 M120 80 L90 80 M180 80 L210 80" stroke="#8C949D" stroke-width="2" opacity="0.3"/>
+      </svg>
+    </div>
+    <div class="mk-clients__body">
+      <span class="sntl-eyebrow"><span class="sntl-eyebrow__tick"></span>Our Clients</span>
+      <h2 class="mk-section__title">We work exclusively with<br>industrial energy consumers.</h2>
+      <p class="mk-clients__lede">Large, continuous loads where a fraction of a peso per kilowatt-hour compounds into millions. Our primary verticals:</p>
+      <ul class="mk-clients__list">
+        <li class="mk-client">
+          <span class="mk-client__t">Manufacturing</span>
+          <span class="mk-client__d">Steel · chemicals · cement · automotive</span>
+        </li>
+        <li class="mk-client">
+          <span class="mk-client__t">Data Centers</span>
+          <span class="mk-client__d">Hyperscale & colocation computing</span>
+        </li>
+        <li class="mk-client">
+          <span class="mk-client__t">Food & Beverage</span>
+          <span class="mk-client__d">Process heat and continuous load</span>
+        </li>
+        <li class="mk-client">
+          <span class="mk-client__t">Chemicals</span>
+          <span class="mk-client__d">Energy-intensive industrial processes</span>
+        </li>
+      </ul>
+      <div class="mk-clients__tags">
+        <span class="badge">CENACE</span>
+        <span class="badge">CFE</span>
+        <span class="badge">CNE</span>
+        <span class="badge">MEM</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
+<footer class="mk-footer" id="about">
+  <div class="mk-wrap">
+    <div class="mk-footer__cta">
+      <div>
+        <h2 class="mk-footer__title">Begin with a benchmark.</h2>
+        <p class="mk-footer__sub">A complimentary load analysis and rate comparison — no obligation.</p>
+      </div>
+      <button class="btn btn--foil" onclick="openModal()">Speak with an advisor</button>
+    </div>
+    <div class="mk-footer__grid">
+      <div class="mk-footer__brand">
+        <div class="sntl-crest-stacked">
+          <svg class="sntl-crest-stacked__shield" viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Sentinel crest">
+            <path d="M24 2L44 10V28C44 40 34 50 24 54C14 50 4 40 4 28V10L24 2Z" stroke="#C9CED2" stroke-width="2.5" stroke-linejoin="round"/>
+            <path d="M24 18V38M16 26H32" stroke="#8C949D" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <div class="sntl-crest-stacked__words">Sentinel<br>Energy<br>Partners</div>
+          <div class="sntl-crest-stacked__rule"></div>
+          <div class="sntl-crest-stacked__motto">Praestites Sumus</div>
+        </div>
+      </div>
+      <div class="mk-footer__col">
+        <div class="mk-footer__h">Contact</div>
+        <a href="mailto:contacto@sentinels.com.mx">contacto@sentinels.com.mx</a>
+        <a href="https://sentinels.com.mx">sentinels.com.mx</a>
+      </div>
+      <div class="mk-footer__col">
+        <div class="mk-footer__h">Practice</div>
+        <a href="#services" onclick="mkNav('services');return false">Services</a>
+        <a href="#proof" onclick="mkNav('proof');return false">Benchmarking</a>
+        <a href="#clients" onclick="mkNav('clients');return false">Clients</a>
+      </div>
+      <div class="mk-footer__col">
+        <div class="mk-footer__h">Markets</div>
+        <span>MEM · Wholesale</span>
+        <span>CFE Tariffs</span>
+        <span>PPA Origination</span>
+      </div>
+    </div>
+    <div class="mk-footer__base">
+      <span>© 2026 Sentinel Energy Partners</span>
+      <span class="u-motto">Praestites Sumus</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============================================================
+     CONTACT MODAL
+     ============================================================ -->
+<div class="mk-modal" id="mk-modal" hidden onmousedown="if(event.target===this)closeModal()">
+  <div class="mk-modal__panel" onmousedown="event.stopPropagation()">
+    <button class="mk-modal__close" aria-label="Close" onclick="closeModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <!-- Request form -->
+    <div id="mk-form-view">
+      <div class="mk-modal__eyebrow">
+        <span class="sntl-eyebrow"><span class="sntl-eyebrow__tick"></span>Request a benchmark</span>
+      </div>
+      <h3 class="mk-modal__title">Tell us about your load.</h3>
+      <form class="mk-modal__form" onsubmit="submitModal(event)">
+        <div class="mk-modal__row">
+          <div class="field">
+            <label for="f-company">Company</label>
+            <input id="f-company" type="text" placeholder="Acme Steel" required>
+          </div>
+          <div class="field">
+            <label for="f-email">Work email</label>
+            <input id="f-email" type="email" placeholder="name@company.com" required>
+          </div>
+        </div>
+        <div class="mk-modal__row">
+          <div class="field">
+            <label for="f-vertical">Vertical</label>
+            <select id="f-vertical">
+              <option value="" disabled selected>Choose…</option>
+              <option>Manufacturing</option>
+              <option>Data Centers</option>
+              <option>Food & Beverage</option>
+              <option>Chemicals</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-gwh">Annual consumption (GWh/yr)</label>
+            <input id="f-gwh" type="number" placeholder="0">
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-tariff">Current tariff</label>
+          <select id="f-tariff">
+            <option value="" disabled selected>Choose…</option>
+            <option>CFE-GDMTH</option>
+            <option>CFE-DIST</option>
+            <option>MEM Qualified User</option>
+            <option>Not sure</option>
+          </select>
+        </div>
+        <label class="checkbox-field">
+          <input type="checkbox" checked>
+          <span>Send me the monthly market intelligence digest</span>
+        </label>
+        <div class="mk-modal__actions">
+          <button type="button" class="btn btn--ghost" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn btn--primary">Request benchmark</button>
+        </div>
+      </form>
+    </div>
+    <!-- Success state -->
+    <div id="mk-done-view" style="display:none" class="mk-modal__done">
+      <div class="sntl-crest-stacked" style="align-items:center">
+        <svg style="width:64px;height:auto" viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M24 2L44 10V28C44 40 34 50 24 54C14 50 4 40 4 28V10L24 2Z" stroke="#444B53" stroke-width="2.5" stroke-linejoin="round"/>
+          <path d="M16 27L21 32L32 21" stroke="#3E6B53" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="sntl-crest-stacked__words" style="color:#0B0D0F">Sentinel<br>Energy<br>Partners</div>
+      </div>
+      <h3 class="mk-modal__title">Request received.</h3>
+      <p class="mk-modal__sub">An advisor will reply within one business day with your benchmark scope.</p>
+      <button class="btn btn--primary" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     JAVASCRIPT
+     ============================================================ -->
+<script>
+// ---- Navigation ----
+function mkNav(id) {
+  if (id === 'top') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  const el = document.getElementById(id);
+  if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 64, behavior: 'smooth' });
+}
+
+// ---- Mobile menu ----
+function toggleMobile() {
+  const m = document.getElementById('mk-mobile');
+  const b = document.getElementById('mk-burger');
+  const open = m.style.display === 'flex';
+  m.style.display = open ? 'none' : 'flex';
+  b.setAttribute('aria-expanded', String(!open));
+}
+function closeMobile() {
+  document.getElementById('mk-mobile').style.display = 'none';
+  document.getElementById('mk-burger').setAttribute('aria-expanded', 'false');
+}
+
+// ---- Modal ----
+function openModal() {
+  const modal = document.getElementById('mk-modal');
+  document.getElementById('mk-form-view').style.display = '';
+  document.getElementById('mk-done-view').style.display = 'none';
+  modal.removeAttribute('hidden');
+  document.body.style.overflow = 'hidden';
+  // reset form
+  const form = modal.querySelector('form');
+  if (form) form.reset();
+}
+function closeModal() {
+  document.getElementById('mk-modal').setAttribute('hidden', '');
+  document.body.style.overflow = '';
+}
+function submitModal(e) {
+  e.preventDefault();
+  document.getElementById('mk-form-view').style.display = 'none';
+  document.getElementById('mk-done-view').style.display = '';
+}
+// Close modal on Escape
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+// ---- Chart ----
+(function renderChart() {
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const CFE =   [2.10,2.05,2.12,2.20,2.28,2.34,2.30,2.26,2.22,2.16,2.12,2.18];
+  const MEM =   [1.80,1.74,1.79,1.86,1.95,2.00,1.97,1.92,1.88,1.83,1.80,1.86];
+  const MAX = 2.5;
+  const plot = document.getElementById('mk-chart-plot');
+  if (!plot) return;
+  plot.innerHTML = MONTHS.map((m, i) => `
+    <div class="mk-chart__col">
+      <div class="mk-chart__bars">
+        <div class="mk-chart__bar mk-chart__bar--cfe" style="height:${(CFE[i]/MAX*100).toFixed(1)}%"></div>
+        <div class="mk-chart__bar mk-chart__bar--mem" style="height:${(MEM[i]/MAX*100).toFixed(1)}%"></div>
+      </div>
+      <div class="mk-chart__x">${m}</div>
+    </div>
+  `).join('');
+})();
+</script>
+</body>
+</html>
