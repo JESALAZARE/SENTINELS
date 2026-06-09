@@ -63,8 +63,8 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
 .mk-header__nav{display:flex;gap:var(--space-6)}
 .mk-header__link{font-family:var(--font-sans);font-size:14px;font-weight:500;color:var(--silver-300);text-decoration:none;transition:color var(--duration-base)}
 .mk-header__link:hover{color:#fff}
-.mk-header__btn{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 var(--space-4);font-family:var(--font-sans);font-size:13px;font-weight:600;letter-spacing:0.02em;border:1px solid rgba(255,255,255,0.28);background:transparent;color:var(--mist-100);border-radius:var(--radius-md);cursor:pointer;transition:background var(--duration-base),border-color var(--duration-base)}
-.mk-header__btn:hover{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.45)}
+.mk-header__btn{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 var(--space-5);font-family:var(--font-sans);font-size:13px;font-weight:600;letter-spacing:0.02em;border:0;background:var(--metal-silver);color:var(--ink-900);border-radius:var(--radius-md);cursor:pointer;transition:filter var(--duration-base)}
+.mk-header__btn:hover{filter:brightness(1.06)}
 .mk-header__burger{display:none;background:none;border:0;color:var(--mist-100);width:38px;height:38px;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .mk-header__burger svg{width:22px;height:22px}
 .mk-header__mobile{display:none;flex-direction:column;padding:var(--space-3) var(--space-7) var(--space-5);background:var(--ink-900);border-top:1px solid var(--border-inverse)}
@@ -169,7 +169,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
 .mk-footer__base{display:flex;justify-content:space-between;align-items:center;padding-top:var(--space-5);border-top:1px solid var(--border-inverse);font-family:var(--font-sans);font-size:12px;color:var(--steel-400)}
 .u-motto{font-family:var(--font-serif);font-style:italic;letter-spacing:0.05em}
 /* Crest stacked in footer */
-.sntl-crest-stacked{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-3)}
+.sntl-crest-stacked{display:flex;flex-direction:column;align-items:center;text-align:center;gap:var(--space-3)}
 .sntl-crest-stacked__shield{width:64px;height:auto}
 .sntl-crest-stacked__words{font-family:var(--font-serif);font-weight:500;text-transform:uppercase;letter-spacing:var(--tracking-crest);line-height:1.18;color:var(--mist-100);font-size:16px}
 .sntl-crest-stacked__rule{width:44px;height:2px;background:var(--metal-silver);margin:var(--space-1) 0}
@@ -391,7 +391,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
       </div>
       <div class="mk-footer__col">
         <div class="mk-footer__h">Contact</div>
-        <a href="mailto:contacto@sentinels.com.mx">contacto@sentinels.com.mx</a>
+        <a href="/cdn-cgi/l/email-protection#22414d4c564341564d6251474c564b4c474e510c414d4f0c4f5a"><span class="__cf_email__" data-cfemail="0a6965647e6b697e654a796f647e63646f667924696567246772">[email&#160;protected]</span></a>
         <a href="https://sentinels.com.mx">sentinels.com.mx</a>
       </div>
       <div class="mk-footer__col">
@@ -492,7 +492,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
 <!-- ============================================================
      JAVASCRIPT
      ============================================================ -->
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ---- Navigation ----
 function mkNav(id) {
   if (id === 'top') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
