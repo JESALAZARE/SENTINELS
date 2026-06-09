@@ -400,7 +400,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
       </div>
       <div class="mk-footer__col">
         <div class="mk-footer__h">Contact</div>
-        <a href="/cdn-cgi/l/email-protection#b6d5d9d8c2d7d5c2d9f6c5d3d8c2dfd8d3dac598d5d9db98dbce"><span class="__cf_email__" data-cfemail="a7c4c8c9d3c6c4d3c8e7d4c2c9d3cec9c2cbd489c4c8ca89cadf">[email&#160;protected]</span></a>
+        <a id="sntl-contact-email" href="#" style="font-family:var(--font-sans);font-size:14px;color:var(--silver-200);text-decoration:none"></a>
         <a href="https://sentinels.com.mx">sentinels.com.mx</a>
       </div>
       <div class="mk-footer__col">
@@ -501,7 +501,13 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
 <!-- ============================================================
      JAVASCRIPT
      ============================================================ -->
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<script>
+// ---- Render contact email (bypass any proxy obfuscation) ----
+(function(){
+  var u='contacto',d='sentinels.com.mx',a=u+'@'+d;
+  var el=document.getElementById('sntl-contact-email');
+  if(el){el.href='mailto:'+a;el.textContent=a;}
+})();
 // ---- Navigation ----
 function mkNav(id) {
   if (id === 'top') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
