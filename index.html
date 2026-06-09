@@ -1,3 +1,5 @@
+<!-- @dsCard group="Marketing" viewport="1280x900" name="Sentinels — website" subtitle="Homepage · hero, services, clients, intake" -->
+<!-- @startingPoint section="Marketing" subtitle="Sentinels marketing homepage — full interactive recreation" viewport="1280x900" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -37,6 +39,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
   --space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;
   --space-9:96px;--space-10:128px;--space-11:192px;
   --radius-md:4px;--radius-lg:8px;
+  --metal-gold:linear-gradient(150deg,#F0E080 0%,#D4A832 26%,#9E7B18 52%,#C89D2A 74%,#EAD472 100%);
   --ease-out:cubic-bezier(0.16,1,0.3,1);
   --duration-base:200ms;--duration-slow:360ms;
   --shadow-md:0 6px 18px rgba(11,13,15,0.08),0 2px 6px rgba(11,13,15,0.05);
@@ -63,8 +66,8 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
 .mk-header__nav{display:flex;gap:var(--space-6)}
 .mk-header__link{font-family:var(--font-sans);font-size:14px;font-weight:500;color:var(--silver-300);text-decoration:none;transition:color var(--duration-base)}
 .mk-header__link:hover{color:#fff}
-.mk-header__btn{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 var(--space-5);font-family:var(--font-sans);font-size:13px;font-weight:600;letter-spacing:0.02em;border:0;background:var(--metal-silver);color:var(--ink-900);border-radius:var(--radius-md);cursor:pointer;transition:filter var(--duration-base)}
-.mk-header__btn:hover{filter:brightness(1.06)}
+.mk-header__btn{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 var(--space-5);font-family:var(--font-sans);font-size:13px;font-weight:600;letter-spacing:0.02em;background:var(--metal-silver);color:var(--ink-900);border:none;border-radius:var(--radius-md);cursor:pointer;transition:filter var(--duration-base)}
+.mk-header__btn:hover{filter:brightness(1.07)}
 .mk-header__burger{display:none;background:none;border:0;color:var(--mist-100);width:38px;height:38px;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .mk-header__burger svg{width:22px;height:22px}
 .mk-header__mobile{display:none;flex-direction:column;padding:var(--space-3) var(--space-7) var(--space-5);background:var(--ink-900);border-top:1px solid var(--border-inverse)}
@@ -95,6 +98,9 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
 .btn--ghost{background:transparent;color:var(--ink-900);border:1px solid var(--border-default);padding:0 var(--space-5);height:44px;font-size:14px}
 .btn--ghost:hover{background:var(--paper-50)}
 .btn svg{width:18px;height:18px}
+.btn--gold{background:var(--metal-gold);color:#1C1200;padding:0 var(--space-7);height:52px;font-size:15px}
+.btn--gold:hover{filter:brightness(1.07)}
+.btn--gold-sm{background:var(--metal-gold);color:#1C1200;padding:0 var(--space-5);height:36px;font-size:13px;font-weight:600;border-radius:var(--radius-md);display:inline-flex;align-items:center;text-decoration:none;letter-spacing:0.02em}
 
 /* ---- Services -------------------------------------------- */
 .mk-services{background:#fff}
@@ -169,7 +175,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
 .mk-footer__base{display:flex;justify-content:space-between;align-items:center;padding-top:var(--space-5);border-top:1px solid var(--border-inverse);font-family:var(--font-sans);font-size:12px;color:var(--steel-400)}
 .u-motto{font-family:var(--font-serif);font-style:italic;letter-spacing:0.05em}
 /* Crest stacked in footer */
-.sntl-crest-stacked{display:flex;flex-direction:column;align-items:center;text-align:center;gap:var(--space-3)}
+.sntl-crest-stacked{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-3)}
 .sntl-crest-stacked__shield{width:64px;height:auto}
 .sntl-crest-stacked__words{font-family:var(--font-serif);font-weight:500;text-transform:uppercase;letter-spacing:var(--tracking-crest);line-height:1.18;color:var(--mist-100);font-size:16px}
 .sntl-crest-stacked__rule{width:44px;height:2px;background:var(--metal-silver);margin:var(--space-1) 0}
@@ -231,7 +237,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
 <header class="mk-header" id="mk-header">
   <div class="mk-header__inner">
     <a class="mk-header__brand" href="#top" onclick="scrollTo({top:0,behavior:'smooth'});return false">
-      <img class="mk-header__shield" src="crest.png" alt="Sentinel crest" style="height:38px;width:auto;object-fit:contain;">
+      <img class="mk-header__shield" src="../../assets/crest.png" alt="Sentinel crest" style="height:38px;width:auto;object-fit:contain;">
       <span class="mk-header__words">Sentinel Energy Partners</span>
     </a>
     <nav class="mk-header__nav" aria-label="Primary">
@@ -239,7 +245,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
       <a class="mk-header__link" href="#clients" onclick="mkNav('clients');return false">Clients</a>
       <a class="mk-header__link" href="#about" onclick="mkNav('about');return false">About</a>
     </nav>
-    <div class="mk-header__actions">
+    <div class="mk-header__actions" style="display:flex;align-items:center;gap:var(--space-3)">
       <button class="mk-header__btn" onclick="openModal()">Become a client</button>
       <button class="mk-header__burger" aria-label="Toggle menu" onclick="toggleMobile()" aria-expanded="false" id="mk-burger">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
@@ -257,7 +263,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
      HERO
      ============================================================ -->
 <section class="mk-hero" id="top">
-  <div class="mk-hero__bg" style="background-image:url('hero.png');background-size:cover;background-position:center right;background-repeat:no-repeat;"></div>
+  <div class="mk-hero__bg" style="background-image:url('../../assets/hero.png');background-size:cover;background-position:center right;background-repeat:no-repeat;"></div>
   <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(11,13,15,0.92) 38%,rgba(11,13,15,0.45) 65%,rgba(11,13,15,0.15) 100%);pointer-events:none"></div>
 
   <div class="mk-hero__content">
@@ -378,12 +384,15 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
         <h2 class="mk-footer__title">Begin with a benchmark.</h2>
         <p class="mk-footer__sub">A complimentary load analysis and rate comparison — no obligation.</p>
       </div>
-      <button class="btn btn--foil" onclick="openModal()">Speak with an advisor</button>
+      <div style="display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap">
+        <a class="btn btn--gold" href="client-portal.html">Sign In</a>
+        <button class="btn btn--foil" onclick="openModal()">Speak with an advisor</button>
+      </div>
     </div>
     <div class="mk-footer__grid">
       <div class="mk-footer__brand">
         <div class="sntl-crest-stacked">
-          <img class="sntl-crest-stacked__shield" src="crest.png" alt="Sentinel crest" style="width:72px;height:auto;object-fit:contain;">
+          <img class="sntl-crest-stacked__shield" src="../../assets/crest.png" alt="Sentinel crest" style="width:72px;height:auto;object-fit:contain;">
           <div class="sntl-crest-stacked__words">Sentinel<br>Energy<br>Partners</div>
           <div class="sntl-crest-stacked__rule"></div>
           <div class="sntl-crest-stacked__motto">Praestites Sumus</div>
@@ -391,7 +400,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
       </div>
       <div class="mk-footer__col">
         <div class="mk-footer__h">Contact</div>
-        <a href="/cdn-cgi/l/email-protection#22414d4c564341564d6251474c564b4c474e510c414d4f0c4f5a"><span class="__cf_email__" data-cfemail="0a6965647e6b697e654a796f647e63646f667924696567246772">[email&#160;protected]</span></a>
+        <a href="/cdn-cgi/l/email-protection#07646869736664736847746269736e69626b742964686a296a7f"><span class="__cf_email__" data-cfemail="dab9b5b4aebbb9aeb59aa9bfb4aeb3b4bfb6a9f4b9b5b7f4b7a2">[email&#160;protected]</span></a>
         <a href="https://sentinels.com.mx">sentinels.com.mx</a>
       </div>
       <div class="mk-footer__col">
@@ -479,7 +488,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
     <!-- Success state -->
     <div id="mk-done-view" style="display:none" class="mk-modal__done">
       <div class="sntl-crest-stacked" style="align-items:center">
-        <img src="crest.png" alt="Sentinel crest" style="width:64px;height:auto;object-fit:contain;">
+        <img src="../../assets/crest.png" alt="Sentinel crest" style="width:64px;height:auto;object-fit:contain;">
         <div class="sntl-crest-stacked__words" style="color:#0B0D0F">Sentinel<br>Energy<br>Partners</div>
       </div>
       <h3 class="mk-modal__title">Request received.</h3>
