@@ -36,7 +36,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 /* ── Login ────────────────────────────────────────────── */
 #cp-login{position:fixed;inset:0;z-index:200;background:var(--ink-900);display:flex;align-items:center;justify-content:center;transition:opacity 400ms var(--ease-out)}
 #cp-login.cp-fade-out{opacity:0;pointer-events:none}
-.cp-login-bg{position:absolute;inset:0;background-image:url('hero.png');background-size:cover;background-position:center;opacity:0.12;pointer-events:none}
+.cp-login-bg{position:absolute;inset:0;background-image:url('../../assets/hero.png');background-size:cover;background-position:center;opacity:0.12;pointer-events:none}
 .cp-login-panel{position:relative;width:380px;background:var(--ink-800);border:1px solid var(--border-inverse);border-radius:var(--radius-lg);padding:48px;animation:cp-rise 500ms var(--ease-out);display:flex;flex-direction:column;align-items:center;text-align:center}
 .cp-login-crest{width:52px;height:auto;display:block;margin-bottom:24px}
 .cp-login-eyebrow{display:none}
@@ -298,6 +298,30 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       Return to website
     </a>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SET PASSWORD SCREEN
+═══════════════════════════════════════════════════ -->
+<div id="cp-setpw" style="display:none;position:fixed;inset:0;z-index:200;background:var(--ink-900);display:none;align-items:center;justify-content:center">
+  <div class="cp-login-bg"></div>
+  <div class="cp-login-panel">
+    <img class="cp-login-crest" src="logo-shield-knockout.png" alt="Sentinel Energy Partners" onerror="this.src='crest.png'">
+    <div class="cp-login-eyebrow">Client Portal</div>
+    <h1 class="cp-login-title">Set your password.</h1>
+    <p style="font-family:var(--font-sans);font-size:13px;color:var(--steel-400);margin:0 0 24px;text-align:center">Choose a secure password to access your portal.</p>
+    <form class="cp-login-form" id="cp-setpw-form" onsubmit="doSetPassword(event)">
+      <div class="cp-field">
+        <label for="cp-newpw">New Password</label>
+        <input id="cp-newpw" type="password" placeholder="Min. 8 characters" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="cp-field">
+        <label for="cp-newpw2">Confirm Password</label>
+        <input id="cp-newpw2" type="password" placeholder="Repeat password" autocomplete="new-password" minlength="8" required>
+      </div>
+      <button class="cp-login-btn" id="cp-setpw-btn" type="submit">Activate Account</button>
+    </form>
   </div>
 </div>
 
@@ -743,7 +767,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
               </div>
               <div class="cp-engage-item">
                 <div class="cp-engage-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
-                <div><div class="cp-engage-label">Send email</div><div class="cp-engage-desc"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="274d094254574e49485d4667544249534e49424b540944484a094a5f">[email&#160;protected]</a></div></div>
+                <div><div class="cp-engage-label">Send email</div><div class="cp-engage-desc"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="107a3e756360797e7f6a715063757e64797e757c633e737f7d3e7d68">[email&#160;protected]</a></div></div>
               </div>
               <div class="cp-engage-item">
                 <div class="cp-engage-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
@@ -766,11 +790,63 @@ const _SB = supabase.createClient(
   'sb_publishable_vVZzMbF7BddPycx7CoZUww_2-iIG8PF'
 );
 
-/* ── Session check on load ─────────────────────── */
+/* ── Session check on load ─────────────────────────────── */
 window.addEventListener('DOMContentLoaded', async () => {
+  // Detect invite / password-recovery token in URL hash
+  const hash = window.location.hash;
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  const type = params.get('type');
+  if (type === 'invite' || type === 'recovery') {
+    // Exchange the token so we have a valid session
+    await _SB.auth.getSession();
+    // Show set-password screen
+    document.getElementById('cp-login').style.display = 'none';
+    const spEl = document.getElementById('cp-setpw');
+    spEl.style.display = 'flex';
+    return;
+  }
   const { data: { session } } = await _SB.auth.getSession();
   if (session) await _showPortal(session.user);
 });
+
+/* ── Set Password (invite / recovery flow) ────────────── */
+async function doSetPassword(e) {
+  e.preventDefault();
+  const pw1 = document.getElementById('cp-newpw').value;
+  const pw2 = document.getElementById('cp-newpw2').value;
+  const btn = document.getElementById('cp-setpw-btn');
+  let errEl = document.getElementById('cp-setpw-error');
+  if (errEl) errEl.textContent = '';
+  if (pw1 !== pw2) {
+    if (!errEl) {
+      errEl = document.createElement('div');
+      errEl.id = 'cp-setpw-error';
+      errEl.style.cssText = 'color:#E57373;font-size:12px;text-align:center;font-family:var(--font-sans);margin-bottom:8px';
+      btn.before(errEl);
+    }
+    errEl.textContent = 'Passwords do not match.';
+    return;
+  }
+  btn.textContent = 'Activating…';
+  btn.disabled = true;
+  const { data, error } = await _SB.auth.updateUser({ password: pw1 });
+  if (error) {
+    btn.textContent = 'Activate Account';
+    btn.disabled = false;
+    if (!errEl) {
+      errEl = document.createElement('div');
+      errEl.id = 'cp-setpw-error';
+      errEl.style.cssText = 'color:#E57373;font-size:12px;text-align:center;font-family:var(--font-sans);margin-bottom:8px';
+      btn.before(errEl);
+    }
+    errEl.textContent = error.message || 'Could not set password. Try again.';
+    return;
+  }
+  // Password set — clean URL and show portal
+  window.history.replaceState(null, '', window.location.pathname);
+  document.getElementById('cp-setpw').style.display = 'none';
+  await _showPortal(data.user);
+}
 
 /* ── Login ─────────────────────────────────────── */
 async function doLogin(e) {
