@@ -163,6 +163,15 @@ const Board = (() => {
       } },
 
     /* Plants & bills — real data from the monthly bills (energy.js) */
+    kpi_last_bill: { cat: 'Plants & bills', title: 'Latest bill', icon: 'kpi', sizes: ['s', 'm'], desc: 'Total paid in your latest month, all plants.',
+      ready: () => !!Energy.latestMonth(), need: 'monthly bills',
+      render: b => { const m = Energy.latestMonth(); kpi(b, { value: money(m.total), unit: 'MXN', note: `${m.label} · ${m.sites} plant${m.sites === 1 ? '' : 's'}` }); } },
+    kpi_ytd_cost: { cat: 'Plants & bills', title: 'Spend this year', icon: 'kpi', sizes: ['s', 'm'], desc: 'Total paid so far this year, from your bills.',
+      ready: () => Energy.ytd().months > 0, need: 'monthly bills',
+      render: b => { const y = Energy.ytd(); kpi(b, { value: money(y.total), unit: 'MXN', note: `${y.from}${y.months > 1 ? ' – ' + y.to : ''} · ${y.months} month${y.months === 1 ? '' : 's'}` }); } },
+    kpi_ytd_kwh: { cat: 'Plants & bills', title: 'Consumption this year', icon: 'kpi', sizes: ['s', 'm'], desc: 'kWh consumed so far this year, from your bills.',
+      ready: () => Energy.ytd().months > 0, need: 'monthly bills',
+      render: b => { const y = Energy.ytd(); kpi(b, { value: fx(y.kwh / 1e6, 2), unit: 'GWh', note: `${y.from}${y.months > 1 ? ' – ' + y.to : ''} · avg ${fx(y.kwh / y.months / 1e6, 2)} GWh/month` }); } },
     kpi_real_savings_ytd: { cat: 'Plants & bills', title: 'Real savings YTD', icon: 'kpi', sizes: ['s', 'm'], desc: 'What your actual bills saved versus CFE this year.',
       ready: () => Energy.savingsYTD().months > 0, need: 'bills with their CFE equivalent',
       render: b => { const y = Energy.savingsYTD(); kpi(b, { value: money(y.saved), unit: 'MXN', note: `${y.pct != null ? fx(y.pct, 1) + '% below CFE · ' : ''}${y.months} month${y.months === 1 ? '' : 's'}`, tone: 'pos' }); } },
@@ -192,11 +201,11 @@ const Board = (() => {
         b.innerHTML = a.length ? `<div class="cp-alerts">${a.map(x => `<div class="cp-alert cp-alert--${x.level}">${esc(x.text)}</div>`).join('')}</div>`
           : '<div class="cp-widget-empty">No alerts right now.</div>';
       } },
-    chart_periods: { cat: 'Plants & bills', title: 'Consumption by period', icon: 'bar', sizes: ['m', 'w', 'l'], desc: 'Base, intermediate and peak kWh each month.',
+    chart_periods: { cat: 'Plants & bills', title: 'Monthly consumption by period (B · I · P)', icon: 'bar', sizes: ['m', 'w', 'l'], desc: 'Base (B), intermediate (I) and peak (P) kWh each month.',
       ready: () => Energy.hasPeriods() && Energy.monthly().length >= 1, need: 'bills with kWh by period',
       render: b => {
         const m = Energy.monthly();
-        const series = [{ name: 'Base', color: '#B4BBC2', values: m.map(r => r.base) }, { name: 'Intermediate', color: '#646C75', values: m.map(r => r.int) }, { name: 'Peak', color: C.ink, values: m.map(r => r.peak) }];
+        const series = [{ name: 'Base (B)', color: '#B4BBC2', values: m.map(r => r.base) }, { name: 'Intermediate (I)', color: '#646C75', values: m.map(r => r.int) }, { name: 'Peak (P)', color: C.ink, values: m.map(r => r.peak) }];
         // Bills that only report a total (e.g. GDMTO) still count toward the month
         const rest = m.map(r => Math.max(0, r.kwh - r.base - r.int - r.peak));
         if (rest.some(v => v > 0)) series.push({ name: 'Not split by period', color: '#E3DCC8', values: rest });
@@ -234,12 +243,26 @@ const Board = (() => {
   const CATS = ['Plants & bills', 'Key figures', 'Charts', 'Contract', 'Updates'];
   const titleOf = t => typeof CATALOG[t].title === 'function' ? CATALOG[t].title() : CATALOG[t].title;
 
-  // Default layouts favour real bill data when the advisor has loaded it
+  // Widgets fed by the advisor's manual contract data or by savings versus CFE only
+  // apply to Qualified Supply clients; CFE (basic service) clients don't see them
+  const QUALIFIED_ONLY = ['kpi_rate', 'kpi_cfe', 'kpi_spread', 'kpi_savings_month', 'kpi_savings_year', 'kpi_ytd', 'kpi_contract_end',
+    'kpi_counterparty', 'kpi_volume', 'kpi_base_price', 'kpi_escalation', 'kpi_mem', 'kpi_billed', 'chart_rates', 'chart_spread',
+    'chart_savings_pct', 'chart_consumption', 'chart_savings_mxn', 'chart_mix', 'contract_progress', 'contract_summary',
+    'kpi_real_savings_ytd', 'chart_real_savings'];
+  for (const k of QUALIFIED_ONLY) { const ready = CATALOG[k].ready; CATALOG[k].qualifiedOnly = true; CATALOG[k].ready = () => Energy.isQualified() && ready(); }
+  const offered = t => !CATALOG[t].qualifiedOnly || Energy.isQualified();
+
+  // Default layouts: CFE clients get indicators computed from their bills;
+  // Qualified Supply clients get savings versus CFE and their contract terms
   const BOARDS = ['dashboard', 'contract'];
   function defaults(b) {
-    if (b === 'dashboard') return Energy.hasBills()
-      ? [['kpi_real_savings_ytd', 's'], ['kpi_cost_kwh', 's'], ['kpi_peak_demand', 's'], ['kpi_contract_end', 's'], ['chart_periods', 'w'], ['alerts', 's'], ['chart_real_savings', 'm'], ['sites_table', 'm'], ['docs_recent', 'l']]
-      : [['kpi_rate', 's'], ['kpi_savings_month', 's'], ['kpi_ytd', 's'], ['kpi_contract_end', 's'], ['chart_rates', 'w'], ['intel_list', 's'], ['docs_recent', 'l']];
+    if (b === 'dashboard') {
+      if (!Energy.isQualified()) return [['kpi_last_bill', 's'], ['kpi_ytd_cost', 's'], ['kpi_ytd_kwh', 's'], ['kpi_cost_kwh', 's'],
+        ['chart_periods', 'w'], ['alerts', 's'], ['kpi_pf', 's'], ['kpi_peak_demand', 's'], ['chart_cost_kwh', 'm'], ['sites_table', 'l'], ['docs_recent', 'l']];
+      return Energy.hasBills()
+        ? [['kpi_real_savings_ytd', 's'], ['kpi_cost_kwh', 's'], ['kpi_peak_demand', 's'], ['kpi_contract_end', 's'], ['chart_periods', 'w'], ['alerts', 's'], ['chart_real_savings', 'm'], ['sites_table', 'm'], ['docs_recent', 'l']]
+        : [['kpi_rate', 's'], ['kpi_savings_month', 's'], ['kpi_ytd', 's'], ['kpi_contract_end', 's'], ['chart_rates', 'w'], ['intel_list', 's'], ['docs_recent', 'l']];
+    }
     return (Energy.contracts().length ? [['contracts_list', 'l']] : []).concat([['contract_summary', 'l'], ['kpi_counterparty', 's'], ['kpi_volume', 's'], ['kpi_base_price', 's'], ['kpi_escalation', 's'],
       ['contract_progress', 'w'], ['chart_mix', 's'], ['kpi_mem', 's'], ['kpi_billed', 's'], ['advisor', 'm']]);
   }
@@ -472,11 +495,11 @@ const Board = (() => {
   /* ── Boards ───────────────────────────────────── */
   const layouts = {};
   const uid = () => Math.random().toString(36).slice(2, 10);
-  const key = b => 'sp_board_v1_' + (MY_ID || 'anon') + '_' + b;
+  const key = b => 'sp_board_v2_' + (MY_ID || 'anon') + '_' + b;
   function load(b) {
     try {
       const v = JSON.parse(localStorage.getItem(key(b)));
-      if (Array.isArray(v)) return v.filter(w => CATALOG[w.type] && CATALOG[w.type].sizes.includes(w.size));
+      if (Array.isArray(v)) return v.filter(w => CATALOG[w.type] && offered(w.type) && CATALOG[w.type].sizes.includes(w.size));
     } catch {}
     return defaults(b).filter(([t]) => CATALOG[t].ready()).map(([type, size]) => ({ id: uid(), type, size }));
   }
@@ -575,7 +598,8 @@ const Board = (() => {
     const g = document.getElementById('cp-gallery');
     const used = new Set(layouts[b].map(w => w.type));
     document.getElementById('cp-gallery-list').innerHTML = CATS.map(cat => {
-      const items = Object.entries(CATALOG).filter(([, d]) => d.cat === cat);
+      const items = Object.entries(CATALOG).filter(([t, d]) => d.cat === cat && offered(t));
+      if (!items.length) return '';
       return `<div class="cp-gal-cat">${cat}</div><div class="cp-gal-grid">${items.map(([t, d]) => {
         const ready = d.ready(), added = used.has(t);
         return `<button class="cp-gal-item" data-t="${t}" ${!ready || added ? 'disabled' : ''}>

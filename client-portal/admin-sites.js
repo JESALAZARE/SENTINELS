@@ -25,6 +25,8 @@ const Sites = (() => {
     ['ref_cfe_mxn', 'Costo equivalente con CFE (MXN) — para el ahorro real', 'number']
   ];
 
+  // "Costo equivalente CFE" (real savings) only applies to Qualified Supply clients
+  const billFields = () => BILL_FIELDS.filter(([k]) => k !== 'ref_cfe_mxn' || isQualifiedClient());
   const sites = () => (CUR.data.sites = CUR.data.sites || []);
   const contracts = () => (CUR.data.contracts = CUR.data.contracts || []);
   const site = () => sites().find(s => s.id === sel);
@@ -76,12 +78,12 @@ const Sites = (() => {
         <button class="btn btn-sm" onclick="Sites.editBill(null)">+ Captura manual</button>
         <span class="small muted" id="bill-status"></span>
       </div>
-      <table><thead><tr><th>Mes</th><th>kWh base</th><th>kWh inter.</th><th>kWh punta</th><th>kWh total</th><th>Dem. kW</th><th>FP</th><th>Total MXN</th><th>Ref. CFE</th><th></th></tr></thead><tbody>
+      <table><thead><tr><th>Mes</th><th>kWh base</th><th>kWh inter.</th><th>kWh punta</th><th>kWh total</th><th>Dem. kW</th><th>FP</th><th>Total MXN</th>${isQualifiedClient() ? "<th>Ref. CFE</th>" : ""}<th></th></tr></thead><tbody>
       ${bills.length ? bills.map(b => `<tr>
           <td class="mono small">${monthLabel(b.month)}</td><td class="mono small">${fmtN(b.kwh_base)}</td><td class="mono small">${fmtN(b.kwh_int)}</td>
           <td class="mono small">${fmtN(b.kwh_peak)}</td><td class="mono small">${fmtN(kwhOf(b))}</td><td class="mono small">${fmtN(b.demand_kw)}</td>
           <td class="mono small" style="${b.pf && b.pf < 0.9 ? 'color:var(--neg);font-weight:700' : ''}">${b.pf ? Number(b.pf).toFixed(2) : '—'}</td>
-          <td class="mono small">${fmtN(b.total_mxn)}</td><td class="mono small">${fmtN(b.ref_cfe_mxn)}</td>
+          <td class="mono small">${fmtN(b.total_mxn)}</td>${isQualifiedClient() ? `<td class="mono small">${fmtN(b.ref_cfe_mxn)}</td>` : ""}
           <td style="text-align:right;white-space:nowrap">${b.doc ? `<button class="btn btn-sm" onclick="Sites.viewPdf('${b.month}')">PDF</button> ` : ''}<button class="btn btn-sm" onclick="Sites.editBill('${b.month}')">Editar</button> <button class="btn btn-sm btn-danger" onclick="Sites.deleteBill('${b.month}', this)">Quitar</button></td>
         </tr>`).join('') : '<tr><td colspan="10" class="muted">Sin recibos todavía.</td></tr>'}
       </tbody></table>`;
@@ -137,7 +139,7 @@ const Sites = (() => {
       <div class="grid">
         <div><label>Mes del recibo *</label><input id="bx-month" type="month" value="${esc(b.month || '')}" ${month ? 'disabled' : ''}></div>
         <div><label>Suministrador</label><input id="bx-supplier" value="${esc(b.supplier || 'CFE')}"></div>
-        ${BILL_FIELDS.map(([k, label]) => `<div><label>${label}</label><input id="bx-${k}" type="number" step="any" value="${esc(b[k] ?? '')}"></div>`).join('')}
+        ${billFields().map(([k, label]) => `<div><label>${label}</label><input id="bx-${k}" type="number" step="any" value="${esc(b[k] ?? '')}"></div>`).join('')}
       </div>
       <div><label>PDF del recibo (opcional)</label>
         ${pendingPdf ? `<div class="small">📄 ${esc(pendingPdf.name)} · se adjuntará al guardar</div>` : `<input id="bx-pdf" type="file" accept="application/pdf,.pdf" style="height:auto;padding:6px">`}
@@ -152,7 +154,12 @@ const Sites = (() => {
     const m = month || $('bx-month').value;
     if (!/^\d{4}-\d{2}$/.test(m)) return msg('bx-msg', 'Elige el mes del recibo.');
     const bill = { month: m, supplier: $('bx-supplier').value.trim() };
-    for (const [k] of BILL_FIELDS) { const v = $('bx-' + k).value.trim(); bill[k] = v === '' ? null : Number(v); }
+    const prev = s.bills.find(x => x.month === m) || {};
+    for (const [k] of BILL_FIELDS) {
+      const el = $('bx-' + k);
+      if (!el) { bill[k] = prev[k] ?? null; continue; }  // field hidden for this client type
+      const v = el.value.trim(); bill[k] = v === '' ? null : Number(v);
+    }
     if (bill.total_mxn == null) return msg('bx-msg', 'Escribe el total pagado.');
     if (bill.pf != null && bill.pf > 1) bill.pf = +(bill.pf / 100).toFixed(4);  // 95 → 0.95
     if (!kwhOf(bill)) return msg('bx-msg', 'Escribe los kWh (por periodo o el total).');

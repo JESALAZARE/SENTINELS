@@ -1060,6 +1060,8 @@ async function _openVault(vault, raw, id) {
   Board.renderAll();
   S1.init();
   SitesPage.init();
+  // CFE (basic service) clients without contracts have nothing to show under My Contract
+  document.querySelector('.cp-nav-item[data-section="contract"]').style.display = Energy.isQualified() || Energy.contracts().length ? '' : 'none';
   _showPortal();
 }
 

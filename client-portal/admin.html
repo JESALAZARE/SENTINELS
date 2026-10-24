@@ -701,8 +701,13 @@ function textToChart(text) {
 
 function renderEditor() {
   const d = CUR.data, p = d.profile || {}, isNew = !CUR.id;
-  const fields = FIELDS.map(([title, fs]) => `<fieldset><legend>${title}</legend><div class="grid">${fs.map(([k, label, type, ph]) =>
-    `<div><label for="f-${k}">${label}</label><input id="f-${k}" data-k="${k}" type="${type}" ${type === 'number' ? 'step="any"' : ''} placeholder="${esc(ph || '')}" value="${esc(p[k] ?? '')}"></div>`).join('')}</div></fieldset>`).join('');
+  const group = ([title, fs]) => `<fieldset><legend>${title}</legend><div class="grid">${fs.map(([k, label, type, ph]) =>
+    `<div><label for="f-${k}">${label}</label><input id="f-${k}" data-k="${k}" type="${type}" ${type === 'number' ? 'step="any"' : ''} placeholder="${esc(ph || '')}" value="${esc(p[k] ?? '')}"></div>`).join('')}</div></fieldset>`;
+  // Manual indicators and contract terms only apply to Qualified Supply clients;
+  // for CFE (SSB) clients the portal computes everything from the bills
+  CUR.qualified = isQualifiedProfile(p);
+  const fields = FIELDS.filter(([t]) => !QUALIFIED_GROUPS.includes(t)).map(group).join('');
+  const qualifiedFields = FIELDS.filter(([t]) => QUALIFIED_GROUPS.includes(t)).map(group).join('');.join('');
   $('editor').innerHTML = `
     <div class="row" style="justify-content:space-between">
       <h2>${isNew ? 'Nuevo cliente' : esc(p.company)}</h2>
@@ -718,15 +723,24 @@ function renderEditor() {
       <input id="f-email" type="email" value="${esc(d.email)}" placeholder="nombre@empresa.com">
       ${isNew ? '<p class="small muted" style="margin:6px 0 0">Al guardar se genera una contraseña segura para enviarle.</p>' : ''}
     </fieldset>
+    <fieldset><legend>Tipo de suministro</legend>
+      <div class="row" style="justify-content:space-between">
+        <div style="min-width:0"><b id="supply-label"></b><div class="small muted" id="supply-desc"></div></div>
+        <button type="button" class="btn btn-sm" id="supply-btn" onclick="toggleSupply()"></button>
+      </div>
+    </fieldset>
     ${fields}
     <fieldset><legend>Sentinel One</legend>
       <label style="display:flex;gap:10px;align-items:center;font-weight:500;margin:0"><input id="f-ai" type="checkbox" style="width:auto;height:auto" ${d.ai && d.ai.enabled ? 'checked' : ''}> Dar acceso al asistente IA en su portal</label>
       ${AI.url && AI.secret ? '' : '<p class="small muted" style="margin:6px 0 0">Primero configura el Worker en la pestaña <b>Sentinel One</b>; después vuelve a guardar a este cliente.</p>'}
     </fieldset>
+    <div id="qualified-only" class="stack">
+      ${qualifiedFields}
     <fieldset><legend>Gráfica de tarifas</legend>
       <label for="f-chart">Una línea por mes: <span class="mono">Mes; tarifa Sentinel; tarifa CFE; consumo GWh</span> — el consumo es opcional y activa las gráficas de consumo y ahorro en pesos (puedes pegar desde Excel)</label>
       <textarea id="f-chart" rows="6" class="mono" placeholder="Jul 25; 1.82; 2.05; 10.4&#10;Aug 25; 1.83; 2.08; 11.1">${esc(chartToText(d.chart))}</textarea>
     </fieldset>
+    </div>
     <div id="editor-msg"></div>
     <div class="row"><button class="btn btn-dark" id="save-btn" onclick="saveClient(this)">${isNew ? 'Crear cliente' : 'Guardar cambios'}</button></div>
     <fieldset><legend>Documentos</legend>
@@ -743,8 +757,31 @@ function renderEditor() {
     </fieldset>
     ${isNew ? '' : `<fieldset><legend>Plantas y recibos</legend><div id="sites-panel"></div></fieldset>
     <fieldset><legend>Contratos</legend><div id="contracts-panel"></div></fieldset>`}`;
+  applySupplyUI();
   if (!isNew) Sites.render();
 }
+
+/* ── Supply type: CFE Basic Service (default) or Qualified Supply ── */
+const QUALIFIED_GROUPS = ['Indicadores del dashboard', 'Contrato'];
+const QUALIFIED_KEYS = ['rate', 'cfe_rate', 'savings_monthly', 'ytd_gwh', 'contract_id', 'contract_start', 'contract_end', 'counterparty', 'volume_gwh', 'base_price'];
+// Older clients have no supply_type: treat them as Qualified if they already have manual contract data
+function isQualifiedProfile(p) {
+  p = p || {};
+  if (p.supply_type) return p.supply_type === 'qualified';
+  return QUALIFIED_KEYS.some(k => p[k] != null && p[k] !== '');
+}
+const isQualifiedClient = () => !!(CUR && CUR.qualified);
+function applySupplyUI() {
+  const q = CUR.qualified;
+  $('supply-label').textContent = q ? 'Suministro Calificado' : 'CFE · Suministrador de Servicios Básicos';
+  $('supply-desc').textContent = q
+    ? 'Capturas a mano los indicadores, el contrato y la gráfica de tarifas (abajo), además de sus recibos.'
+    : 'Los indicadores del portal se calculan solos con los recibos que cargues en “Plantas y recibos”.';
+  $('supply-btn').textContent = q ? 'Cambiar a CFE (Servicios Básicos)' : 'Cliente Suministro Calificado';
+  $('supply-btn').classList.toggle('btn-dark', !q);
+  $('qualified-only').classList.toggle('hidden', !q);
+}
+function toggleSupply() { CUR.qualified = !CUR.qualified; applySupplyUI(); Sites.render(); }
 
 function collectForm() {
   const email = $('f-email').value.trim().toLowerCase();
@@ -755,6 +792,8 @@ function collectForm() {
     if (v !== '') profile[i.dataset.k] = i.type === 'number' ? Number(v) : v;
   });
   if (!profile.company) throw new Error('Escribe el nombre de la empresa.');
+  // The Qualified-only fields stay stored while hidden, so switching back keeps them
+  profile.supply_type = CUR.qualified ? 'qualified' : 'ssb';
   return { email, profile, chart: textToChart($('f-chart').value) };
 }
 

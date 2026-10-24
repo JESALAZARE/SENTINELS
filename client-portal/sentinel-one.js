@@ -30,21 +30,25 @@ const S1 = (() => {
     const field = k => p[k] != null && p[k] !== '' ? `${LABELS[k]}: ${p[k]}` : null;
     const group = (title, keys) => { const rows = keys.map(field).filter(Boolean); if (rows.length) L.push(`## ${title}`, ...rows, ''); };
     group('Client', ['company', 'account_id', 'contact_name', 'contact_role']);
-    group('Key figures', ['rate', 'cfe_rate', 'savings_monthly', 'ytd_gwh']);
-    const calc = [];
-    if (p.rate && p.cfe_rate) calc.push(`Rate below CFE: ${((p.cfe_rate - p.rate) / p.cfe_rate * 100).toFixed(1)}% (${(p.cfe_rate - p.rate).toFixed(3)} MXN/kWh)`);
-    if (p.savings_monthly) calc.push(`Estimated annual savings (monthly × 12): ${Math.round(p.savings_monthly * 12).toLocaleString('en-US')} MXN`);
-    const s = _date(p.contract_start), e = _date(p.contract_end);
-    if (e) calc.push(`Months remaining in contract as of today: ${Math.max(0, Math.round((e - new Date()) / (1000 * 60 * 60 * 24 * 30.44)))}`);
-    if (s && e) calc.push(`Contract term elapsed as of today: ${Math.min(100, Math.max(0, (new Date() - s) / (e - s) * 100)).toFixed(0)}%`);
-    if (calc.length) L.push('## Values computed by the portal from the data above', ...calc, '');
-    group('Contract', ['contract_id', 'contract_title', 'contract_start', 'contract_end', 'counterparty', 'counterparty_note', 'volume_gwh', 'volume_note', 'base_price', 'price_note', 'escalation', 'escalation_note', 'mem_portion', 'mem_note', 'billed_label', 'billed_gwh', 'billed_note', 'renewal_note']);
+    L.push('## Supply type', Energy.isQualified() ? 'Qualified Supply (Suministro Calificado): the client buys energy from a qualified supplier under the contract below; savings are measured against the CFE tariff.' : 'CFE Basic Service Supplier (Suministrador de Servicios Básicos): the client buys energy from CFE at its regulated tariff, so there are no savings versus CFE to report; figures come from the monthly bills.', '');
     group('Advisor', ['advisor_name', 'advisor_email']);
-    const pts = (ME.chart || []).filter(x => x && isFinite(x.rate));
-    if (pts.length) {
-      L.push('## Monthly history', 'Month | Sentinel rate (MXN/kWh) | CFE GDMTH (MXN/kWh) | Consumption (GWh)');
-      pts.forEach(x => L.push(`${x.label} | ${x.rate} | ${isFinite(x.cfe) && x.cfe != null ? x.cfe : '—'} | ${isFinite(x.gwh) && x.gwh != null ? x.gwh : '—'}`));
-      L.push('');
+    // Manual indicators, contract terms and the rate history only apply to Qualified Supply clients
+    if (Energy.isQualified()) {
+      group('Key figures', ['rate', 'cfe_rate', 'savings_monthly', 'ytd_gwh']);
+      const calc = [];
+      if (p.rate && p.cfe_rate) calc.push(`Rate below CFE: ${((p.cfe_rate - p.rate) / p.cfe_rate * 100).toFixed(1)}% (${(p.cfe_rate - p.rate).toFixed(3)} MXN/kWh)`);
+      if (p.savings_monthly) calc.push(`Estimated annual savings (monthly × 12): ${Math.round(p.savings_monthly * 12).toLocaleString('en-US')} MXN`);
+      const s = _date(p.contract_start), e = _date(p.contract_end);
+      if (e) calc.push(`Months remaining in contract as of today: ${Math.max(0, Math.round((e - new Date()) / (1000 * 60 * 60 * 24 * 30.44)))}`);
+      if (s && e) calc.push(`Contract term elapsed as of today: ${Math.min(100, Math.max(0, (new Date() - s) / (e - s) * 100)).toFixed(0)}%`);
+      if (calc.length) L.push('## Values computed by the portal from the data above', ...calc, '');
+      group('Contract', ['contract_id', 'contract_title', 'contract_start', 'contract_end', 'counterparty', 'counterparty_note', 'volume_gwh', 'volume_note', 'base_price', 'price_note', 'escalation', 'escalation_note', 'mem_portion', 'mem_note', 'billed_label', 'billed_gwh', 'billed_note', 'renewal_note']);
+      const pts = (ME.chart || []).filter(x => x && isFinite(x.rate));
+      if (pts.length) {
+        L.push('## Monthly history', 'Month | Sentinel rate (MXN/kWh) | CFE GDMTH (MXN/kWh) | Consumption (GWh)');
+        pts.forEach(x => L.push(`${x.label} | ${x.rate} | ${isFinite(x.cfe) && x.cfe != null ? x.cfe : '—'} | ${isFinite(x.gwh) && x.gwh != null ? x.gwh : '—'}`));
+        L.push('');
+      }
     }
     if (Energy.sites().length || Energy.contracts().length) L.push('## Plants, monthly bills and contracts', Energy.toText());
     const docs = ME.docs || [];
@@ -119,9 +123,10 @@ const S1 = (() => {
     if (Energy.hasRef()) s.push('How much have I really saved this year, plant by plant?');
     if (Energy.alerts().length) s.push('What should I pay attention to right now?');
     if (Energy.sites().length > 1) s.push('Compare my plants by cost per kWh.');
-    if (!Energy.hasRef() && (p.savings_monthly || (p.rate && p.cfe_rate))) s.push('How much am I saving compared with CFE?');
-    if (p.contract_end) s.push('When does my contract end and how far along am I?');
-    if ((ME.chart || []).length >= 3) s.push('Summarize how my rate has moved in recent months.');
+    if (Energy.isQualified() && !Energy.hasRef() && (p.savings_monthly || (p.rate && p.cfe_rate))) s.push('How much am I saving compared with CFE?');
+    if (Energy.isQualified() && p.contract_end) s.push('When does my contract end and how far along am I?');
+    if (!Energy.isQualified() && Energy.hasBills()) s.push('How much have I spent and consumed this year?', 'How is my consumption split between base, intermediate and peak?');
+    if (Energy.isQualified() && (ME.chart || []).length >= 3) s.push('Summarize how my rate has moved in recent months.');
     if ((INTEL || []).length) s.push('What did the latest market update say?');
     s.push('Give me an executive summary of my account.');
     return s.slice(0, 4);

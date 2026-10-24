@@ -9,11 +9,20 @@ const Energy = (() => {
   const contracts = () => ((typeof ME !== 'undefined' && ME && ME.contracts) || []);
   const kwh = b => b.kwh_total || ((b.kwh_base || 0) + (b.kwh_int || 0) + (b.kwh_peak || 0)) || 0;
   const label = m => { const [y, mo] = String(m).split('-'); return MONTHS[+mo - 1] + ' ' + String(y).slice(2); };
-  const savingsOf = b => (b.ref_cfe_mxn != null && b.total_mxn != null) ? b.ref_cfe_mxn - b.total_mxn : null;
+  // Supply type: CFE Basic Service Supplier (default) or Qualified Supply. Older
+  // profiles without supply_type count as Qualified when they hold manual contract data.
+  const QUALIFIED_KEYS = ['rate', 'cfe_rate', 'savings_monthly', 'ytd_gwh', 'contract_id', 'contract_start', 'contract_end', 'counterparty', 'volume_gwh', 'base_price'];
+  function isQualified() {
+    const p = (typeof ME !== 'undefined' && ME && ME.profile) || {};
+    if (p.supply_type) return p.supply_type === 'qualified';
+    return QUALIFIED_KEYS.some(k => p[k] != null && p[k] !== '');
+  }
+  // Savings versus CFE only make sense when the client is not supplied by CFE
+  const savingsOf = b => (isQualified() && b.ref_cfe_mxn != null && b.total_mxn != null) ? b.ref_cfe_mxn - b.total_mxn : null;
 
   const allBills = () => sites().flatMap(s => (s.bills || []).map(b => ({ ...b, site: s.id, siteName: s.name })));
   const hasBills = () => allBills().length > 0;
-  const hasRef = () => allBills().some(b => b.ref_cfe_mxn != null);
+  const hasRef = () => isQualified() && allBills().some(b => b.ref_cfe_mxn != null);
   const hasPeriods = () => allBills().some(b => b.kwh_base != null || b.kwh_int != null || b.kwh_peak != null);
 
   // One row per month, summed across plants
@@ -23,7 +32,7 @@ const Energy = (() => {
       const r = by[b.month] = by[b.month] || { month: b.month, label: label(b.month), kwh: 0, base: 0, int: 0, peak: 0, total: 0, ref: 0, refKnown: true, sites: 0 };
       r.kwh += kwh(b); r.base += b.kwh_base || 0; r.int += b.kwh_int || 0; r.peak += b.kwh_peak || 0;
       r.total += b.total_mxn || 0; r.sites++;
-      if (b.ref_cfe_mxn == null) r.refKnown = false; else r.ref += b.ref_cfe_mxn;
+      if (!isQualified() || b.ref_cfe_mxn == null) r.refKnown = false; else r.ref += b.ref_cfe_mxn;
     }
     return Object.values(by).sort((a, b) => a.month.localeCompare(b.month)).map(r => ({
       ...r, costKwh: r.kwh ? r.total / r.kwh : null, savings: r.refKnown ? r.ref - r.total : null,
@@ -31,6 +40,15 @@ const Energy = (() => {
     }));
   }
   const latestMonth = () => { const m = monthly(); return m.length ? m[m.length - 1] : null; };
+
+  // Year-to-date consumption and spend from the bills (all plants); defaults to the latest bill's year
+  function ytd(year) {
+    const m = monthly();
+    year = year || (m.length ? m[m.length - 1].month.slice(0, 4) : String(new Date().getFullYear()));
+    const rows = m.filter(r => r.month.startsWith(year));
+    return { year, kwh: rows.reduce((s, r) => s + r.kwh, 0), total: rows.reduce((s, r) => s + r.total, 0), months: rows.length,
+      from: rows.length ? rows[0].label : null, to: rows.length ? rows[rows.length - 1].label : null };
+  }
 
   function savingsYTD(year = String(new Date().getFullYear())) {
     const rows = allBills().filter(b => b.month.startsWith(year) && savingsOf(b) != null);
@@ -102,5 +120,5 @@ const Energy = (() => {
     return L.join('\n');
   }
 
-  return { sites, contracts, kwh, label, savingsOf, allBills, hasBills, hasRef, hasPeriods, monthly, latestMonth, savingsYTD, siteSummary, alerts, toText };
+  return { sites, contracts, kwh, label, isQualified, savingsOf, allBills, hasBills, hasRef, hasPeriods, monthly, latestMonth, ytd, savingsYTD, siteSummary, alerts, toText };
 })();
