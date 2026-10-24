@@ -5,6 +5,8 @@ Static site on GitHub Pages (sentinels.com.mx, repo JESALAZARE/SENTINELS, public
 - `index.html` — marketing homepage (Formspree contact form).
 - `client-portal/index.html` — client portal (English UI).
 - `client-portal/admin.html` — admin panel (Spanish UI); publishes to GitHub via the API.
+- `client-portal/board.js` — customizable Dashboard / My Contract widget boards.
+- `client-portal/sentinel-one.js` + `sentinel-one/worker.js` — "Sentinel One" AI assistant (Claude Haiku 5.5 via a Cloudflare Worker that holds the API key, checks an HMAC pass, caps spend per client/month and stores the client's encrypted chat state). Setup steps: `sentinel-one/LEEME.md`. The Worker is pasted into the Cloudflare dashboard, so it uses plain `fetch` (no build step).
 - `client-portal/crypto.js` — shared AES-GCM/PBKDF2 helpers. Everything under `client-portal/data/` is encrypted and public; never write plaintext client data there or in commit messages.
 
 ## Every page must work on phone, tablet and desktop

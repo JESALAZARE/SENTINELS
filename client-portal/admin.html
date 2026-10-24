@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://api.github.com; form-action 'none'; base-uri 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://api.github.com https://*.workers.dev; form-action 'none'; base-uri 'self'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <script>
 // Always use HTTPS and never render inside another site's frame
@@ -188,6 +188,7 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
     <div class="tabs">
       <button class="tab active" data-tab="clients" onclick="showTab('clients')">Clientes</button>
       <button class="tab" data-tab="intel" onclick="showTab('intel')">Market Intelligence</button>
+      <button class="tab" data-tab="ai" onclick="showTab('ai')">Sentinel One</button>
     </div>
 
     <!-- Clientes -->
@@ -212,6 +213,22 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
         <p class="muted" style="margin:0">Las publicaciones las ven <b>todos</b> los clientes. Selecciona una o crea una nueva.</p>
       </div>
     </div>
+
+    <!-- Sentinel One -->
+    <div id="t-ai" class="hidden stack" style="max-width:860px">
+      <div class="card stack">
+        <h2>Sentinel One · asistente IA</h2>
+        <p class="muted" style="margin:0">Asistente con Claude Haiku 5.5 que responde <b>solo</b> con los datos del portal de cada cliente. Funciona a través de tu Cloudflare Worker, que guarda la llave de Anthropic y limita el gasto de cada cliente por mes.</p>
+        <div id="ai-config"></div>
+      </div>
+      <div class="card stack">
+        <div class="row" style="justify-content:space-between">
+          <h3 style="margin:0">Uso de este mes</h3>
+          <button class="btn btn-sm" onclick="loadAiUsage(this)">Actualizar</button>
+        </div>
+        <div id="ai-usage"><p class="muted small" style="margin:0">Configura el Worker para ver el uso.</p></div>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -227,6 +244,20 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
       <span class="small muted" id="pw-copied"></span>
       <button class="btn" onclick="copyMessage()">Copiar mensaje</button>
       <button class="btn btn-dark" onclick="document.getElementById('pw-modal').hidden=true">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Llave secreta de Sentinel One -->
+<div class="modal" id="ai-secret-modal" hidden>
+  <div class="card stack">
+    <h2>Llave secreta de Sentinel One</h2>
+    <p class="muted" style="margin:0">Cópiala y pégala en Cloudflare como el secreto <b class="mono">AI_SECRET</b> de tu Worker (Settings → Variables and Secrets → Add → tipo <i>Secret</i>). <b>Solo se muestra ahora.</b></p>
+    <div class="pw" id="ai-secret-value" style="font-size:14px;word-break:break-all"></div>
+    <div class="row" style="justify-content:flex-end">
+      <span class="small muted" id="ai-secret-copied"></span>
+      <button class="btn" onclick="copyAiSecret()">Copiar</button>
+      <button class="btn btn-dark" onclick="document.getElementById('ai-secret-modal').hidden=true">Listo</button>
     </div>
   </div>
 </div>
@@ -511,6 +542,8 @@ async function doUnlock(e) {
       META = (await readJSON('data/meta.json')) || META;  // latest copy from GitHub
     }
     PORTAL_RAW = await SP.open(ADMIN_KEY, META.portalKey);
+    AI.url = (META.ai && META.ai.url) || '';
+    AI.secret = META.ai && META.ai.secret ? dec.decode(await SP.open(ADMIN_KEY, META.ai.secret)) : null;
     const idx = await readJSON('data/admin-index.json');
     INDEX = idx ? await SP.openJSON(ADMIN_KEY, idx) : [];
     const intel = await readJSON('data/intel.json');
@@ -539,6 +572,8 @@ function showTab(t) {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
   $('t-clients').classList.toggle('hidden', t !== 'clients');
   $('t-intel').classList.toggle('hidden', t !== 'intel');
+  $('t-ai').classList.toggle('hidden', t !== 'ai');
+  if (t === 'ai') { renderAiConfig(); loadAiUsage(); }
 }
 
 const saveIndex = async () => writeJSON('data/admin-index.json', await SP.sealJSON(ADMIN_KEY, INDEX));
@@ -681,6 +716,10 @@ function renderEditor() {
       ${isNew ? '<p class="small muted" style="margin:6px 0 0">Al guardar se genera una contraseña segura para enviarle.</p>' : ''}
     </fieldset>
     ${fields}
+    <fieldset><legend>Sentinel One</legend>
+      <label style="display:flex;gap:10px;align-items:center;font-weight:500;margin:0"><input id="f-ai" type="checkbox" style="width:auto;height:auto" ${d.ai && d.ai.enabled ? 'checked' : ''}> Dar acceso al asistente IA en su portal</label>
+      ${AI.url && AI.secret ? '' : '<p class="small muted" style="margin:6px 0 0">Primero configura el Worker en la pestaña <b>Sentinel One</b>; después vuelve a guardar a este cliente.</p>'}
+    </fieldset>
     <fieldset><legend>Gráfica de tarifas</legend>
       <label for="f-chart">Una línea por mes: <span class="mono">Mes; tarifa Sentinel; tarifa CFE; consumo GWh</span> — el consumo es opcional y activa las gráficas de consumo y ahorro en pesos (puedes pegar desde Excel)</label>
       <textarea id="f-chart" rows="6" class="mono" placeholder="Jul 25; 1.82; 2.05; 10.4&#10;Aug 25; 1.83; 2.08; 11.1">${esc(chartToText(d.chart))}</textarea>
@@ -735,6 +774,7 @@ async function saveClient(btn) {
       CUR.data.docs = [];
     }
     Object.assign(CUR.data, form, { portalKey: SP.b64(PORTAL_RAW) });
+    CUR.data.ai = await aiPass(id, $('f-ai').checked);
     const oldId = CUR.id;
     CUR.id = id;
     await writeVault();
@@ -826,6 +866,127 @@ async function copyMessage() {
   $('pw-copied').textContent = 'Copiado ✓';
 }
 
+/* ── Sentinel One (AI assistant) ────────────────────
+   The Worker trusts a client when it presents HMAC(AI_SECRET, "client:<id>").
+   The secret lives encrypted in meta.json (admin key) and as a Worker secret;
+   each enabled client's pass is stored inside their encrypted vault. */
+const AI = { url: '', secret: null };
+async function hmacHex(secret, msg) {
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return SP.hex(new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(msg))));
+}
+async function aiPass(id, on) {
+  if (!on) return { enabled: false };
+  return { enabled: true, url: AI.url, token: AI.secret ? await hmacHex(AI.secret, 'client:' + id) : '' };
+}
+
+function renderAiConfig() {
+  $('ai-config').innerHTML = `
+    <div><label for="ai-url">URL de tu Cloudflare Worker</label>
+      <input id="ai-url" type="url" placeholder="https://sentinel-one.tu-cuenta.workers.dev" value="${esc(AI.url)}"></div>
+    <div class="row">
+      <button class="btn btn-dark" onclick="saveAiConfig(this)">Guardar URL</button>
+      <button class="btn" onclick="testAi(this)">Probar conexión</button>
+    </div>
+    <div class="row" style="justify-content:space-between;border-top:1px solid var(--border-subtle);padding-top:14px">
+      <div><b>Llave secreta (AI_SECRET)</b><div class="small muted">${AI.secret ? 'Generada ✓ — también debe estar guardada en Cloudflare.' : 'Aún no generada.'}</div></div>
+      <button class="btn ${AI.secret ? '' : 'btn-gold'}" onclick="generateAiSecret(this)">${AI.secret ? 'Generar nueva' : 'Generar llave'}</button>
+    </div>
+    <div id="ai-msg"></div>`;
+}
+
+// Re-issue the pass of every client with the assistant enabled (after the URL or secret changes)
+async function reissueAiPasses() {
+  let n = 0;
+  for (const c of INDEX) {
+    const v = await readJSON(`data/clients/${c.id}.json`);
+    if (!v) continue;
+    const key = await SP.importKey(await SP.open(ADMIN_KEY, v.admin));
+    const data = await SP.openJSON(key, v.data);
+    if (!data.ai || !data.ai.enabled) continue;
+    data.ai = await aiPass(c.id, true);
+    v.data = await SP.sealJSON(key, data);
+    await writeJSON(`data/clients/${c.id}.json`, v);
+    n++;
+  }
+  if (CUR && CUR.id) await openClient(CUR.id);
+  return n;
+}
+
+async function saveAiMeta() {
+  META.ai = { url: AI.url, secret: AI.secret ? await SP.seal(ADMIN_KEY, enc.encode(AI.secret)) : null };
+  await writeJSON('data/meta.json', META);
+}
+
+async function saveAiConfig(btn) {
+  const url = $('ai-url').value.trim().replace(/\/+$/, '');
+  if (!/^https:\/\/[\w.-]+(\/.*)?$/.test(url)) return msg('ai-msg', 'Escribe la URL completa del Worker, empezando con https://');
+  await busy(btn, 'Guardando…', async () => {
+    AI.url = url;
+    await saveAiMeta();
+    const n = await reissueAiPasses();
+    await publish('configurar sentinel one');
+    renderAiConfig();
+    msg('ai-msg', `URL guardada${n ? ` y ${n} cliente(s) actualizados` : ''}.`, 'ok');
+  });
+}
+
+async function generateAiSecret(btn) {
+  if (AI.secret && !confirm('Al generar una nueva llave, la anterior deja de funcionar: tendrás que pegar la nueva en Cloudflare. ¿Continuar?')) return;
+  await busy(btn, 'Generando…', async () => {
+    AI.secret = SP.hex(SP.rand(32));
+    await saveAiMeta();
+    const n = await reissueAiPasses();
+    await publish('llave de sentinel one');
+    renderAiConfig();
+    $('ai-secret-value').textContent = AI.secret;
+    $('ai-secret-copied').textContent = '';
+    $('ai-secret-modal').hidden = false;
+    if (n) msg('ai-msg', `${n} cliente(s) actualizados con la nueva llave.`, 'ok');
+  });
+}
+async function copyAiSecret() {
+  try { await navigator.clipboard.writeText(AI.secret); $('ai-secret-copied').textContent = 'Copiada ✓'; } catch { $('ai-secret-copied').textContent = 'Selecciónala y cópiala manualmente.'; }
+}
+
+async function testAi(btn) {
+  if (!AI.url) return msg('ai-msg', 'Primero guarda la URL del Worker.');
+  await busy(btn, 'Probando…', async () => {
+    try {
+      const h = await (await fetch(AI.url + '/health', { cache: 'no-store' })).json();
+      if (!h.configured) return msg('ai-msg', 'El Worker responde, pero le falta configuración: revisa ANTHROPIC_API_KEY, AI_SECRET y el KV "S1".');
+      const r = await fetch(AI.url + '/admin/usage', { headers: { Authorization: 'Bearer ' + AI.secret } });
+      if (r.status === 401) return msg('ai-msg', 'El Worker funciona, pero su AI_SECRET no coincide con la llave de este panel. Vuelve a pegarla en Cloudflare.');
+      if (!r.ok) return msg('ai-msg', 'El Worker respondió con un error (' + r.status + ').');
+      msg('ai-msg', `Conexión correcta ✓ Modelo ${h.model}, límite de $${h.limitUsd} USD por cliente al mes.`, 'ok');
+      loadAiUsage();
+    } catch { msg('ai-msg', 'No pude conectar con el Worker. Revisa la URL.'); }
+  });
+}
+
+async function loadAiUsage(btn) {
+  const box = $('ai-usage');
+  if (!AI.url || !AI.secret) { box.innerHTML = '<p class="muted small" style="margin:0">Configura el Worker para ver el uso.</p>'; return; }
+  const run = async () => {
+    try {
+      const r = await fetch(AI.url + '/admin/usage', { headers: { Authorization: 'Bearer ' + AI.secret }, cache: 'no-store' });
+      if (!r.ok) throw 0;
+      const { month, limitUsd, usage } = await r.json();
+      const rows = [];
+      for (const c of INDEX.slice().sort((a, b) => (a.company || '').localeCompare(b.company || ''))) {
+        const u = usage[c.id] || { usd: 0, requests: 0 };
+        const pct = Math.min(100, u.usd / limitUsd * 100);
+        rows.push(`<tr><td>${esc(c.company)}</td><td class="mono small">$${u.usd.toFixed(3)} / $${limitUsd}</td>
+          <td style="min-width:120px"><div style="height:6px;background:var(--mist-100);border-radius:3px"><div style="height:6px;border-radius:3px;width:${pct}%;background:${pct >= 100 ? 'var(--neg)' : 'var(--ink-900)'}"></div></div></td>
+          <td class="mono small">${u.requests}</td></tr>`);
+      }
+      box.innerHTML = `<p class="small muted" style="margin:0 0 8px">Mes ${esc(month)} · el contador se reinicia el día 1.</p>
+        <table><thead><tr><th>Cliente</th><th>Gastado</th><th>Uso</th><th>Preguntas</th></tr></thead><tbody>${rows.join('') || '<tr><td colspan="4" class="muted">Sin clientes.</td></tr>'}</tbody></table>`;
+    } catch { box.innerHTML = '<p class="muted small" style="margin:0">No pude leer el uso. Usa "Probar conexión" para revisar la configuración.</p>'; }
+  };
+  return btn ? busy(btn, 'Actualizando…', run) : run();
+}
+
 /* ── Change the admin password ──────────────────────
    Re-wraps every key held for the admin; client passwords are untouched. */
 function openAdminPwModal() {
@@ -858,6 +1019,7 @@ async function changeAdminPassword(btn) {
     META.admin = { salt: SP.b64(salt), iter: SP.ITER, check: await SP.seal(NEW, enc.encode('sentinels-admin')) };
     META.portalKey = await rewrap(META.portalKey);
     if (META.ghToken) META.ghToken = await rewrap(META.ghToken);
+    if (META.ai && META.ai.secret) META.ai.secret = await rewrap(META.ai.secret);
     ADMIN_KEY = NEW;
     await saveIndex();
     await writeJSON('data/meta.json', META);

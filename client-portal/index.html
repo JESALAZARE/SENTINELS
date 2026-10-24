@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; worker-src 'self' blob: https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://sentinels.com.mx; connect-src 'self' https://formspree.io https://cdnjs.cloudflare.com; form-action 'self' https://formspree.io; base-uri 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; worker-src 'self' blob: https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://sentinels.com.mx; connect-src 'self' https://formspree.io https://cdnjs.cloudflare.com https://*.workers.dev; form-action 'self' https://formspree.io; base-uri 'self'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <script>
 // Always use HTTPS and never render inside another site's frame
@@ -479,6 +479,128 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 /* ── Animations ───────────────────────────────────────── */
 @keyframes cp-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes cp-fade{from{opacity:0}to{opacity:1}}
+/* ── Sentinel One (AI assistant) ──────────────────────── */
+.cp-nav-ai svg{color:var(--signal-notice)}
+#cp-content.cp-content--chat{padding:0;overflow:hidden}
+#sec-assistant.active{height:100%}
+.s1{display:grid;grid-template-columns:280px 1fr;height:100%;min-height:0;position:relative}
+.s1-side{border-right:1px solid var(--border-subtle);background:var(--white);display:flex;flex-direction:column;min-height:0}
+.s1-tabs{display:flex;border-bottom:1px solid var(--border-subtle)}
+.s1-tab{flex:1;border:0;background:none;padding:12px 6px;font-family:var(--font-sans);font-size:13px;font-weight:600;color:var(--steel-400);border-bottom:2px solid transparent;cursor:pointer}
+.s1-tab.on{color:var(--ink-900);border-color:var(--ink-900)}
+.s1-pane{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.s1-pane[hidden]{display:none}
+.s1-new{width:100%;height:40px;font-size:13px}
+.s1-help{font-size:12px;color:var(--steel-400);margin:0;line-height:1.5}
+.s1-empty{font-size:12px;color:var(--steel-400);margin:4px 0}
+.s1-chat-item{display:flex;align-items:center;gap:6px;padding:9px 10px;border-radius:var(--radius-md);cursor:pointer;font-size:13px;color:var(--graphite-500)}
+.s1-chat-item span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s1-chat-item:hover{background:var(--paper-50)}
+.s1-chat-item.on{background:var(--paper-50);color:var(--ink-900);font-weight:600}
+.s1-chat-item button,.s1-mem button{border:0;background:none;color:var(--silver-300);font-size:16px;line-height:1;cursor:pointer;padding:2px 4px;border-radius:4px}
+.s1-chat-item button:hover,.s1-mem button:hover{color:var(--signal-negative);background:var(--signal-negative-soft)}
+#s1-instructions{width:100%;min-height:150px;resize:vertical;border:1px solid var(--border-default);border-radius:var(--radius-md);padding:10px;font-family:var(--font-sans);font-size:13px;line-height:1.5;outline:none}
+#s1-instructions:focus{border-color:var(--ink-900)}
+.s1-presets{display:flex;flex-wrap:wrap;gap:6px}
+.s1-preset{border:1px solid var(--border-default);background:#fff;border-radius:999px;padding:4px 10px;font-family:var(--font-sans);font-size:11px;color:var(--graphite-500);cursor:pointer}
+.s1-preset:hover{border-color:var(--ink-900);color:var(--ink-900)}
+.s1-row{display:flex;align-items:center;gap:8px}
+.s1-count{font-family:var(--font-mono);font-size:10px;color:var(--silver-300);flex:1}
+.s1-ok{font-size:12px;color:var(--signal-positive);font-weight:600}
+.s1-mem-form{display:flex;gap:6px}
+.s1-mem-form input{flex:1;min-width:0;height:36px;border:1px solid var(--border-default);border-radius:var(--radius-md);padding:0 10px;font-family:var(--font-sans);font-size:13px;outline:none}
+.s1-mem{display:flex;gap:6px;align-items:flex-start;padding:10px;border:1px solid var(--border-subtle);border-radius:var(--radius-md);font-size:13px;color:var(--ink-900)}
+.s1-mem > div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.s1-mem small{font-size:10px;color:var(--steel-400)}
+.s1-usage{padding:12px 14px;border-top:1px solid var(--border-subtle)}
+.s1-usage:empty{display:none}
+.s1-usage-l{font-size:11px;color:var(--steel-400);margin-bottom:6px}
+.s1-usage-l b{color:var(--ink-900)}
+.s1-usage-bar{height:5px;background:var(--mist-100);border-radius:3px;overflow:hidden}
+.s1-usage-bar i{display:block;height:100%;background:var(--metal-gold)}
+.s1-main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--paper-50)}
+.s1-head{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border-subtle);background:var(--white)}
+.s1-side-btn{display:none;width:36px;height:36px;border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:#fff;cursor:pointer;align-items:center;justify-content:center;flex:none}
+.s1-side-btn svg{width:18px;height:18px}
+.s1-title{flex:1;display:flex;flex-direction:column;line-height:1.2}
+.s1-title b{font-family:var(--font-serif);font-size:19px;font-weight:600}
+.s1-title span{font-size:11px;color:var(--signal-positive);font-weight:600}
+.s1-log{flex:1;overflow-y:auto;padding:24px 20px;display:flex;flex-direction:column;gap:16px;min-height:0}
+.s1-welcome{margin:auto;max-width:560px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}
+.s1-welcome h2{font-family:var(--font-serif);font-weight:600;font-size:26px;margin:8px 0 0}
+.s1-welcome p{color:var(--graphite-500);font-size:14px;margin:0 0 10px}
+.s1-sugs{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}
+.s1-sug{text-align:left;border:1px solid var(--border-subtle);background:#fff;border-radius:var(--radius-md);padding:10px 12px;font-family:var(--font-sans);font-size:13px;color:var(--ink-900);cursor:pointer;line-height:1.4}
+.s1-sug:hover{border-color:var(--ink-900);box-shadow:var(--shadow-sm)}
+.s1-msg{display:flex;gap:10px;max-width:820px;width:100%;margin:0 auto}
+.s1-msg--user{justify-content:flex-end}
+.s1-msg--user .s1-bubble{background:var(--ink-900);color:#fff;border-radius:14px 14px 4px 14px;max-width:80%;padding:10px 14px;font-size:14px;line-height:1.55}
+.s1-msg--ai .s1-bubble{background:#fff;border:1px solid var(--border-subtle);border-radius:4px 14px 14px 14px;padding:12px 16px;font-size:14px;line-height:1.6;color:var(--ink-900);min-width:0;flex:1;max-width:calc(100% - 44px);position:relative}
+.s1-bubble p{margin:0 0 8px}
+.s1-bubble p:last-child{margin-bottom:0}
+.s1-bubble ul,.s1-bubble ol{margin:4px 0 8px;padding-left:20px}
+.s1-bubble li{margin:2px 0}
+.s1-bubble code{font-family:var(--font-mono);font-size:12px;background:var(--paper-50);padding:1px 4px;border-radius:3px}
+.s1-bubble pre{font-family:var(--font-mono);font-size:12px;background:var(--paper-50);padding:10px;border-radius:var(--radius-md);overflow-x:auto;white-space:pre-wrap}
+.s1-h{font-weight:700;margin:10px 0 4px}
+.s1-table{overflow-x:auto;margin:6px 0 10px}
+.s1-table table{border-collapse:collapse;font-size:12px;min-width:100%}
+.s1-table th,.s1-table td{border:1px solid var(--border-subtle);padding:5px 8px;text-align:left;white-space:nowrap}
+.s1-table th{background:var(--paper-50);font-weight:600}
+.s1-avatar{width:32px;height:32px;border-radius:50%;flex:none;background:var(--ink-900);color:#F0E080;display:flex;align-items:center;justify-content:center}
+.s1-avatar svg{width:17px;height:17px}
+.s1-avatar--lg{width:56px;height:56px}
+.s1-avatar--lg svg{width:28px;height:28px}
+.s1-note{font-size:12px;color:var(--steel-400);margin-top:6px;font-style:italic}
+.s1-copy{position:absolute;top:6px;right:8px;border:0;background:none;font-family:var(--font-sans);font-size:11px;color:var(--silver-300);cursor:pointer;opacity:0;transition:opacity 150ms}
+.s1-msg--ai:hover .s1-copy{opacity:1}
+.s1-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.14);border-radius:999px;padding:2px 10px;font-size:12px;margin:0 6px 6px 0}
+#s1-attached .s1-chip{background:var(--white);border:1px solid var(--border-default);color:var(--ink-900)}
+#s1-attached .s1-chip button{border:0;background:none;cursor:pointer;color:var(--steel-400);font-size:14px;padding:0 0 0 2px}
+.s1-typing{display:inline-flex;gap:4px;padding:6px 0}
+.s1-typing i{width:7px;height:7px;border-radius:50%;background:var(--silver-300);animation:s1-dot 1.2s infinite ease-in-out}
+.s1-typing i:nth-child(2){animation-delay:.15s}.s1-typing i:nth-child(3){animation-delay:.3s}
+@keyframes s1-dot{0%,80%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+.s1-compose{padding:12px 20px 14px;background:var(--white);border-top:1px solid var(--border-subtle)}
+.s1-input-row{display:flex;align-items:flex-end;gap:8px;max-width:820px;margin:0 auto;border:1px solid var(--border-default);border-radius:14px;padding:6px 6px 6px 8px;background:#fff}
+.s1-input-row:focus-within{border-color:var(--ink-900)}
+#s1-input{flex:1;border:0;outline:none;resize:none;font-family:var(--font-sans);font-size:15px;line-height:1.5;padding:7px 4px;max-height:160px;background:transparent}
+.s1-icon-btn{width:36px;height:36px;border:0;background:none;border-radius:10px;cursor:pointer;color:var(--steel-400);display:flex;align-items:center;justify-content:center}
+.s1-icon-btn:hover{background:var(--paper-50);color:var(--ink-900)}
+.s1-icon-btn svg,.s1-send svg{width:18px;height:18px}
+.s1-send{width:38px;height:38px;border:0;border-radius:10px;background:var(--ink-900);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
+.s1-send[hidden]{display:none}
+.s1-stop{background:var(--signal-negative)}
+.s1-attach{position:relative}
+.s1-attach-menu{position:absolute;bottom:44px;left:0;width:300px;max-height:300px;overflow-y:auto;background:#fff;border:1px solid var(--border-default);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);padding:6px;z-index:10}
+.s1-attach-menu button{display:flex;flex-direction:column;width:100%;text-align:left;border:0;background:none;padding:8px 10px;border-radius:var(--radius-md);font-family:var(--font-sans);font-size:13px;color:var(--ink-900);cursor:pointer}
+.s1-attach-menu button:hover{background:var(--paper-50)}
+.s1-attach-menu small{font-size:11px;color:var(--steel-400)}
+#s1-attached{max-width:820px;margin:0 auto}
+.s1-foot{max-width:820px;margin:8px auto 0;font-size:11px;color:var(--silver-300);text-align:center}
+.s1-scrim{display:none}
+@media (max-width:900px){
+  .s1{grid-template-columns:1fr}
+  .s1-side{position:absolute;top:0;bottom:0;left:0;width:300px;max-width:88%;z-index:20;transform:translateX(-105%);transition:transform 240ms var(--ease-out);box-shadow:0 0 40px rgba(0,0,0,.2)}
+  .s1--side .s1-side{transform:none}
+  .s1--side .s1-scrim{display:block;position:absolute;inset:0;z-index:15;background:rgba(11,13,15,.35)}
+  .s1-side-btn{display:inline-flex}
+}
+@media (max-width:600px){
+  .s1-head{padding:10px 12px}
+  .s1-head .cp-btn-sm{padding:0 10px}
+  .s1-log{padding:16px 12px;gap:12px}
+  .s1-welcome h2{font-size:22px}
+  .s1-sugs{grid-template-columns:1fr}
+  .s1-msg--user .s1-bubble{max-width:88%}
+  .s1-msg--ai .s1-avatar{display:none}
+  .s1-msg--ai .s1-bubble{max-width:100%}
+  .s1-compose{padding:8px 10px 10px}
+  #s1-input{font-size:16px}
+  .s1-attach-menu{width:calc(100vw - 40px)}
+  .s1-copy{opacity:1}
+}
+
 /* ── Boards: tablet & phone ───────────────────────────── */
 @media (max-width:1180px){
   .cp-board{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -563,6 +685,10 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         Dashboard
       </button>
+      <button class="cp-nav-item cp-nav-ai" data-section="assistant" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+        Sentinel One
+      </button>
       <button class="cp-nav-item" data-section="intelligence">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
         Market Intelligence
@@ -636,6 +762,68 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
       <!-- ╔══════════════════════════════════════════╗
            ║  MARKET INTELLIGENCE                     ║
            ╚══════════════════════════════════════════╝ -->
+      <section id="sec-assistant" class="cp-section">
+        <div class="s1" id="s1">
+          <aside class="s1-side">
+            <div class="s1-tabs">
+              <button class="s1-tab on" data-p="chats">Chats</button>
+              <button class="s1-tab" data-p="train">Train</button>
+              <button class="s1-tab" data-p="memory">Memory</button>
+            </div>
+            <div class="s1-pane" data-p="chats">
+              <button class="cp-btn-dark s1-new" onclick="S1.newChat()">+ New conversation</button>
+              <div id="s1-chats"></div>
+            </div>
+            <div class="s1-pane" data-p="train" hidden>
+              <p class="s1-help">Tell Sentinel One how to work for you: language, tone, format, what to focus on. It always answers only from your portal data.</p>
+              <textarea id="s1-instructions" maxlength="4000" placeholder="e.g. Always answer in Spanish. Start with a one-line summary. Focus on savings versus CFE."></textarea>
+              <div class="s1-presets">
+                <button class="s1-preset" data-t="Always answer in Spanish.">Spanish</button>
+                <button class="s1-preset" data-t="Start with a one-line executive summary.">Executive summary</button>
+                <button class="s1-preset" data-t="Keep answers to 3–5 bullet points.">Short answers</button>
+                <button class="s1-preset" data-t="Focus on savings and cost versus CFE.">Focus on savings</button>
+                <button class="s1-preset" data-t="Show figures in a table when comparing months.">Use tables</button>
+              </div>
+              <div class="s1-row"><span class="s1-count" id="s1-instr-count">0 / 4000</span><span class="s1-ok" id="s1-instr-status"></span><button class="cp-btn-dark cp-btn-sm" id="s1-instr-save">Save</button></div>
+            </div>
+            <div class="s1-pane" data-p="memory" hidden>
+              <p class="s1-help">Facts Sentinel One remembers across conversations. It saves them when you ask it to remember something; you can add or remove them here.</p>
+              <form id="s1-mem-form" class="s1-mem-form"><input id="s1-mem-input" maxlength="500" placeholder="Add something to remember…"><button class="cp-btn-dark cp-btn-sm">Add</button></form>
+              <div id="s1-memories"></div>
+            </div>
+            <div class="s1-usage" id="s1-usage"></div>
+          </aside>
+          <div class="s1-main">
+            <div class="s1-head">
+              <button class="s1-side-btn" onclick="S1.toggleSide()" aria-label="Chats, training and memory">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h16"/></svg>
+              </button>
+              <div class="s1-title"><b>Sentinel One</b><span>Answers only from your portal data</span></div>
+              <button class="cp-btn-ghost cp-btn-sm" onclick="S1.newChat()">New chat</button>
+            </div>
+            <div class="s1-log" id="s1-log"></div>
+            <form class="s1-compose" id="s1-form">
+              <div id="s1-attached"></div>
+              <div class="s1-input-row">
+                <div class="s1-attach">
+                  <button type="button" class="s1-icon-btn" id="s1-attach-btn" title="Attach a document from your portal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg>
+                  </button>
+                  <div class="s1-attach-menu" id="s1-attach-menu" hidden></div>
+                </div>
+                <textarea id="s1-input" rows="1" placeholder="Ask about your contract, rates, savings…"></textarea>
+                <button type="submit" class="s1-send" id="s1-send" title="Send">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </button>
+                <button type="button" class="s1-send s1-stop" id="s1-stop" title="Stop" hidden><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>
+              </div>
+              <div class="s1-foot">Sentinel One uses AI and answers only with the information in your portal. Confirm important decisions with your advisor.</div>
+            </form>
+          </div>
+          <div class="s1-scrim" onclick="S1.toggleSide(false)"></div>
+        </div>
+      </section>
+
       <section id="sec-intelligence" class="cp-section">
         <div class="cp-page-head">
           <div>
@@ -830,6 +1018,7 @@ async function _openVault(vault, raw, id) {
   } catch {}
   _renderIntel(intel);
   Board.renderAll();
+  S1.init();
   _showPortal();
 }
 
@@ -839,8 +1028,9 @@ function _showPortal() {
   setTimeout(() => document.getElementById('cp-app').classList.add('cp-visible'), 50);
 }
 
-// Restore the session after a page reload (same tab only)
-(async () => {
+// Restore the session after a page reload (same tab only). Waits for
+// DOMContentLoaded so board.js and sentinel-one.js are loaded first.
+document.addEventListener('DOMContentLoaded', async () => {
   let s = null;
   try { s = JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch {}
   if (!s) return;
@@ -850,7 +1040,7 @@ function _showPortal() {
     await _openVault(vault, SP.unb64(s.dek), s.id);
   }
   catch { try { sessionStorage.removeItem(SESSION_KEY); } catch {} }
-})();
+});
 
 // Account set to inactive by the advisor (e.g. pending payment)
 const SUPPORT_EMAIL = 'contacto@sentinels.com.mx';
@@ -1044,6 +1234,7 @@ document.addEventListener('keydown', e => {
 const SECTION_TITLES = {
   dashboard: 'Dashboard',
   intelligence: 'Market Intelligence',
+  assistant: 'Sentinel One',
   contract: 'My Contract',
   documents: 'Documents',
   support: 'Support'
@@ -1066,6 +1257,8 @@ function goTo(id) {
   if (sec) sec.classList.add('active');
   document.getElementById('cp-topbar-title').textContent = SECTION_TITLES[id] || id;
   document.getElementById('cp-content').scrollTop = 0;
+  document.getElementById('cp-content').classList.toggle('cp-content--chat', id === 'assistant');
+  if (id === 'assistant') S1.onShow();
 }
 
 // Nav button clicks
@@ -1216,6 +1409,7 @@ function filterDocs(btn, type) {
 }
 </script>
 <script src="board.js"></script>
+<script src="sentinel-one.js"></script>
 <!-- ═══════════════════════════════════════════════════
      BECOME A CLIENT MODAL
 ═══════════════════════════════════════════════════ -->
