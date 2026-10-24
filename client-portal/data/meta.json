@@ -19,10 +19,10 @@
  },
  "repo": "JESALAZARE/SENTINELS",
  "ai": {
-  "url": "",
+  "url": "https://sentinel-one.shy-wood-119b.workers.dev",
   "secret": {
-   "iv": "Q6uFtq03pEMNLnNh",
-   "ct": "iSOH1LpPf0fISkLdcaF+TBQjEYmTBuHVWYzjN6djIDB4D/Qe8VvySz4PUhTqmT0HAdi+XmrEmoxZt0JUJA+AX8B6Gp8y5TvEms9IG5AALxs="
+   "iv": "RlMNUDEaV6uzpmc/",
+   "ct": "ZRPQ5Dy9bnzkbt0Rutm2tuEY8117GHqMpKdZE4tfXEQQpl5OyguhsBkZ4bcxyiunu0d0jVGcxYAluMk/PCH7wlkKF0x9jjlDh73tb2SI11s="
   }
  }
 }
