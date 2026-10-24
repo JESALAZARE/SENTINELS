@@ -87,10 +87,29 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
   <!-- 1 · Conectar carpeta -->
   <section id="v-connect" class="card center stack">
     <h1>Panel de administración</h1>
-    <p class="muted">Este panel guarda los datos de tus clientes <b>cifrados</b> dentro de la carpeta de tu sitio. Después los publicas con VS Code (Commit → Sync Changes), igual que cualquier cambio de tu página.</p>
-    <p class="muted small">Usa Microsoft Edge o Google Chrome. Cuando te lo pida, elige tu carpeta <b>SENTINELS</b> y permite que el panel la edite.</p>
-    <div id="connect-msg"></div>
-    <button class="btn btn-dark" onclick="connectFolder()">Conectar carpeta del sitio</button>
+    <p class="muted">Este panel guarda los datos de tus clientes <b>cifrados</b> directamente en tu repositorio de GitHub. Cada cambio se publica solo y tus clientes lo ven en 1–2 minutos.</p>
+    <form onsubmit="connectGitHub(event)" class="stack">
+      <div><label for="gh-repo">Repositorio</label><input id="gh-repo" value="JESALAZARE/SENTINELS" autocomplete="off"></div>
+      <div><label for="gh-token">Llave de acceso de GitHub</label><input id="gh-token" type="password" autocomplete="off" placeholder="github_pat_…"></div>
+      <label class="small" style="display:flex;gap:8px;align-items:center;font-weight:500"><input id="gh-remember" type="checkbox" checked style="width:auto;height:auto"> Recordar en este navegador</label>
+      <div id="connect-msg"></div>
+      <div class="row">
+        <button class="btn btn-dark" id="gh-btn" type="submit">Conectar</button>
+        <button class="btn btn-sm hidden" id="gh-forget" type="button" onclick="forgetToken()">Olvidar llave guardada</button>
+      </div>
+    </form>
+    <details class="small muted">
+      <summary style="cursor:pointer;font-weight:600">¿Cómo creo la llave? (una sola vez)</summary>
+      <ol style="padding-left:18px">
+        <li>Entra a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>.</li>
+        <li><b>Token name:</b> Portal Sentinels. <b>Expiration:</b> 1 año (o la que prefieras).</li>
+        <li><b>Repository access:</b> Only select repositories → <b>SENTINELS</b>.</li>
+        <li><b>Permissions → Repository permissions → Contents:</b> Read and write.</li>
+        <li>Clic en <b>Generate token</b>, cópiala y pégala arriba. GitHub solo la muestra una vez.</li>
+      </ol>
+      La llave se guarda únicamente en este navegador. Si se te pierde o vence, crea otra igual.
+    </details>
+    <p class="small muted" style="margin:0">¿Prefieres trabajar sin conexión? <a href="#" onclick="event.preventDefault();connectFolder()">Usar la carpeta local</a> (tendrás que publicar con Commit + Sync).</p>
   </section>
 
   <!-- 2 · Configuración inicial -->
@@ -120,6 +139,7 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
     <div id="publish" class="msg msg-notice hidden">
       <b>Tienes cambios sin publicar.</b> En VS Code: <b>Source Control</b> → escribe un mensaje → <b>Commit</b> → <b>Sync Changes</b>. Tus clientes los verán 1–2 minutos después.
     </div>
+    <div id="pub-status" class="hidden"></div>
     <div class="tabs">
       <button class="tab active" data-tab="clients" onclick="showTab('clients')">Clientes</button>
       <button class="tab" data-tab="intel" onclick="showTab('intel')">Market Intelligence</button>
@@ -206,9 +226,79 @@ async function busy(btn, label, fn) {
 }
 function fmtSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
 
-/* ── Folder access ──────────────────────────────── */
+/* ── Storage: GitHub (auto-publish) or local folder ─
+   Paths are relative to /client-portal. With GitHub, writes are
+   buffered and pushed as one commit by publish(). */
+let GH = null;
+
+function githubStore(repo, token, branch = 'main') {
+  const BASE = 'client-portal/';
+  const encPath = p => p.split('/').map(encodeURIComponent).join('/');
+  const api = (p, opts = {}) => fetch('https://api.github.com/repos/' + repo + p, {
+    ...opts, cache: 'no-store',
+    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(opts.headers || {}) }
+  });
+  async function check(r) {
+    if (r.ok) return r;
+    const e = new Error(r.status === 401 ? 'La llave de GitHub no es válida o ya venció. Crea una nueva.'
+      : (r.status === 403 || r.status === 404) ? 'La llave no tiene permiso de escritura (Contents: Read and write) en este repositorio.'
+      : 'GitHub respondió con un error (' + r.status + '). Intenta de nuevo.');
+    e.status = r.status;
+    throw e;
+  }
+  const pending = new Map();  // full path → Uint8Array, or null to delete
+  let head = null;
+  async function getHead() { head = (await (await check(await api('/git/ref/heads/' + branch))).json()).object.sha; return head; }
+  async function fetchRaw(full) {
+    const r = await api('/contents/' + encPath(full) + '?ref=' + head, { headers: { Accept: 'application/vnd.github.raw+json' } });
+    if (r.status === 404) return null;
+    return new Uint8Array(await (await check(r)).arrayBuffer());
+  }
+  return {
+    pending,
+    async init() { await getHead(); },
+    async read(path, asBytes) {
+      const full = BASE + path;
+      const b = pending.has(full) ? pending.get(full) : await fetchRaw(full);
+      if (b == null) return null;
+      return asBytes ? b : dec.decode(b);
+    },
+    async write(path, content) { pending.set(BASE + path, typeof content === 'string' ? enc.encode(content) : content); },
+    async remove(path) {
+      const full = BASE + path;
+      if (pending.has(full) && pending.get(full) !== null) {
+        pending.delete(full);
+        if ((await fetchRaw(full)) == null) return;  // only existed in this batch
+      } else if ((await fetchRaw(full)) == null) return;
+      pending.set(full, null);
+    },
+    async flush(message) {
+      if (!pending.size) return;
+      for (let attempt = 0; ; attempt++) {
+        const parent = await getHead();
+        const baseTree = (await (await check(await api('/git/commits/' + parent))).json()).tree.sha;
+        const tree = [];
+        for (const [path, bytes] of pending) {
+          if (bytes == null) { tree.push({ path, mode: '100644', type: 'blob', sha: null }); continue; }
+          const blob = await (await check(await api('/git/blobs', { method: 'POST', body: JSON.stringify({ content: SP.b64(bytes), encoding: 'base64' }) }))).json();
+          tree.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
+        }
+        const t = await (await check(await api('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: baseTree, tree }) }))).json();
+        const c = await (await check(await api('/git/commits', { method: 'POST', body: JSON.stringify({ message, tree: t.sha, parents: [parent] }) }))).json();
+        const r = await api('/git/refs/heads/' + branch, { method: 'PATCH', body: JSON.stringify({ sha: c.sha, force: false }) });
+        if (r.status === 422 && attempt < 2) continue;  // someone pushed meanwhile: rebuild on the new head
+        await check(r);
+        head = c.sha;
+        pending.clear();
+        return;
+      }
+    }
+  };
+}
+
 async function dirAt(parts, create) { let d = ROOT; for (const p of parts) d = await d.getDirectoryHandle(p, { create }); return d; }
 async function readFile(path, asBytes) {
+  if (GH) return GH.read(path, asBytes);
   const parts = path.split('/'), name = parts.pop();
   try {
     const f = await (await (await dirAt(parts, false)).getFileHandle(name)).getFile();
@@ -217,6 +307,7 @@ async function readFile(path, asBytes) {
 }
 async function readJSON(path) { const t = await readFile(path); return t == null ? null : JSON.parse(t); }
 async function writeFile(path, content) {
+  if (GH) return GH.write(path, content);
   const parts = path.split('/'), name = parts.pop();
   const fh = await (await dirAt(parts, true)).getFileHandle(name, { create: true });
   const w = await fh.createWritable(); await w.write(content); await w.close();
@@ -224,8 +315,65 @@ async function writeFile(path, content) {
 }
 const writeJSON = (path, obj) => writeFile(path, JSON.stringify(obj, null, 1) + '\n');
 async function removeFile(path) {
+  if (GH) return GH.remove(path);
   const parts = path.split('/'), name = parts.pop();
   try { await (await dirAt(parts, false)).removeEntry(name); dirty(); } catch (e) { if (e.name !== 'NotFoundError') throw e; }
+}
+
+// Push buffered changes to GitHub. Commit messages are public: never put client data in them.
+async function publish(message) {
+  if (!GH || !GH.pending.size) return;
+  const el = $('pub-status');
+  el.className = 'msg msg-notice'; el.textContent = 'Publicando en GitHub…';
+  try {
+    await GH.flush('Portal: ' + message);
+    el.className = 'msg msg-ok'; el.textContent = 'Publicado ✓ Tus clientes lo verán en 1–2 minutos.';
+    clearTimeout(publish.t); publish.t = setTimeout(() => el.classList.add('hidden'), 6000);
+  } catch (e) {
+    // Changes stay buffered; Reintentar (or the next action) pushes them
+    el.className = 'msg msg-err';
+    el.innerHTML = esc('No se pudo publicar: ' + e.message) + ' <button class="btn btn-sm" onclick="publish(\'reintento\')">Reintentar</button>';
+  }
+}
+
+/* ── Connect ────────────────────────────────────── */
+const GH_KEY = 'sp_admin_github';
+(() => {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(GH_KEY)); } catch {}
+  if (saved && saved.token) {
+    $('gh-repo').value = saved.repo || $('gh-repo').value;
+    $('gh-token').value = saved.token;
+    $('gh-forget').classList.remove('hidden');
+  }
+})();
+function forgetToken() {
+  try { localStorage.removeItem(GH_KEY); } catch {}
+  $('gh-token').value = ''; $('gh-forget').classList.add('hidden');
+}
+
+async function connectGitHub(e) {
+  e.preventDefault();
+  msg('connect-msg', '');
+  const repo = $('gh-repo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+  const token = $('gh-token').value.trim();
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return msg('connect-msg', 'Escribe el repositorio como usuario/nombre, por ejemplo JESALAZARE/SENTINELS.');
+  if (!token) return msg('connect-msg', 'Pega tu llave de acceso de GitHub.');
+  await busy($('gh-btn'), 'Conectando…', async () => {
+    const store = githubStore(repo, token);
+    try {
+      await store.init();
+      GH = store;
+      if ((await readFile('crypto.js')) == null) throw new Error('Ese repositorio no tiene la carpeta client-portal del sitio.');
+      META = await readJSON('data/meta.json');
+    } catch (err) { GH = null; return msg('connect-msg', err.message); }
+    try {
+      if ($('gh-remember').checked) localStorage.setItem(GH_KEY, JSON.stringify({ repo, token }));
+      else localStorage.removeItem(GH_KEY);
+    } catch {}
+    show(META ? 'unlock' : 'setup');
+    (META ? $('unlock-pw') : $('setup-pw')).focus();
+  });
 }
 
 async function connectFolder() {
@@ -263,6 +411,7 @@ async function doSetup() {
     await saveIndex(); await saveIntel();
     await writeJSON('data/meta.json', META);
     enterMain();
+    await publish('configuración inicial');
   });
 }
 
@@ -448,6 +597,7 @@ async function saveClient(btn) {
     INDEX = INDEX.filter(c => c.id !== oldId && c.id !== id);
     INDEX.push({ id, email: form.email, company: form.profile.company, updated: today() });
     await saveIndex();
+    await publish('guardar cliente');
     renderClientList(); renderEditor();
     if (password) showPassword(password, 'Acceso creado');
     else msg('editor-msg', 'Cambios guardados.', 'ok');
@@ -461,6 +611,7 @@ async function resetPassword(btn) {
     CUR.vault.client = await SP.wrapWithPassword(password, CUR.dek);
     CUR.vault.pwUpdated = Date.now();  // older client requests can no longer be applied
     await writeVault();
+    await publish('nueva contraseña de cliente');
     showPassword(password, 'Nueva contraseña');
   });
 }
@@ -475,6 +626,7 @@ async function deleteClient(btn) {
     await saveIndex();
     CUR = null;
     await rotatePortalKey();
+    await publish('eliminar cliente');
     renderClientList();
     $('editor').innerHTML = '<div class="msg msg-ok">Cliente eliminado.</div>';
   });
@@ -554,7 +706,8 @@ async function applyRequest(btn) {
     vault.client = req.wrap;
     vault.pwUpdated = req.ts;
     await writeJSON(`data/clients/${req.id}.json`, vault);
-    msg('req-msg', `Listo: contraseña actualizada para ${entry.company} (${entry.email}). Publica con Commit + Sync Changes y avísale al cliente.`, 'ok');
+    await publish('cambio de contraseña de cliente');
+    msg('req-msg', `Listo: contraseña actualizada para ${entry.company} (${entry.email}). ${GH ? 'En 1–2 minutos ya funciona;' : 'Publica con Commit + Sync Changes y'} avísale al cliente.`, 'ok');
     if (CUR && CUR.id === req.id) CUR.vault = vault;
   });
 }
@@ -574,7 +727,7 @@ async function uploadDocs(input) {
     await writeFile('data/docs/' + rid, await SP.sealFile(CUR.key, new Uint8Array(await f.arrayBuffer())));
     CUR.data.docs.push({ file: rid, name: f.name.replace(/\.[^.]+$/, '') || f.name, filename: f.name, mime: f.type || 'application/octet-stream', type, date: today(), size: fmtSize(f.size) });
   }
-  if (ok.length) await writeVault();
+  if (ok.length) { await writeVault(); $('doc-status').textContent = 'Publicando…'; await publish('subir documentos'); }
   renderEditor();
   $('doc-status').textContent = (ok.length ? `${ok.length} archivo(s) agregado(s). ` : '') +
     (tooBig.length ? `No se subieron (más de 95 MB, GitHub no los acepta): ${tooBig.map(f => f.name).join(', ')}` : '');
@@ -597,6 +750,7 @@ async function deleteDoc(i) {
   await removeFile('data/docs/' + x.file);
   CUR.data.docs.splice(i, 1);
   await writeVault();
+  await publish('quitar documento');
   renderEditor();
 }
 
@@ -635,6 +789,7 @@ async function saveIntelItem(btn) {
   await busy(btn, 'Guardando…', async () => {
     INTEL = INTEL.filter(i => i.id !== item.id).concat(item);
     await saveIntel();
+    await publish('market intelligence');
     editIntel(item.id);
     msg('intel-msg', 'Guardado.', 'ok');
   });
@@ -645,6 +800,7 @@ async function deleteIntelItem(btn) {
     INTEL = INTEL.filter(i => i.id !== INTEL_CUR);
     INTEL_CUR = null;
     await saveIntel();
+    await publish('market intelligence');
     renderIntelList();
     $('intel-editor').innerHTML = '<div class="msg msg-ok">Publicación eliminada.</div>';
   });
