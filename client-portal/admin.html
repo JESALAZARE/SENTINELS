@@ -127,6 +127,7 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
   <section id="v-unlock" class="card center stack hidden">
     <h1>Desbloquear</h1>
     <p class="muted">Escribe tu contraseña de administrador.</p>
+    <p class="small muted" style="margin:0"><a href="#" onclick="event.preventDefault();show('connect')">Usar otra llave de GitHub o la carpeta local</a></p>
     <form onsubmit="doUnlock(event)" class="stack">
       <input id="unlock-pw" type="password" autocomplete="current-password">
       <div id="unlock-msg"></div>
@@ -255,7 +256,7 @@ function githubStore(repo, token, branch = 'main') {
     return new Uint8Array(await (await check(r)).arrayBuffer());
   }
   return {
-    pending,
+    repo, token, pending,
     async init() { await getHead(); },
     async read(path, asBytes) {
       const full = BASE + path;
@@ -338,6 +339,30 @@ async function publish(message) {
 
 /* ── Connect ────────────────────────────────────── */
 const GH_KEY = 'sp_admin_github';
+const DEFAULT_REPO = 'JESALAZARE/SENTINELS';
+
+// If the GitHub key is already stored (encrypted) in the published meta.json,
+// start on the password screen: no key or folder needed on this device.
+(async () => {
+  try {
+    const r = await fetch('data/meta.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const m = await r.json();
+    if (m && m.ghToken && !GH && !ROOT) { META = m; show('unlock'); $('unlock-pw').focus(); }
+  } catch {}
+})();
+
+// Keep the current GitHub key in meta.json, encrypted with the admin key
+async function storeTokenInRepo() {
+  if (!GH) return;
+  let cur = null;
+  try { cur = META.ghToken ? dec.decode(await SP.open(ADMIN_KEY, META.ghToken)) : null; } catch {}
+  if (cur === GH.token && META.repo === GH.repo) return;
+  META.ghToken = await SP.seal(ADMIN_KEY, enc.encode(GH.token));
+  META.repo = GH.repo;
+  await writeJSON('data/meta.json', META);
+  await publish('llave de acceso cifrada');
+}
 (() => {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(GH_KEY)); } catch {}
@@ -408,6 +433,7 @@ async function doSetup() {
       portalKey: await SP.seal(ADMIN_KEY, PORTAL_RAW)
     };
     INDEX = []; INTEL = [];
+    if (GH) { META.ghToken = await SP.seal(ADMIN_KEY, enc.encode(GH.token)); META.repo = GH.repo; }
     await saveIndex(); await saveIntel();
     await writeJSON('data/meta.json', META);
     enterMain();
@@ -424,12 +450,25 @@ async function doUnlock(e) {
       if (dec.decode(await SP.open(key, META.admin.check)) !== 'sentinels-admin') throw 0;
     } catch { return msg('unlock-msg', 'Contraseña incorrecta.'); }
     ADMIN_KEY = key;
+    if (!GH && !ROOT) {
+      // Opened with just the password: use the GitHub key stored (encrypted) in meta.json
+      if (!META.ghToken) { show('connect'); return msg('connect-msg', 'Pega tu llave de GitHub una vez; después se guarda cifrada y solo necesitarás tu contraseña.'); }
+      const store = githubStore(META.repo || DEFAULT_REPO, dec.decode(await SP.open(ADMIN_KEY, META.ghToken)));
+      try { await store.init(); }
+      catch (err) {
+        show('connect');
+        return msg('connect-msg', err.status === 401 ? 'La llave guardada ya venció o fue revocada. Pega una nueva; se guardará cifrada otra vez.' : err.message);
+      }
+      GH = store;
+      META = (await readJSON('data/meta.json')) || META;  // latest copy from GitHub
+    }
     PORTAL_RAW = await SP.open(ADMIN_KEY, META.portalKey);
     const idx = await readJSON('data/admin-index.json');
     INDEX = idx ? await SP.openJSON(ADMIN_KEY, idx) : [];
     const intel = await readJSON('data/intel.json');
     INTEL = intel ? await SP.openJSON(await SP.importKey(PORTAL_RAW), intel) : [];
     enterMain();
+    await storeTokenInRepo();
   });
 }
 
