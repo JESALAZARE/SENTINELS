@@ -297,7 +297,8 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
       </div>
       <button class="cp-login-btn" id="cp-signin-btn" type="submit">Sign In</button>
     </form>
-    <div class="cp-login-foot">Not a client yet? <button class="cp-req-access" type="button" onclick="openAccessModal()">Request access →</button></div>
+    <div class="cp-login-foot"><button class="cp-req-access" type="button" onclick="openForgotModal()">Forgot password?</button></div>
+    <div class="cp-login-foot" style="margin-top:12px">Not a client yet? <button class="cp-req-access" type="button" onclick="openAccessModal()">Request access →</button></div>
     <a href="https://sentinels.com.mx" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;font-family:var(--font-sans);font-size:12px;color:var(--steel-400);text-decoration:none;transition:color 150ms" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--steel-400)'">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       Return to website
@@ -354,6 +355,10 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
         <div class="cp-sb-user-role" id="cp-user-role">—</div>
       </div>
     </div>
+    <a class="cp-sb-signout" href="#" onclick="event.preventDefault();openPwModal()" style="padding-bottom:4px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Change password
+    </a>
     <a class="cp-sb-signout" href="#" onclick="doSignOut()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       Sign out
@@ -626,8 +631,9 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 const FORMSPREE = 'https://formspree.io/f/mlgknepp';
 const DATA = 'data/';
 const SESSION_KEY = 'sp_session';
-let ME = null;   // decrypted client payload
-let DEK = null;  // client data key (documents)
+let ME = null;     // decrypted client payload
+let DEK = null;    // client data key (documents)
+let DEK_RAW = null, MY_ID = null;
 
 /* ── Helpers ────────────────────────────────────── */
 function _set(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
@@ -679,7 +685,7 @@ async function doLogin(e) {
     try { vault = await _fetchJSON('clients/' + id + '.json'); } catch { throw new Error('auth'); }
     try { raw = await SP.unwrapWithPassword(pw, vault.client); } catch { throw new Error('auth'); }
     try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ id, dek: SP.b64(raw) })); } catch {}
-    await _openVault(vault, raw);
+    await _openVault(vault, raw, id);
   } catch (err) {
     btn.textContent = 'Sign In';
     btn.classList.remove('cp-loading');
@@ -688,7 +694,8 @@ async function doLogin(e) {
   }
 }
 
-async function _openVault(vault, raw) {
+async function _openVault(vault, raw, id) {
+  DEK_RAW = raw; MY_ID = id;
   DEK = await SP.importKey(raw);
   ME = await SP.openJSON(DEK, vault.data);
   ME.docs = (ME.docs || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -715,7 +722,7 @@ function _showPortal() {
   let s = null;
   try { s = JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch {}
   if (!s) return;
-  try { await _openVault(await _fetchJSON('clients/' + s.id + '.json'), SP.unb64(s.dek)); }
+  try { await _openVault(await _fetchJSON('clients/' + s.id + '.json'), SP.unb64(s.dek), s.id); }
   catch { try { sessionStorage.removeItem(SESSION_KEY); } catch {} }
 })();
 
@@ -960,6 +967,77 @@ async function submitSupport(e) {
   btn.textContent = 'Send message'; btn.disabled = false;
 }
 
+/* ── Change password ────────────────────────────
+   The site can't save on its own, so the new password is wrapped here
+   (it never leaves the browser in clear) and sent to the advisor, who
+   applies it from the admin panel and publishes. */
+function _modal(id, open) {
+  const m = document.getElementById(id);
+  if (open) {
+    m.querySelectorAll('form').forEach(f => f.reset());
+    m.querySelectorAll('[data-view="form"]').forEach(v => v.style.display = '');
+    m.querySelectorAll('[data-view="done"]').forEach(v => v.style.display = 'none');
+    m.querySelectorAll('.cp-modal-status').forEach(s => s.textContent = '');
+    m.removeAttribute('hidden');
+  } else m.setAttribute('hidden', '');
+}
+const openPwModal = () => _modal('cp-pw-modal', true);
+const openForgotModal = () => _modal('cp-forgot-modal', true);
+
+async function submitPwChange(e) {
+  e.preventDefault();
+  const cur = document.getElementById('pw-current').value;
+  const n1 = document.getElementById('pw-new').value, n2 = document.getElementById('pw-new2').value;
+  const status = document.getElementById('pw-status'), btn = document.getElementById('pw-submit');
+  if (n1.length < 10) { status.textContent = 'Use at least 10 characters.'; return; }
+  if (n1 !== n2) { status.textContent = 'The new passwords do not match.'; return; }
+  if (n1 === cur) { status.textContent = 'Choose a password different from your current one.'; return; }
+  btn.textContent = 'Sending…'; btn.disabled = true; status.textContent = '';
+  try {
+    const vault = await _fetchJSON('clients/' + MY_ID + '.json');
+    try { await SP.unwrapWithPassword(cur, vault.client); } catch { throw new Error('current'); }
+    const ts = Date.now();
+    const req = { v: 1, id: MY_ID, ts, wrap: await SP.wrapWithPassword(n1, DEK_RAW), proof: await SP.sealJSON(DEK, { t: 'pw-change', id: MY_ID, ts }) };
+    const company = (ME.profile && ME.profile.company) || 'client';
+    const fd = new FormData();
+    fd.append('email', ME.email || '');
+    fd.append('company', company);
+    fd.append('source', 'client-portal');
+    fd.append('_subject', 'Password change request — ' + company);
+    fd.append('request_code', 'SPREQ1:' + btoa(JSON.stringify(req)));
+    fd.append('instructions', 'Admin panel → Clientes → Aplicar solicitud de contraseña → paste request_code → Commit + Sync Changes.');
+    const res = await fetch(FORMSPREE, { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error('send');
+    document.querySelector('#cp-pw-modal [data-view="form"]').style.display = 'none';
+    document.querySelector('#cp-pw-modal [data-view="done"]').style.display = '';
+  } catch (err) {
+    status.textContent = err.message === 'current' ? 'Your current password is incorrect.' : 'Could not send your request. Please try again.';
+  }
+  btn.textContent = 'Request change'; btn.disabled = false;
+}
+
+async function submitForgot(e) {
+  e.preventDefault();
+  const email = document.getElementById('fg-email').value.trim();
+  const status = document.getElementById('fg-status'), btn = document.getElementById('fg-submit');
+  btn.textContent = 'Sending…'; btn.disabled = true; status.textContent = '';
+  try {
+    const fd = new FormData();
+    fd.append('email', email);
+    fd.append('source', 'client-portal');
+    fd.append('_subject', 'Forgot password — ' + email);
+    fd.append('message', 'This client cannot sign in. Generate a new password in the admin panel (Nueva contraseña), publish it and send it to them.');
+    const res = await fetch(FORMSPREE, { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error();
+    document.querySelector('#cp-forgot-modal [data-view="form"]').style.display = 'none';
+    document.querySelector('#cp-forgot-modal [data-view="done"]').style.display = '';
+  } catch {
+    status.textContent = 'Could not send your request. Please try again.';
+  }
+  btn.textContent = 'Send request'; btn.disabled = false;
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { _modal('cp-pw-modal', false); _modal('cp-forgot-modal', false); } });
+
 /* ── Access Modal ──────────────────────────────── */
 function openAccessModal() {
   const m = document.getElementById('cp-access-modal');
@@ -1069,6 +1147,67 @@ function filterDocs(btn, type) {
       <div class="cp-access-done-title">Request received.</div>
       <p class="cp-access-done-sub">An advisor will reply within one business day with your benchmark scope.</p>
       <button class="cp-btn-dark" onclick="closeAccessModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     CHANGE PASSWORD MODAL
+═══════════════════════════════════════════════════ -->
+<div class="cp-access-modal" id="cp-pw-modal" hidden onmousedown="if(event.target===this)_modal('cp-pw-modal',false)">
+  <div class="cp-access-panel" onmousedown="event.stopPropagation()">
+    <button class="cp-access-close" aria-label="Close" onclick="_modal('cp-pw-modal',false)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <div data-view="form">
+      <div class="cp-access-eyebrow"><span></span>Account security</div>
+      <h3 class="cp-access-title">Change your password.</h3>
+      <form class="cp-access-form" onsubmit="submitPwChange(event)">
+        <div class="cp-f"><label for="pw-current">Current password</label><input id="pw-current" type="password" autocomplete="current-password" required></div>
+        <div class="cp-access-row">
+          <div class="cp-f"><label for="pw-new">New password</label><input id="pw-new" type="password" autocomplete="new-password" placeholder="Min. 10 characters" required></div>
+          <div class="cp-f"><label for="pw-new2">Confirm new password</label><input id="pw-new2" type="password" autocomplete="new-password" required></div>
+        </div>
+        <p class="cp-access-done-sub" style="margin:0;max-width:none;font-size:13px">Your new password is encrypted on this device before it is sent; nobody at Sentinel can read it. Your advisor will activate it and confirm by email — until then, keep using your current password.</p>
+        <div class="cp-modal-status" id="pw-status" style="color:var(--signal-negative);font-size:13px;min-height:18px"></div>
+        <div class="cp-access-actions">
+          <button type="button" class="cp-btn-ghost" onclick="_modal('cp-pw-modal',false)">Cancel</button>
+          <button type="submit" class="cp-btn-dark" id="pw-submit">Request change</button>
+        </div>
+      </form>
+    </div>
+    <div data-view="done" class="cp-access-done" style="display:none">
+      <div class="cp-access-done-title">Request sent.</div>
+      <p class="cp-access-done-sub">Your advisor will activate your new password and let you know. Until then, keep using your current one.</p>
+      <button class="cp-btn-dark" onclick="_modal('cp-pw-modal',false)">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     FORGOT PASSWORD MODAL
+═══════════════════════════════════════════════════ -->
+<div class="cp-access-modal" id="cp-forgot-modal" hidden onmousedown="if(event.target===this)_modal('cp-forgot-modal',false)">
+  <div class="cp-access-panel" onmousedown="event.stopPropagation()">
+    <button class="cp-access-close" aria-label="Close" onclick="_modal('cp-forgot-modal',false)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <div data-view="form">
+      <div class="cp-access-eyebrow"><span></span>Client portal</div>
+      <h3 class="cp-access-title">Forgot your password?</h3>
+      <form class="cp-access-form" onsubmit="submitForgot(event)">
+        <div class="cp-f"><label for="fg-email">Email you sign in with</label><input id="fg-email" type="email" placeholder="name@company.com" required></div>
+        <div class="cp-modal-status" id="fg-status" style="color:var(--signal-negative);font-size:13px;min-height:18px"></div>
+        <div class="cp-access-actions">
+          <button type="button" class="cp-btn-ghost" onclick="_modal('cp-forgot-modal',false)">Cancel</button>
+          <button type="submit" class="cp-btn-dark" id="fg-submit">Send request</button>
+        </div>
+      </form>
+    </div>
+    <div data-view="done" class="cp-access-done" style="display:none">
+      <div class="cp-access-done-title">Request received.</div>
+      <p class="cp-access-done-sub">Your advisor will send a new password to your registered email.</p>
+      <button class="cp-btn-dark" onclick="_modal('cp-forgot-modal',false)">Close</button>
     </div>
   </div>
 </div>

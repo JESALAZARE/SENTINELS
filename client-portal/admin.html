@@ -129,6 +129,7 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
     <div id="t-clients" class="layout">
       <div class="stack">
         <button class="btn btn-gold" style="width:100%" onclick="newClient()">+ Nuevo cliente</button>
+        <button class="btn" style="width:100%" onclick="openRequestModal()">Aplicar solicitud de contraseña</button>
         <div class="list" id="client-list"></div>
       </div>
       <div id="editor" class="card stack">
@@ -161,6 +162,20 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
       <span class="small muted" id="pw-copied"></span>
       <button class="btn" onclick="copyMessage()">Copiar mensaje</button>
       <button class="btn btn-dark" onclick="document.getElementById('pw-modal').hidden=true">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Solicitud de cambio de contraseña -->
+<div class="modal" id="req-modal" hidden>
+  <div class="card stack">
+    <h2>Aplicar solicitud de contraseña</h2>
+    <p class="muted" style="margin:0">Cuando un cliente cambia su contraseña desde el portal, te llega un correo de Formspree con un campo <b>request_code</b> (empieza con <span class="mono">SPREQ1:</span>). Cópialo completo y pégalo aquí. La contraseña nueva viene cifrada: ni tú ni nadie puede leerla.</p>
+    <textarea id="req-code" rows="6" class="mono small" placeholder="SPREQ1:…"></textarea>
+    <div id="req-msg"></div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn" onclick="document.getElementById('req-modal').hidden=true">Cerrar</button>
+      <button class="btn btn-dark" id="req-btn" onclick="applyRequest(this)">Aplicar</button>
     </div>
   </div>
 </div>
@@ -444,6 +459,7 @@ async function resetPassword(btn) {
   await busy(btn, 'Generando…', async () => {
     const password = SP.genPassword();
     CUR.vault.client = await SP.wrapWithPassword(password, CUR.dek);
+    CUR.vault.pwUpdated = Date.now();  // older client requests can no longer be applied
     await writeVault();
     showPassword(password, 'Nueva contraseña');
   });
@@ -504,6 +520,43 @@ async function copyMessage() {
   const t = $('pw-message');
   try { await navigator.clipboard.writeText(t.value); } catch { t.select(); document.execCommand('copy'); }
   $('pw-copied').textContent = 'Copiado ✓';
+}
+
+/* ── Client password-change requests ────────────── */
+function openRequestModal() {
+  $('req-code').value = ''; msg('req-msg', '');
+  $('req-modal').hidden = false; $('req-code').focus();
+}
+
+async function applyRequest(btn) {
+  msg('req-msg', '');
+  let req;
+  try {
+    const code = $('req-code').value.replace(/\s+/g, '');
+    if (!code.startsWith('SPREQ1:')) throw 0;
+    req = JSON.parse(atob(code.slice(7)));
+    const w = req.wrap;
+    if (!req.id || !req.ts || !w || !w.salt || !w.iv || !w.ct || !(w.iter >= 100000)) throw 0;
+  } catch { return msg('req-msg', 'Ese código no es válido. Copia el campo request_code completo del correo.'); }
+  const entry = INDEX.find(c => c.id === req.id);
+  if (!entry) return msg('req-msg', 'Esa solicitud es de un cliente que ya no existe.');
+  await busy(btn, 'Verificando…', async () => {
+    const vault = await readJSON(`data/clients/${req.id}.json`);
+    const dek = await SP.open(ADMIN_KEY, vault.admin);
+    const key = await SP.importKey(dek);
+    // The proof is encrypted with the client's own data key: only a signed-in client can produce it
+    let proof;
+    try { proof = await SP.openJSON(key, req.proof); } catch { proof = null; }
+    if (!proof || proof.t !== 'pw-change' || proof.id !== req.id || proof.ts !== req.ts)
+      return msg('req-msg', 'No pude verificar que la solicitud venga de este cliente. No se aplicó.');
+    if (vault.pwUpdated && req.ts <= vault.pwUpdated)
+      return msg('req-msg', 'Esta solicitud es más antigua que la contraseña actual del cliente. No se aplicó.');
+    vault.client = req.wrap;
+    vault.pwUpdated = req.ts;
+    await writeJSON(`data/clients/${req.id}.json`, vault);
+    msg('req-msg', `Listo: contraseña actualizada para ${entry.company} (${entry.email}). Publica con Commit + Sync Changes y avísale al cliente.`, 'ok');
+    if (CUR && CUR.id === req.id) CUR.vault = vault;
+  });
 }
 
 /* ── Documents ──────────────────────────────────── */
