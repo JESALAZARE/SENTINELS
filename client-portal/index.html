@@ -293,6 +293,98 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-viewer-msg{color:var(--silver-200);font-size:14px;margin-top:40px}
 @media print{body.cp-viewing{display:none}}
 
+/* ── Boards (customizable dashboard / contract) ───────── */
+.cp-board-head{align-items:flex-end}
+.cp-board-tools{display:flex;gap:8px}
+.cp-btn-sm{height:36px;padding:0 14px;font-size:13px}
+.cp-board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:start}
+.cp-widget{background:var(--white);border:1px solid var(--border-subtle);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);padding:16px 18px 18px;min-width:0;position:relative}
+.cp-widget::before{content:"";position:absolute;top:0;left:18px;width:36px;height:2px;background:var(--metal-silver)}
+.cp-w-s{grid-column:span 1}.cp-w-m{grid-column:span 2}.cp-w-w{grid-column:span 3}.cp-w-l{grid-column:1 / -1}
+.cp-widget.dragging{opacity:.4}
+.cp-widget-new{animation:cp-pop 900ms var(--ease-out)}
+@keyframes cp-pop{0%{box-shadow:0 0 0 3px rgba(200,157,42,.6)}100%{box-shadow:var(--shadow-sm)}}
+.cp-widget-head{display:flex;align-items:center;gap:6px;margin:0 -6px 10px 0}
+.cp-widget-title{flex:1;min-width:0;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-widget-grip{width:14px;height:18px;color:var(--silver-200);cursor:grab;flex:none;margin-left:-6px;opacity:0;transition:opacity 150ms}
+.cp-widget-grip svg{width:14px;height:18px}
+.cp-widget:hover .cp-widget-grip{opacity:1}
+.cp-widget-btn{width:28px;height:28px;border:0;background:none;border-radius:var(--radius-md);color:var(--steel-400);font-size:18px;line-height:1;cursor:pointer;flex:none}
+.cp-widget-btn:hover{background:var(--paper-50);color:var(--ink-900)}
+.cp-widget-empty{font-size:13px;color:var(--steel-400);padding:6px 0}
+.cp-widget-more{display:block;margin-top:12px}
+.cp-widget .cp-intel-item:first-child{padding-top:0}
+.cp-kpi-value--text{font-family:var(--font-serif);font-size:24px;font-weight:600;line-height:1.15}
+.cp-docs-grid--w{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+.cp-widget-add{grid-column:span 1;min-height:132px;border:1.5px dashed var(--border-default);border-radius:var(--radius-md);background:transparent;color:var(--steel-400);font-family:var(--font-sans);font-size:13px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;transition:all 150ms}
+.cp-widget-add span{width:36px;height:36px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:400}
+.cp-widget-add:hover{border-color:var(--ink-900);color:var(--ink-900);background:var(--white)}
+/* Widget menu */
+.cp-wmenu{position:fixed;z-index:1400;min-width:180px;background:#fff;border:1px solid var(--border-default);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);padding:6px}
+.cp-wmenu-h{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--silver-300);padding:6px 10px 4px}
+.cp-wmenu button{display:block;width:100%;text-align:left;border:0;background:none;padding:8px 10px;border-radius:var(--radius-md);font-family:var(--font-sans);font-size:13px;color:var(--ink-900);cursor:pointer}
+.cp-wmenu button:hover:not(:disabled){background:var(--paper-50)}
+.cp-wmenu button.on{font-weight:700}
+.cp-wmenu button.on::after{content:" ✓"}
+.cp-wmenu button:disabled{color:var(--silver-200);cursor:default}
+.cp-wmenu button.danger{color:var(--signal-negative)}
+.cp-wmenu-sep{height:1px;background:var(--border-subtle);margin:4px 0}
+/* Gallery */
+.cp-gallery-panel{max-width:760px;max-height:calc(100dvh - 40px);overflow-y:auto}
+.cp-gal-cat{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--steel-400);margin:18px 0 8px}
+.cp-gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.cp-gal-item{display:flex;gap:12px;align-items:flex-start;text-align:left;padding:12px;border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:#fff;cursor:pointer;font-family:var(--font-sans);transition:all 150ms}
+.cp-gal-item:hover:not(:disabled){border-color:var(--ink-900);box-shadow:var(--shadow-sm)}
+.cp-gal-item:disabled{cursor:default;background:var(--paper-50)}
+.cp-gal-item:disabled .cp-gal-ico,.cp-gal-item:disabled b{opacity:.55}
+.cp-gal-ico{width:36px;height:36px;flex:none;border-radius:var(--radius-md);background:var(--paper-50);border:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:center;color:var(--ink-900)}
+.cp-gal-ico svg{width:18px;height:18px}
+.cp-gal-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cp-gal-txt b{font-size:13px;color:var(--ink-900)}
+.cp-gal-txt span{font-size:12px;color:var(--steel-400);line-height:1.4}
+.cp-gal-txt em{font-style:normal;font-size:11px;font-weight:600;color:var(--signal-notice);margin-top:2px}
+.cp-gal-txt em.ok{color:var(--signal-positive)}
+/* Interactive charts */
+.cp-ch-bar{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;margin-bottom:8px}
+.cp-ch-legend{display:flex;gap:6px;flex-wrap:wrap}
+.cp-ch-key{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-subtle);background:#fff;border-radius:999px;padding:3px 10px;font-family:var(--font-mono);font-size:11px;color:var(--graphite-500);cursor:pointer}
+.cp-ch-key span{width:10px;height:10px;border-radius:2px}
+.cp-ch-key.off{opacity:.4;text-decoration:line-through}
+.cp-ch-ranges{display:inline-flex;border:1px solid var(--border-subtle);border-radius:var(--radius-md);overflow:hidden;margin-left:auto}
+.cp-ch-ranges button{border:0;background:#fff;padding:4px 9px;font-family:var(--font-mono);font-size:11px;color:var(--steel-400);cursor:pointer}
+.cp-ch-ranges button+button{border-left:1px solid var(--border-subtle)}
+.cp-ch-ranges button.on{background:var(--ink-900);color:#fff}
+.cp-ch-total{font-size:12px;color:var(--steel-400)}
+.cp-ch-total b{font-family:var(--font-mono);color:var(--ink-900);font-size:14px}
+.cp-ch-plot{position:relative;height:210px;touch-action:pan-y}
+.cp-ch-plot svg{display:block;cursor:crosshair}
+.cp-ch-ax{font-family:var(--font-mono);font-size:10px;fill:var(--silver-300)}
+.cp-ch-tip{position:absolute;top:4px;pointer-events:none;background:var(--ink-900);color:#fff;border-radius:var(--radius-md);padding:8px 10px;font-size:12px;line-height:1.5;white-space:nowrap;box-shadow:var(--shadow-md);z-index:2}
+.cp-ch-tip-t{font-family:var(--font-mono);font-size:10px;color:var(--silver-200);text-transform:uppercase;letter-spacing:.06em}
+.cp-ch-tip span{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}
+.cp-ch-tip b{font-family:var(--font-mono);font-weight:500}
+.cp-ch-tip-note{color:#A8D5BA;font-size:11px}
+.cp-donut{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.cp-donut svg{flex:none}
+.cp-ch-arc{transition:opacity 150ms;cursor:pointer}
+.cp-donut-v{font-family:var(--font-mono);font-size:22px;font-weight:500;fill:var(--ink-900)}
+.cp-donut-l{font-size:9px;fill:var(--steel-400);text-transform:uppercase;letter-spacing:.08em}
+.cp-donut-legend{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--graphite-500)}
+.cp-donut-legend div{cursor:pointer}
+.cp-donut-legend span{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.cp-donut-legend b{font-family:var(--font-mono);margin-left:4px;color:var(--ink-900)}
+.cp-tl-top{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px}
+.cp-tl-big{font-family:var(--font-mono);font-size:28px;font-weight:500;line-height:1;color:var(--ink-900)}
+.cp-tl-big small{font-size:13px;color:var(--silver-300)}
+.cp-tl-cap{font-size:11px;color:var(--steel-400);text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+.cp-tl-track{position:relative;height:10px;background:var(--mist-100);border-radius:5px;margin:8px 0 26px}
+.cp-tl-fill{position:absolute;inset:0 auto 0 0;border-radius:5px;background:linear-gradient(90deg,#9AA0A7,#0B0D0F)}
+.cp-tl-year{position:absolute;top:14px;transform:translateX(-50%);font-family:var(--font-mono);font-size:10px;color:var(--silver-300)}
+.cp-tl-year i{position:absolute;top:-14px;left:50%;width:1px;height:10px;background:#fff;opacity:.7}
+.cp-tl-now{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid var(--signal-notice);transform:translate(-50%,-50%);box-shadow:var(--shadow-sm)}
+.cp-tl-dates{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--steel-400)}
+.cp-tl-note{margin-top:10px;font-size:12px;font-weight:600;color:var(--signal-notice)}
+
 /* ── Responsive (tablet & phone) ──────────────────────── */
 .cp-topbar-menu{display:none;width:40px;height:40px;margin-left:-8px;border:0;background:none;color:var(--ink-900);cursor:pointer;align-items:center;justify-content:center;flex:none}
 .cp-topbar-menu svg{width:22px;height:22px}
@@ -387,6 +479,32 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 /* ── Animations ───────────────────────────────────────── */
 @keyframes cp-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes cp-fade{from{opacity:0}to{opacity:1}}
+/* ── Boards: tablet & phone ───────────────────────────── */
+@media (max-width:1180px){
+  .cp-board{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cp-w-m,.cp-w-w,.cp-w-l{grid-column:1 / -1}
+}
+@media (max-width:600px){
+  .cp-board-head{flex-direction:column;align-items:stretch}
+  .cp-board-tools{width:100%}
+  .cp-board-tools button{flex:1;height:40px}
+  .cp-board{gap:10px}
+  .cp-board .cp-widget:not(.cp-widget--kpi){grid-column:1 / -1}
+  .cp-widget{padding:14px 12px 14px 14px}
+  .cp-widget::before{left:14px}
+  .cp-widget-head{margin-bottom:6px}
+  .cp-widget-title{font-size:10px;letter-spacing:.08em}
+  .cp-widget-grip{display:none}
+  .cp-widget-btn{width:32px;height:32px}
+  .cp-kpi-value--text{font-size:18px}
+  .cp-widget-add{grid-column:1 / -1;min-height:72px;flex-direction:row}
+  .cp-widget-add span{width:28px;height:28px;font-size:18px}
+  .cp-ch-plot{height:190px}
+  .cp-tl-big{font-size:22px}
+  .cp-gallery-panel{max-height:calc(100dvh - 24px)}
+  .cp-gal-grid{grid-template-columns:1fr}
+}
+@media (hover:none){ .cp-widget-grip{display:none} }
 </style>
 </head>
 <body>
@@ -502,70 +620,17 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
            ║  DASHBOARD                               ║
            ╚══════════════════════════════════════════╝ -->
       <section id="sec-dashboard" class="cp-section active">
-
-        <!-- KPI Row -->
-        <div class="cp-kpi-grid">
-          <div class="cp-kpi-card">
-            <div class="cp-kpi-eyebrow">Active Rate</div>
-            <div class="cp-kpi-value"><span id="kpi-rate">—</span><span class="cp-kpi-unit">MXN/kWh</span></div>
-            <div class="cp-kpi-delta cp-kpi-delta--pos" id="kpi-rate-delta">—</div>
+        <div class="cp-page-head cp-board-head">
+          <div>
+            <h1 class="cp-page-title">Your dashboard</h1>
+            <p class="cp-page-sub">Add, arrange and resize the widgets you care about</p>
           </div>
-          <div class="cp-kpi-card">
-            <div class="cp-kpi-eyebrow">Est. Monthly Savings</div>
-            <div class="cp-kpi-value"><span id="kpi-savings">—</span><span class="cp-kpi-unit">k MXN</span></div>
-            <div class="cp-kpi-delta cp-kpi-delta--pos" id="kpi-savings-note">vs CFE reference tariff</div>
-          </div>
-          <div class="cp-kpi-card">
-            <div class="cp-kpi-eyebrow">YTD Consumption</div>
-            <div class="cp-kpi-value"><span id="kpi-ytd">—</span><span class="cp-kpi-unit">GWh</span></div>
-            <div class="cp-kpi-delta cp-kpi-delta--neutral">YTD consumption</div>
-          </div>
-          <div class="cp-kpi-card">
-            <div class="cp-kpi-eyebrow">Contract Expires</div>
-            <div class="cp-kpi-value" id="kpi-contract-end">—</div>
-            <div class="cp-kpi-delta cp-kpi-delta--notice" id="kpi-contract-remain">—</div>
+          <div class="cp-board-tools">
+            <button class="cp-btn-ghost cp-btn-sm" onclick="Board.reset('dashboard')">Reset layout</button>
+            <button class="cp-btn-dark cp-btn-sm" onclick="Board.openGallery('dashboard')">+ Add widget</button>
           </div>
         </div>
-
-        <!-- Chart + Intelligence row -->
-        <div class="cp-split-row">
-          <div class="cp-card cp-chart-card">
-            <div class="cp-card-head">
-              <div class="cp-card-head-left">
-                <div class="cp-card-title">Rate Comparison</div>
-                <div class="cp-card-sub" id="cp-chart-sub">MXN/kWh</div>
-                <div class="cp-chart-legend">
-                  <span class="cp-legend-item"><span class="cp-legend-dot cp-legend-dot--s"></span>Sentinel rate</span>
-                  <span class="cp-legend-item"><span class="cp-legend-dot cp-legend-dot--cfe"></span>CFE GDMTH</span>
-                </div>
-              </div>
-            </div>
-            <div class="cp-chart-svg-wrap">
-              <svg id="cp-chart-svg" width="100%" height="200" viewBox="0 0 560 200" preserveAspectRatio="none"></svg>
-              <div class="cp-empty" id="cp-chart-empty" style="display:none">Rate history will appear here once your advisor publishes it.</div>
-            </div>
-          </div>
-          <div class="cp-card cp-intel-card">
-            <div class="cp-card-head">
-              <div class="cp-card-title">Market Intelligence</div>
-              <button class="cp-card-link" data-section="intelligence">View all →</button>
-            </div>
-            <div class="cp-intel-list" id="cp-intel-mini"></div>
-          </div>
-        </div>
-
-        <!-- Recent documents -->
-        <div class="cp-card cp-recent-card">
-          <div class="cp-card-head">
-            <div>
-              <div class="cp-card-title">Recent Documents</div>
-              <div class="cp-card-sub">Latest reports and analyses</div>
-            </div>
-            <button class="cp-card-link" data-section="documents">View all →</button>
-          </div>
-          <div class="cp-docs-grid" id="cp-docs-recent"></div>
-        </div>
-
+        <div class="cp-board" id="board-dashboard"></div>
       </section><!-- /dashboard -->
 
       <!-- ╔══════════════════════════════════════════╗
@@ -587,85 +652,17 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
            ║  MY CONTRACT                             ║
            ╚══════════════════════════════════════════╝ -->
       <section id="sec-contract" class="cp-section">
-        <div class="cp-page-head">
+        <div class="cp-page-head cp-board-head">
           <div>
             <h1 class="cp-page-title">My Contract</h1>
             <p class="cp-page-sub">Active PPA terms and counterparty details</p>
           </div>
-        </div>
-        <!-- Contract header -->
-        <div class="cp-card cp-contract-header">
-          <div>
-            <div class="cp-contract-id" id="ctr-id">CONTRACT ID · —</div>
-            <div class="cp-contract-title" id="ctr-title">Power Purchase Agreement</div>
-            <div class="cp-contract-period" id="ctr-period">—</div>
-          </div>
-          <div class="cp-contract-status">Active</div>
-        </div>
-        <!-- Terms grid -->
-        <div class="cp-terms-grid" style="margin-bottom:20px">
-          <div class="cp-term">
-            <div class="cp-term-label">Counterparty</div>
-            <div class="cp-term-value" id="ctr-counterparty" style="font-family:var(--font-serif);font-size:16px;font-weight:600">—</div>
-            <div class="cp-term-note" id="ctr-counterparty-note"></div>
-          </div>
-          <div class="cp-term">
-            <div class="cp-term-label">Annual Volume</div>
-            <div class="cp-term-value"><span id="ctr-volume">—</span></div>
-            <div class="cp-term-note" id="ctr-volume-note"></div>
-          </div>
-          <div class="cp-term">
-            <div class="cp-term-label">Base Price</div>
-            <div class="cp-term-value"><span id="ctr-price">—</span> <span style="font-size:13px">MXN/kWh</span></div>
-            <div class="cp-term-note" id="ctr-price-note"></div>
-          </div>
-          <div class="cp-term">
-            <div class="cp-term-label">Price Escalation</div>
-            <div class="cp-term-value" id="ctr-escalation">—</div>
-            <div class="cp-term-note" id="ctr-escalation-note"></div>
-          </div>
-          <div class="cp-term">
-            <div class="cp-term-label">MEM-indexed portion</div>
-            <div class="cp-term-value" id="ctr-mem">—</div>
-            <div class="cp-term-note" id="ctr-mem-note"></div>
-          </div>
-          <div class="cp-term">
-            <div class="cp-term-label" id="ctr-billed-label">Last billed</div>
-            <div class="cp-term-value"><span id="ctr-billed">—</span> <span style="font-size:13px">GWh</span></div>
-            <div class="cp-term-note" id="ctr-billed-note"></div>
+          <div class="cp-board-tools">
+            <button class="cp-btn-ghost cp-btn-sm" onclick="Board.reset('contract')">Reset layout</button>
+            <button class="cp-btn-dark cp-btn-sm" onclick="Board.openGallery('contract')">+ Add widget</button>
           </div>
         </div>
-        <!-- Contract meter -->
-        <div class="cp-card cp-contract-meter" style="margin-bottom:20px">
-          <div class="cp-meter-bar-wrap">
-            <div class="cp-meter-label">Contract progress</div>
-            <div class="cp-meter-bar"><div class="cp-meter-fill" style="width:50%"></div></div>
-            <div class="cp-meter-dates"><span id="ctr-meter-start">—</span><span id="ctr-meter-pct">—</span><span id="ctr-meter-end">—</span></div>
-          </div>
-          <div style="flex:none;text-align:right">
-            <div style="font-family:var(--font-mono);font-size:28px;font-weight:500;color:var(--ink-900);line-height:1"><span id="ctr-months-left">—</span> <span style="font-size:14px;color:var(--silver-300)">mo.</span></div>
-            <div style="font-size:11px;color:var(--steel-400);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px">remaining</div>
-            <div style="font-size:11px;color:var(--signal-notice);font-weight:600;margin-top:6px" id="ctr-renewal-note"></div>
-          </div>
-        </div>
-        <!-- Advisor -->
-        <div class="cp-card cp-advisor-card">
-          <div class="cp-advisor-avatar" id="adv-avatar">—</div>
-          <div>
-            <div class="cp-advisor-name" id="adv-name">—</div>
-            <div class="cp-advisor-role">Senior Advisor · Sentinel Energy Partners</div>
-            <div class="cp-advisor-contacts">
-              <a class="cp-advisor-link" id="adv-email" href="#">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                <span id="adv-email-txt">—</span>
-              </a>
-              <a class="cp-advisor-link" id="adv-call" href="#" target="_blank" rel="noopener">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 14 19.79 19.79 0 0 1 1.61 5.42 2 2 0 0 1 3.58 3.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 17l.19-.08z"/></svg>
-                Schedule a call
-              </a>
-            </div>
-          </div>
-        </div>
+        <div class="cp-board" id="board-contract"></div>
       </section>
 
       <!-- ╔══════════════════════════════════════════╗
@@ -826,13 +823,13 @@ async function _openVault(vault, raw, id) {
   ME.docs = (ME.docs || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
   _populatePortal(ME);
   _renderDocs(ME.docs);
-  _buildChart(ME.chart || []);
   let intel = [];
   try {
     PORTAL_KEY = await SP.importKey(SP.unb64(ME.portalKey));
     intel = await SP.openJSON(PORTAL_KEY, await _fetchJSON('intel.json'));
   } catch {}
   _renderIntel(intel);
+  Board.renderAll();
   _showPortal();
 }
 
@@ -882,61 +879,14 @@ function _populatePortal(d) {
   _set('cp-user-name', c.contact_name || d.email || '—');
   _set('cp-user-role', c.contact_role || '—');
   _set('cp-user-avatar', _initials(c.contact_name || c.company));
-  if (c.rate) {
-    _set('kpi-rate', Number(c.rate).toFixed(2));
-    if (c.cfe_rate) {
-      const pct = (((c.cfe_rate - c.rate) / c.cfe_rate) * 100).toFixed(1);
-      _set('kpi-rate-delta', '↓ ' + pct + '% vs CFE GDMTH');
-    }
-  }
-  if (c.savings_monthly) _set('kpi-savings', '$' + Math.round(c.savings_monthly / 1000).toLocaleString('en-US'));
-  if (c.ytd_gwh) _set('kpi-ytd', Number(c.ytd_gwh).toFixed(1));
-  if (c.contract_end) {
-    const end = _date(c.contract_end);
-    const months = Math.max(0, Math.round((end - new Date()) / (1000 * 60 * 60 * 24 * 30.4)));
-    _set('kpi-contract-end', end.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }));
-    _set('kpi-contract-remain', months + ' months remaining');
-    _set('ctr-months-left', months);
-  }
-  _set('ctr-id', 'CONTRACT ID · ' + (c.contract_id || '—'));
-  _set('ctr-title', c.contract_title || 'Power Purchase Agreement');
-  _set('ctr-counterparty', c.counterparty || '—');
-  _set('ctr-counterparty-note', c.counterparty_note || '');
-  _set('ctr-volume', c.volume_gwh ? c.volume_gwh + ' GWh' : '—');
-  _set('ctr-volume-note', c.volume_note || '');
-  _set('ctr-price', c.base_price ? Number(c.base_price).toFixed(2) : '—');
-  _set('ctr-price-note', c.price_note || '');
-  _set('ctr-escalation', c.escalation || '—');
-  _set('ctr-escalation-note', c.escalation_note || '');
-  _set('ctr-mem', c.mem_portion || '—');
-  _set('ctr-mem-note', c.mem_note || '');
-  _set('ctr-billed-label', c.billed_label || 'Last billed');
-  _set('ctr-billed', c.billed_gwh || '—');
-  _set('ctr-billed-note', c.billed_note || '');
-  _set('ctr-renewal-note', c.renewal_note || '');
-  if (c.contract_start && c.contract_end) {
-    const s = _date(c.contract_start), en = _date(c.contract_end);
-    _set('ctr-period', s.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) + ' — ' + en.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
-    const pct = Math.min(100, Math.max(0, ((new Date() - s) / (en - s)) * 100));
-    const fill = document.querySelector('.cp-meter-fill');
-    if (fill) fill.style.width = pct.toFixed(0) + '%';
-    _set('ctr-meter-pct', pct.toFixed(0) + '% elapsed');
-    _set('ctr-meter-start', _fmtDate(c.contract_start));
-    _set('ctr-meter-end', _fmtDate(c.contract_end));
-  }
-  // Advisor
-  _set('adv-name', c.advisor_name || 'Sentinel Advisory Team');
-  _set('adv-avatar', _initials(c.advisor_name || 'Sentinel'));
+  // Dashboard and contract figures are rendered by the boards (board.js)
+  // Support page quick links
   const advEmail = c.advisor_email || 'contacto@sentinels.com.mx';
-  _set('adv-email-txt', advEmail);
   _set('qa-email-txt', advEmail);
   _set('cp-support-advisor', c.advisor_name ? 'Your advisor: ' + c.advisor_name : 'Your advisory team');
   const mail = subj => 'mailto:' + advEmail + (subj ? '?subject=' + encodeURIComponent(subj + ' — ' + (c.company || '')) : '');
-  const callUrl = _safeUrl(c.call_url) || mail('Schedule a call');
-  document.getElementById('adv-email').href = mail('');
   document.getElementById('qa-email').href = mail('');
-  document.getElementById('adv-call').href = callUrl;
-  document.getElementById('qa-call').href = callUrl;
+  document.getElementById('qa-call').href = _safeUrl(c.call_url) || mail('Schedule a call');
   document.getElementById('qa-renewal').href = mail('Renewal review request');
 }
 
@@ -963,9 +913,6 @@ function _renderDocs(docs) {
   });
   table.style.display = docs.length ? '' : 'none';
   document.getElementById('cp-docs-empty').style.display = docs.length ? 'none' : '';
-  document.getElementById('cp-docs-recent').innerHTML = docs.length
-    ? docs.slice(0, 4).map((d, i) => `<div class="cp-doc-mini" style="cursor:pointer" onclick="_dlDoc(${i})"><div class="cp-doc-icon">${FILE_ICON}</div><div class="cp-doc-name">${_esc(d.name)}</div><div class="cp-doc-badge">${DOC_TYPES[d.type] || 'Report'}</div><div class="cp-doc-meta">${_fmtDate(d.date)} · ${_esc(_ext(d))}</div></div>`).join('')
-    : '<div class="cp-empty" style="grid-column:1/-1">No documents have been shared yet.</div>';
 }
 
 async function _dlDoc(i, btn) {
@@ -1001,10 +948,6 @@ function _tagClass(tag) {
 function _renderIntel(items) {
   INTEL = items = (items || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const empty = '<div class="cp-empty">No market updates yet.</div>';
-  const nFiles = i => (i.files || []).length;
-  document.getElementById('cp-intel-mini').innerHTML = items.length ? items.slice(0, 3).map((i, n) =>
-    `<div class="cp-intel-item"><div class="cp-intel-meta"><span class="cp-intel-tag ${_tagClass(i.tag)}">${_esc(i.tag || 'Update')}</span><span class="cp-intel-date">${_fmtDate(i.date)}</span></div><div class="cp-intel-title">${_esc(i.title)}</div><div class="cp-intel-summary">${_esc(i.summary)}</div>${nFiles(i) ? `<button class="cp-card-link" style="align-self:flex-start;margin-top:2px" onclick="viewIntelFile(${n},0)">View ${nFiles(i) > 1 ? 'attachments (' + nFiles(i) + ')' : 'attachment'} →</button>` : ''}</div>`
-  ).join('') : empty;
   document.getElementById('cp-intel-full').innerHTML = items.length ? items.map((i, n) => {
     const d = _date(i.date);
     const dateHtml = d && !isNaN(d) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '<br>' + d.getFullYear() : '';
@@ -1106,10 +1049,6 @@ const SECTION_TITLES = {
   support: 'Support'
 };
 
-// Redraw the chart when the screen size changes (rotation, window resize)
-let _chartT;
-window.addEventListener('resize', () => { clearTimeout(_chartT); _chartT = setTimeout(() => { if (ME) _buildChart(ME.chart || []); }, 150); });
-
 // Phone / tablet: the sidebar slides in as a drawer
 function toggleSidebar(open) {
   document.getElementById('cp-app').classList.toggle('cp-sb-open', open);
@@ -1139,55 +1078,6 @@ document.querySelectorAll('[data-section]').forEach(el => {
   if (el.classList.contains('cp-nav-item')) return;
   el.addEventListener('click', () => goTo(el.dataset.section));
 });
-
-/* ── Chart ──────────────────────────────────────── */
-// points: [{ label, rate, cfe }]
-function _buildChart(points) {
-  const svg = document.getElementById('cp-chart-svg');
-  const pts = (points || []).filter(p => p && isFinite(p.rate));
-  const hasData = pts.length >= 2;
-  svg.style.display = hasData ? '' : 'none';
-  document.getElementById('cp-chart-empty').style.display = hasData ? 'none' : '';
-  if (!hasData) return;
-  _set('cp-chart-sub', pts[0].label + ' – ' + pts[pts.length - 1].label + ' · MXN/kWh');
-
-  // Draw at the real on-screen width so text isn't stretched on phones
-  const W = Math.max(280, Math.round(svg.parentNode.getBoundingClientRect().width) || 560), H = 200, pL = 44, pR = 14, pT = 12, pB = 26;
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  const pw = W - pL - pR, ph = H - pT - pB;
-  const hasCfe = pts.every(p => isFinite(p.cfe));
-  const vals = pts.flatMap(p => hasCfe ? [p.rate, p.cfe] : [p.rate]);
-  let lo = Math.floor(Math.min(...vals) * 10) / 10 - 0.1;
-  let hi = Math.ceil(Math.max(...vals) * 10) / 10 + 0.1;
-  const step = Math.max(1, Math.ceil((hi - lo) / 0.1 / 8)) * 0.1;
-  const n = pts.length;
-  const xp = i => pL + (i / (n - 1)) * pw;
-  const yp = v => pT + (1 - (v - lo) / (hi - lo)) * ph;
-  const line = key => pts.map((p, i) => `${xp(i).toFixed(1)},${yp(p[key]).toFixed(1)}`).join(' ');
-
-  let grid = '';
-  for (let v = lo; v <= hi + 1e-9; v += step) {
-    const y = yp(v).toFixed(1);
-    grid += `<line x1="${pL}" y1="${y}" x2="${W - pR}" y2="${y}" stroke="#E3E6E8" stroke-width="1"/>
-    <text x="${pL - 5}" y="${(parseFloat(y) + 3.5).toFixed(1)}" text-anchor="end" fill="#8C949D" font-size="9" font-family="IBM Plex Mono,monospace">${v.toFixed(2)}</text>`;
-  }
-  const every = Math.ceil(n / Math.max(2, Math.floor((W - pL - pR) / 58)));  // ~58px per label
-  const labels = pts.map((p, i) => i % every ? '' :
-    `<text x="${xp(i).toFixed(1)}" y="${H - 4}" text-anchor="${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}" fill="#8C949D" font-size="10" font-family="IBM Plex Mono,monospace">${_esc(p.label)}</text>`).join('');
-
-  let fill = '', cfeLine = '';
-  if (hasCfe) {
-    const fillPts = [
-      ...pts.map((p, i) => `${xp(i).toFixed(1)},${yp(p.cfe).toFixed(1)}`),
-      ...pts.slice().reverse().map((p, i) => `${xp(n - 1 - i).toFixed(1)},${yp(p.rate).toFixed(1)}`)
-    ].join(' ');
-    fill = `<polygon points="${fillPts}" fill="#3E6B53" opacity="0.09"/>`;
-    cfeLine = `<polyline points="${line('cfe')}" fill="none" stroke="#C7CCD0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-  }
-  svg.innerHTML = `${grid}${fill}${cfeLine}
-    <polyline points="${line('rate')}" fill="none" stroke="#0B0D0F" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-    ${labels}`;
-}
 
 /* ── Support message ────────────────────────────── */
 async function submitSupport(e) {
@@ -1325,6 +1215,7 @@ function filterDocs(btn, type) {
   });
 }
 </script>
+<script src="board.js"></script>
 <!-- ═══════════════════════════════════════════════════
      BECOME A CLIENT MODAL
 ═══════════════════════════════════════════════════ -->
@@ -1396,6 +1287,20 @@ function filterDocs(btn, type) {
       <p class="cp-access-done-sub">An advisor will reply within one business day with your benchmark scope.</p>
       <button class="cp-btn-dark" onclick="closeAccessModal()">Close</button>
     </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     WIDGET GALLERY ("+")
+═══════════════════════════════════════════════════ -->
+<div class="cp-access-modal" id="cp-gallery" hidden onmousedown="if(event.target===this)Board.closeGallery()">
+  <div class="cp-access-panel cp-gallery-panel" onmousedown="event.stopPropagation()">
+    <button class="cp-access-close" aria-label="Close" onclick="Board.closeGallery()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <div class="cp-access-eyebrow"><span></span>Customize</div>
+    <h3 class="cp-access-title" style="margin-bottom:16px">Add a widget</h3>
+    <div id="cp-gallery-list"></div>
   </div>
 </div>
 

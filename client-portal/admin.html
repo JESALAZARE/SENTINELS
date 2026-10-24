@@ -646,7 +646,7 @@ function newClient() {
   renderClientList(); renderEditor(); revealOnPhone('editor');
 }
 
-function chartToText(chart) { return (chart || []).map(p => [p.label, p.rate, p.cfe ?? ''].join('; ')).join('\n'); }
+function chartToText(chart) { return (chart || []).map(p => [p.label, p.rate, p.cfe ?? '', p.gwh ?? ''].join('; ').replace(/(; )+$/, '')).join('\n'); }
 function textToChart(text) {
   const out = [];
   for (const line of text.split(/\r?\n/)) {
@@ -656,7 +656,7 @@ function textToChart(text) {
     const num = s => { const n = parseFloat(String(s || '').trim().replace(',', '.')); return isFinite(n) ? n : null; };
     const rate = num(parts[1]);
     if (rate == null) throw new Error(`No entendí esta línea de la gráfica: "${line}"`);
-    out.push({ label: parts[0].trim(), rate, cfe: num(parts[2]) });
+    out.push({ label: parts[0].trim(), rate, cfe: num(parts[2]), gwh: num(parts[3]) });
   }
   return out;
 }
@@ -682,8 +682,8 @@ function renderEditor() {
     </fieldset>
     ${fields}
     <fieldset><legend>Gráfica de tarifas</legend>
-      <label for="f-chart">Una línea por mes: <span class="mono">Mes; tarifa Sentinel; tarifa CFE</span> (puedes pegar desde Excel)</label>
-      <textarea id="f-chart" rows="6" class="mono" placeholder="Jul 25; 1.82; 2.05&#10;Aug 25; 1.83; 2.08">${esc(chartToText(d.chart))}</textarea>
+      <label for="f-chart">Una línea por mes: <span class="mono">Mes; tarifa Sentinel; tarifa CFE; consumo GWh</span> — el consumo es opcional y activa las gráficas de consumo y ahorro en pesos (puedes pegar desde Excel)</label>
+      <textarea id="f-chart" rows="6" class="mono" placeholder="Jul 25; 1.82; 2.05; 10.4&#10;Aug 25; 1.83; 2.08; 11.1">${esc(chartToText(d.chart))}</textarea>
     </fieldset>
     <div id="editor-msg"></div>
     <div class="row"><button class="btn btn-dark" id="save-btn" onclick="saveClient(this)">${isNew ? 'Crear cliente' : 'Guardar cambios'}</button></div>
