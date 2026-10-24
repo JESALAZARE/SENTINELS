@@ -80,7 +80,10 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
 #publish{position:sticky;top:0;z-index:50;margin-bottom:16px}
 .hidden{display:none!important}
 .badge-off{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--neg);background:var(--neg-soft);border-radius:3px;padding:1px 6px;margin-left:4px;vertical-align:middle}
-@media (max-width:860px){.layout{grid-template-columns:1fr}}
+@media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}}
+/* Grid items and fieldsets default to min-content width: let wide tables scroll instead */
+.layout > *,fieldset{min-width:0}
+fieldset table{display:block;overflow-x:auto;white-space:nowrap}
 
 /* ── Responsive (tablet & phone) ───────────────── */
 .list{max-height:none}
@@ -737,7 +740,10 @@ function renderEditor() {
       ${(d.docs || []).length ? d.docs.map((x, i) => `<tr><td>${esc(x.name)}</td><td>${esc(x.type)}</td><td class="mono small">${esc(x.date)}</td><td class="mono small">${esc(x.size)}</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-sm" onclick="viewDoc(${i})">Ver</button> <button class="btn btn-sm btn-danger" onclick="deleteDoc(${i})">Quitar</button></td></tr>`).join('')
         : '<tr><td colspan="5" class="muted">Sin documentos.</td></tr>'}
       </tbody></table>`}
-    </fieldset>`;
+    </fieldset>
+    ${isNew ? '' : `<fieldset><legend>Plantas y recibos</legend><div id="sites-panel"></div></fieldset>
+    <fieldset><legend>Contratos</legend><div id="contracts-panel"></div></fieldset>`}`;
+  if (!isNew) Sites.render();
 }
 
 function collectForm() {
@@ -980,6 +986,7 @@ async function loadAiUsage(btn) {
           <td style="min-width:120px"><div style="height:6px;background:var(--mist-100);border-radius:3px"><div style="height:6px;border-radius:3px;width:${pct}%;background:${pct >= 100 ? 'var(--neg)' : 'var(--ink-900)'}"></div></div></td>
           <td class="mono small">${u.requests}</td></tr>`);
       }
+      if (usage.admin) rows.push(`<tr><td class="muted">Panel admin · lectura de recibos</td><td class="mono small">$${usage.admin.usd.toFixed(3)}</td><td class="small muted">sin tope</td><td class="mono small">${usage.admin.requests}</td></tr>`);
       box.innerHTML = `<p class="small muted" style="margin:0 0 8px">Mes ${esc(month)} · el contador se reinicia el día 1.</p>
         <table><thead><tr><th>Cliente</th><th>Gastado</th><th>Uso</th><th>Preguntas</th></tr></thead><tbody>${rows.join('') || '<tr><td colspan="4" class="muted">Sin clientes.</td></tr>'}</tbody></table>`;
     } catch { box.innerHTML = '<p class="muted small" style="margin:0">No pude leer el uso. Usa "Probar conexión" para revisar la configuración.</p>'; }
@@ -1227,5 +1234,6 @@ async function deleteIntelItem(btn) {
   });
 }
 </script>
+<script src="admin-sites.js"></script>
 </body>
 </html>

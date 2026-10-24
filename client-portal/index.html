@@ -479,6 +479,31 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 /* ── Animations ───────────────────────────────────────── */
 @keyframes cp-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes cp-fade{from{opacity:0}to{opacity:1}}
+/* ── Plants, bills, contracts ─────────────────────────── */
+.cp-site-head{padding:20px 24px;margin-bottom:20px}
+.cp-mini-table{width:100%;border-collapse:collapse;font-size:12px}
+.cp-mini-table th{text-align:left;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--steel-400);padding:8px 8px 6px;border-bottom:1px solid var(--border-subtle);white-space:nowrap}
+.cp-mini-table td{padding:8px;border-bottom:1px solid var(--border-subtle);font-family:var(--font-mono);font-size:12px;white-space:nowrap}
+.cp-mini-table td:first-child{font-family:var(--font-sans);font-weight:600}
+.cp-bad{color:var(--signal-negative);font-weight:600}
+.cp-good{color:var(--signal-positive);font-weight:600}
+.cp-alerts{display:flex;flex-direction:column;gap:8px}
+.cp-alert{font-size:12px;line-height:1.45;padding:8px 10px;border-radius:var(--radius-md);background:var(--paper-50);border-left:3px solid var(--silver-300);color:var(--graphite-500)}
+.cp-alert--warn{background:var(--signal-notice-soft);border-left-color:var(--signal-notice);color:#5C4826}
+.cp-ctr-list{display:flex;flex-direction:column;gap:14px}
+.cp-ctr{padding-bottom:14px;border-bottom:1px solid var(--border-subtle)}
+.cp-ctr:last-child{border-bottom:0;padding-bottom:0}
+.cp-ctr-top{display:flex;flex-direction:column;gap:2px}
+.cp-ctr-top b{font-family:var(--font-serif);font-size:17px;font-weight:600}
+.cp-ctr-top span{font-size:12px;color:var(--steel-400)}
+.cp-ctr-facts{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.cp-ctr-facts span{font-family:var(--font-mono);font-size:11px;border:1px solid var(--border-default);border-radius:2px;padding:1px 6px;color:var(--graphite-500)}
+.cp-ctr-bar{height:6px;background:var(--mist-100);border-radius:3px;overflow:hidden}
+.cp-ctr-bar i{display:block;height:100%;background:linear-gradient(90deg,#9AA0A7,#0B0D0F)}
+.cp-ctr-dates{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:10px;color:var(--steel-400);margin-top:4px}
+.cp-ctr-notes{font-size:12px;color:var(--graphite-500);margin-top:8px}
+@media (max-width:600px){ .cp-site-head{padding:16px} }
+
 /* ── Sentinel One (AI assistant) ──────────────────────── */
 .cp-nav-ai svg{color:var(--signal-notice)}
 #cp-content.cp-content--chat{padding:0;overflow:hidden}
@@ -685,6 +710,10 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         Dashboard
       </button>
+      <button class="cp-nav-item" data-section="sites" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l5 3V10l5 3V6l4-2v17"/></svg>
+        My Sites
+      </button>
       <button class="cp-nav-item cp-nav-ai" data-section="assistant" style="display:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
         Sentinel One
@@ -762,6 +791,16 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
       <!-- ╔══════════════════════════════════════════╗
            ║  MARKET INTELLIGENCE                     ║
            ╚══════════════════════════════════════════╝ -->
+      <section id="sec-sites" class="cp-section">
+        <div class="cp-page-head">
+          <div>
+            <h1 class="cp-page-title">My Sites</h1>
+            <p class="cp-page-sub">Your plants and their monthly electricity bills</p>
+          </div>
+        </div>
+        <div id="sites-root"></div>
+      </section>
+
       <section id="sec-assistant" class="cp-section">
         <div class="s1" id="s1">
           <aside class="s1-side">
@@ -869,6 +908,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
           <button class="cp-doc-filter" onclick="filterDocs(this,'analysis')">Analysis</button>
           <button class="cp-doc-filter" onclick="filterDocs(this,'contract')">Contracts</button>
           <button class="cp-doc-filter" onclick="filterDocs(this,'permit')">Permits</button>
+          <button class="cp-doc-filter" onclick="filterDocs(this,'bill')">Bills</button>
         </div>
         <div class="cp-doc-table" id="cp-doc-table">
           <div class="cp-doc-thead">
@@ -1019,6 +1059,7 @@ async function _openVault(vault, raw, id) {
   _renderIntel(intel);
   Board.renderAll();
   S1.init();
+  SitesPage.init();
   _showPortal();
 }
 
@@ -1081,7 +1122,7 @@ function _populatePortal(d) {
 }
 
 /* ── Documents ──────────────────────────────────── */
-const DOC_TYPES = { report: 'Report', analysis: 'Analysis', contract: 'Contract', permit: 'Permit', other: 'Other' };
+const DOC_TYPES = { report: 'Report', analysis: 'Analysis', contract: 'Contract', permit: 'Permit', bill: 'Bill', other: 'Other' };
 const FILE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
 const DL_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
 
@@ -1235,6 +1276,7 @@ const SECTION_TITLES = {
   dashboard: 'Dashboard',
   intelligence: 'Market Intelligence',
   assistant: 'Sentinel One',
+  sites: 'My Sites',
   contract: 'My Contract',
   documents: 'Documents',
   support: 'Support'
@@ -1259,6 +1301,7 @@ function goTo(id) {
   document.getElementById('cp-content').scrollTop = 0;
   document.getElementById('cp-content').classList.toggle('cp-content--chat', id === 'assistant');
   if (id === 'assistant') S1.onShow();
+  if (id === 'sites') SitesPage.render();
 }
 
 // Nav button clicks
@@ -1408,7 +1451,9 @@ function filterDocs(btn, type) {
   });
 }
 </script>
+<script src="energy.js"></script>
 <script src="board.js"></script>
+<script src="sites.js"></script>
 <script src="sentinel-one.js"></script>
 <!-- ═══════════════════════════════════════════════════
      BECOME A CLIENT MODAL

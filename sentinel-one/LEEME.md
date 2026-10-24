@@ -62,5 +62,9 @@ En 1–2 minutos le aparece la pestaña **Sentinel One** en su portal.
   para generar la respuesta.
 - **Si generas una llave nueva** en el panel, pégala otra vez en Cloudflare (`AI_SECRET`).
 - **Si actualizas `worker.js`** en el repositorio, vuelve a pegarlo en Cloudflare (Edit code → Deploy).
+  Las variables, la llave y el almacén se conservan; solo cambia el código.
+- **Lectura de recibos PDF con IA** (panel admin → Plantas y recibos): usa el mismo Worker y tu
+  llave. Cuesta menos de un centavo de dólar por recibo y aparece en la tabla de uso como
+  "Panel admin · lectura de recibos" (no cuenta contra el tope de los clientes).
 - **Plan gratuito de Cloudflare KV:** 1,000 escrituras al día (cada pregunta usa ~1–2). Si creces
   mucho, el plan de pago de Workers cuesta $5 USD al mes.

@@ -45,7 +45,8 @@ const Board = (() => {
     doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
     news: '<path d="M4 5h13v14H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v8a2 2 0 0 1-2 2"/><path d="M8 9h5M8 13h5"/>',
     person: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
-    contract: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>'
+    contract: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+    bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>'
   };
 
   // [category, title, icon, sizes, default size, description, ready(), missing-data hint, render(body)]
@@ -159,16 +160,89 @@ const Board = (() => {
             <div class="cp-doc-badge">${DOC_TYPES[d.type] || 'Report'}</div><div class="cp-doc-meta">${_fmtDate(d.date)}</div></div>`).join('')}</div>`
           : '<div class="cp-widget-empty">No documents have been shared yet.</div>') +
           `<button class="cp-card-link cp-widget-more" onclick="goTo('documents')">View all →</button>`;
+      } },
+
+    /* Plants & bills — real data from the monthly bills (energy.js) */
+    kpi_real_savings_ytd: { cat: 'Plants & bills', title: 'Real savings YTD', icon: 'kpi', sizes: ['s', 'm'], desc: 'What your actual bills saved versus CFE this year.',
+      ready: () => Energy.savingsYTD().months > 0, need: 'bills with their CFE equivalent',
+      render: b => { const y = Energy.savingsYTD(); kpi(b, { value: money(y.saved), unit: 'MXN', note: `${y.pct != null ? fx(y.pct, 1) + '% below CFE · ' : ''}${y.months} month${y.months === 1 ? '' : 's'}`, tone: 'pos' }); } },
+    kpi_cost_kwh: { cat: 'Plants & bills', title: 'Average cost per kWh', icon: 'kpi', sizes: ['s', 'm'], desc: 'Total paid ÷ kWh in your latest month, all plants.',
+      ready: () => !!(Energy.latestMonth() && Energy.latestMonth().costKwh != null), need: 'monthly bills',
+      render: b => {
+        const m = Energy.monthly(), last = m[m.length - 1], prev = m[m.length - 2];
+        const d = prev && prev.costKwh ? (last.costKwh / prev.costKwh - 1) * 100 : null;
+        kpi(b, { value: fx(last.costKwh), unit: 'MXN/kWh', note: `${last.label}${d != null ? ` · ${d >= 0 ? '↑' : '↓'} ${fx(Math.abs(d), 1)}% vs ${prev.label}` : ''}`, tone: d != null && d > 0 ? 'notice' : 'neutral' });
+      } },
+    kpi_peak_demand: { cat: 'Plants & bills', title: 'Peak demand vs contracted', icon: 'kpi', sizes: ['s', 'm'], desc: 'Highest demand against contracted kW, latest bill.',
+      ready: () => Energy.siteSummary().some(s => s.demandPct != null), need: 'demand and contracted kW',
+      render: b => {
+        const s = Energy.siteSummary().filter(x => x.demandPct != null).sort((a, c) => c.demandPct - a.demandPct)[0];
+        kpi(b, { value: fx(s.demandPct, 0), unit: '%', note: `${s.name} · ${Energy.label(s.last.month)}`, tone: s.demandPct >= 95 ? 'notice' : 'neutral' });
+      } },
+    kpi_pf: { cat: 'Plants & bills', title: 'Power factor', icon: 'kpi', sizes: ['s', 'm'], desc: 'Lowest power factor across plants, latest bill.',
+      ready: () => Energy.siteSummary().some(s => s.last && s.last.pf != null), need: 'power factor on the bills',
+      render: b => {
+        const s = Energy.siteSummary().filter(x => x.last && x.last.pf != null).sort((a, c) => a.last.pf - c.last.pf)[0];
+        kpi(b, { value: fx(s.last.pf), note: `${s.name}${s.last.pf < 0.9 ? ' · below 0.90 threshold' : ' · above 0.90'}`, tone: s.last.pf < 0.9 ? 'notice' : 'pos' });
+      } },
+    alerts: { cat: 'Plants & bills', title: 'Alerts', icon: 'bell', sizes: ['s', 'm', 'w', 'l'], desc: 'Power factor, demand, cost spikes, missing bills, contract deadlines.',
+      ready: () => true, need: '',
+      render: b => {
+        const a = Energy.alerts();
+        b.innerHTML = a.length ? `<div class="cp-alerts">${a.map(x => `<div class="cp-alert cp-alert--${x.level}">${esc(x.text)}</div>`).join('')}</div>`
+          : '<div class="cp-widget-empty">No alerts right now.</div>';
+      } },
+    chart_periods: { cat: 'Plants & bills', title: 'Consumption by period', icon: 'bar', sizes: ['m', 'w', 'l'], desc: 'Base, intermediate and peak kWh each month.',
+      ready: () => Energy.hasPeriods() && Energy.monthly().length >= 1, need: 'bills with kWh by period',
+      render: b => {
+        const m = Energy.monthly();
+        const series = [{ name: 'Base', color: '#B4BBC2', values: m.map(r => r.base) }, { name: 'Intermediate', color: '#646C75', values: m.map(r => r.int) }, { name: 'Peak', color: C.ink, values: m.map(r => r.peak) }];
+        // Bills that only report a total (e.g. GDMTO) still count toward the month
+        const rest = m.map(r => Math.max(0, r.kwh - r.base - r.int - r.peak));
+        if (rest.some(v => v > 0)) series.push({ name: 'Not split by period', color: '#E3DCC8', values: rest });
+        stackedChart(b, { labels: m.map(r => r.label), series, fmt: v => fx(v / 1e6, 2) + ' GWh', axis: v => fx(v / 1e6, 1) });
+      } },
+    chart_real_savings: { cat: 'Plants & bills', title: 'Real savings by month', icon: 'bar', sizes: ['m', 'w', 'l'], desc: 'CFE equivalent minus what you paid, from your bills.',
+      ready: () => Energy.monthly().filter(r => r.savings != null).length >= 1, need: 'bills with their CFE equivalent',
+      render: b => { const m = Energy.monthly().filter(r => r.savings != null); barChart(b, { labels: m.map(r => r.label), values: m.map(r => r.savings), color: C.green, fmt: money, axis: money, total: true }); } },
+    chart_cost_kwh: { cat: 'Plants & bills', title: 'Cost per kWh by month', icon: 'line', sizes: ['m', 'w', 'l'], desc: 'Total paid ÷ kWh, all plants combined.',
+      ready: () => Energy.monthly().filter(r => r.costKwh != null).length >= 2, need: 'two or more monthly bills',
+      render: b => { const m = Energy.monthly().filter(r => r.costKwh != null); lineChart(b, { labels: m.map(r => r.label), series: [{ name: 'Cost per kWh', color: C.ink, values: m.map(r => r.costKwh), area: true }], fmt: v => fx(v, 3) + ' MXN/kWh', axis: v => fx(v) }); } },
+    sites_table: { cat: 'Plants & bills', title: 'Your plants', icon: 'person', sizes: ['m', 'w', 'l'], desc: 'Latest bill of each plant side by side.',
+      ready: () => Energy.sites().length > 0, need: 'plants',
+      render: b => {
+        const rows = Energy.siteSummary();
+        b.innerHTML = `<div class="s1-table" style="margin:0"><table class="cp-mini-table"><thead><tr><th>Plant</th><th>Month</th><th>kWh</th><th>MXN/kWh</th><th>PF</th><th>Demand</th></tr></thead><tbody>
+          ${rows.map(s => `<tr><td>${esc(s.name)}</td><td>${s.last ? esc(Energy.label(s.last.month)) : '—'}</td><td>${s.last ? fx(Energy.kwh(s.last) / 1e6, 2) + ' GWh' : '—'}</td>
+            <td>${s.costKwh != null ? fx(s.costKwh) : '—'}</td><td class="${s.last && s.last.pf != null && s.last.pf < 0.9 ? 'cp-bad' : ''}">${s.last && s.last.pf != null ? fx(s.last.pf) : '—'}</td>
+            <td>${s.demandPct != null ? fx(s.demandPct, 0) + '%' : '—'}</td></tr>`).join('')}</tbody></table></div>
+          <button class="cp-card-link cp-widget-more" onclick="goTo('sites')">Open My Sites →</button>`;
+      } },
+    contracts_list: { cat: 'Contract', title: 'Your contracts', icon: 'contract', sizes: ['m', 'w', 'l'], desc: 'Every contract with its term and progress.',
+      ready: () => Energy.contracts().length > 0, need: 'contracts',
+      render: b => {
+        const now = new Date();
+        b.innerHTML = `<div class="cp-ctr-list">${Energy.contracts().slice().sort((a, c) => String(a.end).localeCompare(String(c.end))).map(c => {
+          const s = _date(c.start), e = _date(c.end), pct = s && e ? Math.min(100, Math.max(0, (now - s) / (e - s) * 100)) : null;
+          return `<div class="cp-ctr"><div class="cp-ctr-top"><b>${esc(c.name || c.type)}</b><span>${esc(c.type)} · ${esc(c.counterparty)}${c.technology ? ' · ' + esc(c.technology) : ''}</span></div>
+            <div class="cp-ctr-facts">${c.volume_gwh != null ? `<span>${fx(c.volume_gwh, 1)} GWh/yr</span>` : ''}${c.price_mxn_kwh != null ? `<span>${fx(c.price_mxn_kwh, 3)} MXN/kWh</span>` : ''}${c.fixed_pct != null ? `<span>${fx(c.fixed_pct, 0)}% fixed</span>` : ''}${c.escalation ? `<span>${esc(c.escalation)}</span>` : ''}</div>
+            ${pct != null ? `<div class="cp-ctr-bar"><i style="width:${pct}%"></i></div><div class="cp-ctr-dates"><span>${esc(_fmtDate(c.start))}</span><span>${pct.toFixed(0)}% elapsed</span><span>${esc(_fmtDate(c.end))}</span></div>` : ''}
+            ${c.notes ? `<div class="cp-ctr-notes">${esc(c.notes)}</div>` : ''}</div>`;
+        }).join('')}</div>`;
       } }
   };
-  const CATS = ['Key figures', 'Charts', 'Contract', 'Updates'];
+  const CATS = ['Plants & bills', 'Key figures', 'Charts', 'Contract', 'Updates'];
   const titleOf = t => typeof CATALOG[t].title === 'function' ? CATALOG[t].title() : CATALOG[t].title;
 
-  const DEFAULTS = {
-    dashboard: [['kpi_rate', 's'], ['kpi_savings_month', 's'], ['kpi_ytd', 's'], ['kpi_contract_end', 's'], ['chart_rates', 'w'], ['intel_list', 's'], ['docs_recent', 'l']],
-    contract: [['contract_summary', 'l'], ['kpi_counterparty', 's'], ['kpi_volume', 's'], ['kpi_base_price', 's'], ['kpi_escalation', 's'],
-      ['contract_progress', 'w'], ['chart_mix', 's'], ['kpi_mem', 's'], ['kpi_billed', 's'], ['advisor', 'm']]
-  };
+  // Default layouts favour real bill data when the advisor has loaded it
+  const BOARDS = ['dashboard', 'contract'];
+  function defaults(b) {
+    if (b === 'dashboard') return Energy.hasBills()
+      ? [['kpi_real_savings_ytd', 's'], ['kpi_cost_kwh', 's'], ['kpi_peak_demand', 's'], ['kpi_contract_end', 's'], ['chart_periods', 'w'], ['alerts', 's'], ['chart_real_savings', 'm'], ['sites_table', 'm'], ['docs_recent', 'l']]
+      : [['kpi_rate', 's'], ['kpi_savings_month', 's'], ['kpi_ytd', 's'], ['kpi_contract_end', 's'], ['chart_rates', 'w'], ['intel_list', 's'], ['docs_recent', 'l']];
+    return (Energy.contracts().length ? [['contracts_list', 'l']] : []).concat([['contract_summary', 'l'], ['kpi_counterparty', 's'], ['kpi_volume', 's'], ['kpi_base_price', 's'], ['kpi_escalation', 's'],
+      ['contract_progress', 'w'], ['chart_mix', 's'], ['kpi_mem', 's'], ['kpi_billed', 's'], ['advisor', 'm']]);
+  }
 
   /* ── Interactive charts (SVG, redrawn on resize) ── */
   const NS = 'http://www.w3.org/2000/svg';
@@ -304,6 +378,59 @@ const Board = (() => {
     });
   }
 
+  // Stacked bars (e.g. base / intermediate / peak kWh); legend toggles series
+  function stackedChart(body, { labels, series, fmt, axis }) {
+    const { plot, tip } = chartShell(body, { labels, legend: series });
+    const hidden = new Set();
+    let range = 0;
+    const H = 210, pL = 46, pR = 12, pT = 12, pB = 26;
+    function draw() {
+      const W = plot.clientWidth; if (!W) return;
+      const from = range ? Math.max(0, labels.length - range) : 0;
+      const L = labels.slice(from), n = L.length, vis = series.filter((s, i) => !hidden.has(i));
+      const totals = L.map((_, i) => vis.reduce((t, s) => t + (s.values[from + i] || 0), 0));
+      plot.querySelector('svg')?.remove();
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
+      const sc = niceScale(0, Math.max(1, ...totals));
+      const y = v => pT + (1 - (v - sc.lo) / (sc.hi - sc.lo)) * (H - pT - pB);
+      const slot = (W - pL - pR) / n, bw = Math.max(6, Math.min(44, slot * 0.62)), cx = i => pL + slot * i + slot / 2;
+      let g = '';
+      for (let v = sc.lo; v <= sc.hi + sc.step / 2; v += sc.step)
+        g += `<line x1="${pL}" x2="${W - pR}" y1="${y(v)}" y2="${y(v)}" stroke="${C.grid}"/><text x="${pL - 6}" y="${y(v) + 3.5}" text-anchor="end" class="cp-ch-ax">${esc(axis(v))}</text>`;
+      const every = Math.ceil(n / Math.max(2, Math.floor((W - pL - pR) / 52)));
+      L.forEach((l, i) => {
+        let acc = 0;
+        vis.forEach(s => {
+          const v = s.values[from + i] || 0;
+          if (v > 0) g += `<rect class="cp-ch-b" data-i="${i}" x="${cx(i) - bw / 2}" y="${y(acc + v)}" width="${bw}" height="${Math.max(0.5, y(acc) - y(acc + v))}" fill="${s.color}"/>`;
+          acc += v;
+        });
+        if (i % every === 0) g += `<text x="${cx(i)}" y="${H - 6}" text-anchor="middle" class="cp-ch-ax">${esc(l)}</text>`;
+      });
+      svg.innerHTML = g;
+      plot.prepend(svg);
+      const move = ev => {
+        const r = svg.getBoundingClientRect(), px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+        const i = Math.max(0, Math.min(n - 1, Math.floor((px - pL) / slot)));
+        svg.querySelectorAll('.cp-ch-b').forEach(b => b.setAttribute('opacity', +b.dataset.i === i ? 1 : 0.45));
+        const rows = vis.slice().reverse().map(s => `<div><span style="background:${s.color}"></span>${esc(s.name)} <b>${esc(fmt(s.values[from + i] || 0))}</b></div>`).join('');
+        tipAt(plot, tip, cx(i), `<div class="cp-ch-tip-t">${esc(L[i])}</div>${rows}<div class="cp-ch-tip-note">Total ${esc(fmt(totals[i]))}</div>`);
+      };
+      svg.addEventListener('pointermove', move); svg.addEventListener('pointerdown', move);
+      svg.addEventListener('pointerleave', () => { tip.hidden = true; svg.querySelectorAll('.cp-ch-b').forEach(b => b.setAttribute('opacity', 1)); });
+    }
+    const redraw = observe(plot, draw);
+    body.querySelectorAll('.cp-ch-key').forEach(k => k.onclick = () => {
+      const i = +k.dataset.i;
+      if (hidden.has(i)) hidden.delete(i); else if (hidden.size < series.length - 1) hidden.add(i);
+      k.classList.toggle('off', hidden.has(i)); redraw();
+    });
+    body.querySelectorAll('.cp-ch-ranges button').forEach(bt => bt.onclick = () => {
+      range = +bt.dataset.r; body.querySelectorAll('.cp-ch-ranges button').forEach(o => o.classList.toggle('on', o === bt)); redraw();
+    });
+  }
+
   function donut(body, parts) {
     const R = 54, r = 36, cx = 70, cy = 70;
     let a0 = -Math.PI / 2, arcs = '';
@@ -351,7 +478,7 @@ const Board = (() => {
       const v = JSON.parse(localStorage.getItem(key(b)));
       if (Array.isArray(v)) return v.filter(w => CATALOG[w.type] && CATALOG[w.type].sizes.includes(w.size));
     } catch {}
-    return DEFAULTS[b].map(([type, size]) => ({ id: uid(), type, size }));
+    return defaults(b).filter(([t]) => CATALOG[t].ready()).map(([type, size]) => ({ id: uid(), type, size }));
   }
   const save = b => { try { localStorage.setItem(key(b), JSON.stringify(layouts[b])); } catch {} };
 
@@ -407,7 +534,7 @@ const Board = (() => {
     layouts[b].forEach(w => host.appendChild(widgetEl(b, w)));
     host.appendChild(addTile(b));
   }
-  const renderAll = () => Object.keys(DEFAULTS).forEach(render);
+  const renderAll = () => BOARDS.forEach(render);
 
   /* ── Widget menu ──────────────────────────────── */
   let menuEl = null;
@@ -475,5 +602,5 @@ const Board = (() => {
     delete layouts[b]; render(b);
   }
 
-  return { renderAll, render, openGallery, closeGallery, reset };
+  return { renderAll, render, openGallery, closeGallery, reset, charts: { lineChart, barChart, stackedChart } };
 })();

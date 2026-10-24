@@ -75,6 +75,13 @@ export default {
         return json({ month, limitUsd: limitOf(env), usage: out });
       }
 
+      if (url.pathname === '/admin/extract' && request.method === 'POST') {
+        if (!safeEqual(request.headers.get('Authorization') || '', 'Bearer ' + env.AI_SECRET)) return json({ error: 'unauthorized' }, 401);
+        const body = await readJson(request, 25 * 1024 * 1024);
+        if (typeof body.pdf !== 'string' || !body.pdf || body.pdf.length > 21 * 1024 * 1024) return json({ error: 'bad_request', message: 'Invalid PDF.' }, 400);
+        return extractBill(env, ctx, body.pdf, json);
+      }
+
       if (request.method !== 'POST') return json({ error: 'not_found' }, 404);
       const body = await readJson(request, 40 * 1024 * 1024);
       const clientId = await authClient(env, body);
@@ -142,6 +149,70 @@ function costOf(u) {
   const r = totalIn > RATES.threshold ? RATES.large : RATES.small;
   return ((u.input_tokens || 0) * r.in + (u.cache_creation_input_tokens || 0) * r.in * 1.25 +
           (u.cache_read_input_tokens || 0) * r.in * 0.1 + (u.output_tokens || 0) * r.out) / 1e6;
+}
+
+/* ── Admin: read a CFE bill PDF ───────────────────── */
+const num = description => ({ type: ['number', 'null'], description });
+const BILL_FIELDS = {
+  rpu: { type: ['string', 'null'], description: 'RPU / service number, digits only' },
+  tariff: { type: ['string', 'null'], description: 'Tariff code, e.g. GDMTH, GDMTO, DIST, PDBT' },
+  month: { type: ['string', 'null'], description: 'Month the billing period ends, as YYYY-MM' },
+  kwh_base: num('Energy consumed in the base period (kWh)'),
+  kwh_int: num('Energy consumed in the intermediate period (kWh)'),
+  kwh_peak: num('Energy consumed in the peak (punta) period (kWh)'),
+  kwh_total: num('Total energy consumed in the period (kWh)'),
+  demand_kw: num('Maximum demand measured in the period (kW)'),
+  contracted_kw: num('Contracted demand (kW), if shown'),
+  pf: num('Power factor as a decimal between 0 and 1 (e.g. 0.95)'),
+  energy_mxn: num('Energy charge (MXN)'),
+  demand_mxn: num('Demand / capacity / distribution charges (MXN)'),
+  other_mxn: num('Other charges, adjustments and taxes (MXN)'),
+  total_mxn: num('Total amount to pay for the period (MXN)')
+};
+const RECORD_BILL_TOOL = {
+  name: 'record_bill',
+  description: 'Record the values read from the electricity bill.',
+  strict: true,
+  input_schema: { type: 'object', properties: BILL_FIELDS, required: Object.keys(BILL_FIELDS), additionalProperties: false }
+};
+
+async function extractBill(env, ctx, pdf, json) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': API_VERSION },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 1024,
+      thinking: { type: 'disabled' },
+      output_config: { effort: 'medium' },
+      tools: [RECORD_BILL_TOOL],
+      tool_choice: { type: 'tool', name: 'record_bill' },
+      messages: [{ role: 'user', content: [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdf } },
+        { type: 'text', text: 'This is a Mexican electricity bill (usually a CFE "recibo"). Read it and record its values with the record_bill tool. ' +
+          'Copy numbers exactly as printed, without thousands separators. Use null for anything that is not on the bill; never estimate or compute missing values, except kwh_total when only the period totals are printed.' }
+      ] }]
+    })
+  });
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    console.error('Anthropic error (extract)', r.status, JSON.stringify(out));
+    return json({ error: 'upstream', message: 'Could not read the bill. Check that it is a valid PDF and try again.' }, 502);
+  }
+  ctx.waitUntil(recordUsage(env, 'admin', out.usage || {}));
+  const tool = (out.content || []).find(b => b.type === 'tool_use' && b.name === 'record_bill');
+  if (!tool) return json({ error: 'unreadable', message: 'The bill could not be read. Enter it manually.' }, 422);
+  return json({ bill: tool.input });
+}
+
+async function recordUsage(env, id, u) {
+  const fresh = await getUsage(env, id);
+  fresh.usd += costOf(u);
+  fresh.requests += 1;
+  fresh.input += (u.input_tokens || 0);
+  fresh.output += (u.output_tokens || 0);
+  fresh.updated = Date.now();
+  await env.S1.put(`usage:${monthKey()}:${id}`, JSON.stringify(fresh), { expirationTtl: 60 * 60 * 24 * 400 });
 }
 
 /* ── Chat ─────────────────────────────────────────── */
@@ -256,13 +327,7 @@ async function chat(env, ctx, body, clientId, json, cors) {
       }
     } finally {
       await writer.close().catch(() => {});
-      const fresh = await getUsage(env, clientId);
-      fresh.usd += costOf(u);
-      fresh.requests += 1;
-      fresh.input += (u.input_tokens || 0);
-      fresh.output += (u.output_tokens || 0);
-      fresh.updated = Date.now();
-      await env.S1.put(`usage:${monthKey()}:${clientId}`, JSON.stringify(fresh), { expirationTtl: 60 * 60 * 24 * 400 });
+      await recordUsage(env, clientId, u);
     }
   })());
   return new Response(readable, { headers: { ...cors, ...usageHeaders, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' } });

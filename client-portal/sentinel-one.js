@@ -46,6 +46,7 @@ const S1 = (() => {
       pts.forEach(x => L.push(`${x.label} | ${x.rate} | ${isFinite(x.cfe) && x.cfe != null ? x.cfe : '—'} | ${isFinite(x.gwh) && x.gwh != null ? x.gwh : '—'}`));
       L.push('');
     }
+    if (Energy.sites().length || Energy.contracts().length) L.push('## Plants, monthly bills and contracts', Energy.toText());
     const docs = ME.docs || [];
     L.push('## Documents shared with the client (their content is only available when the client attaches them)');
     L.push(...(docs.length ? docs.map(d => `- ${d.name} (${d.type || 'document'}, ${d.date}${d.filename ? ', ' + d.filename : ''})`) : ['(none)']), '');
@@ -115,7 +116,10 @@ const S1 = (() => {
 
   function suggestions() {
     const p = ME.profile || {}, s = [];
-    if (p.savings_monthly || (p.rate && p.cfe_rate)) s.push('How much am I saving compared with CFE?');
+    if (Energy.hasRef()) s.push('How much have I really saved this year, plant by plant?');
+    if (Energy.alerts().length) s.push('What should I pay attention to right now?');
+    if (Energy.sites().length > 1) s.push('Compare my plants by cost per kWh.');
+    if (!Energy.hasRef() && (p.savings_monthly || (p.rate && p.cfe_rate))) s.push('How much am I saving compared with CFE?');
     if (p.contract_end) s.push('When does my contract end and how far along am I?');
     if ((ME.chart || []).length >= 3) s.push('Summarize how my rate has moved in recent months.');
     if ((INTEL || []).length) s.push('What did the latest market update say?');
