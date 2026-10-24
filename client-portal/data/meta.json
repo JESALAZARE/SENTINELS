@@ -17,5 +17,12 @@
   "iv": "BChP/d/5DCrhhvyz",
   "ct": "H5GwjB9rauxD8ldfxuc/WOlg+5EcqDYwQXvYMWu7ScIieMDzLXftsmAtjlm5iOiYX8yC7c6+XPMxEMtCBgrA/M8QqFba0TAY8hZIHvHAU/wLQm6Im9GcMqx+TRNNbUahq9v3Ip0OwZA7fbzOtw=="
  },
- "repo": "JESALAZARE/SENTINELS"
+ "repo": "JESALAZARE/SENTINELS",
+ "ai": {
+  "url": "",
+  "secret": {
+   "iv": "Q6uFtq03pEMNLnNh",
+   "ct": "iSOH1LpPf0fISkLdcaF+TBQjEYmTBuHVWYzjN6djIDB4D/Qe8VvySz4PUhTqmT0HAdi+XmrEmoxZt0JUJA+AX8B6Gp8y5TvEms9IG5AALxs="
+  }
+ }
 }
