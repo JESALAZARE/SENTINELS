@@ -12,5 +12,10 @@
  "portalKey": {
   "iv": "mMQ1EL/fOzMtPPhr",
   "ct": "59QKgPRbu7z7rLolwOIfdlIe/NCSdXresin3WdyWS91EzCxydZh2xn3Nt318EChi"
- }
+ },
+ "ghToken": {
+  "iv": "BChP/d/5DCrhhvyz",
+  "ct": "H5GwjB9rauxD8ldfxuc/WOlg+5EcqDYwQXvYMWu7ScIieMDzLXftsmAtjlm5iOiYX8yC7c6+XPMxEMtCBgrA/M8QqFba0TAY8hZIHvHAU/wLQm6Im9GcMqx+TRNNbUahq9v3Ip0OwZA7fbzOtw=="
+ },
+ "repo": "JESALAZARE/SENTINELS"
 }
