@@ -644,6 +644,12 @@ async function rotatePortalKey() {
     vault.data = await SP.sealJSON(key, data);
     await writeJSON(`data/clients/${c.id}.json`, vault);
   }
+  // Intelligence attachments are encrypted with the portal key too
+  const oldKey = await SP.importKey(PORTAL_RAW), newKey = await SP.importKey(raw);
+  for (const it of INTEL) for (const f of it.files || []) {
+    const b = await readFile('data/intel-files/' + f.file, true);
+    if (b) await writeFile('data/intel-files/' + f.file, await SP.sealFile(newKey, await SP.openFile(oldKey, b)));
+  }
   PORTAL_RAW = raw;
   await saveIntel();
   META.portalKey = await SP.seal(ADMIN_KEY, raw);
@@ -780,10 +786,72 @@ function editIntel(id) {
     <div class="row">
       <button class="btn btn-dark" onclick="saveIntelItem(this)">${id ? 'Guardar cambios' : 'Publicar'}</button>
       ${id ? '<button class="btn btn-danger" onclick="deleteIntelItem(this)">Eliminar</button>' : ''}
-    </div>`;
+    </div>
+    <fieldset><legend>Archivos para visualizar</legend>
+      ${id ? `<div class="row" style="margin-bottom:10px">
+        <label class="btn btn-sm" style="margin:0">Adjuntar PDF o imagen<input type="file" accept="${INTEL_FILE_ACCEPT}" multiple hidden onchange="uploadIntelFiles(this)"></label>
+        <span class="small muted" id="intel-file-status"></span>
+      </div>
+      <div id="intel-files"></div>` : '<p class="muted small" style="margin:0">Primero publica la nota; después podrás adjuntarle archivos.</p>'}
+      <p class="small muted" style="margin:10px 0 0">Los clientes solo pueden verlos dentro del portal, sin botón de descarga. (Siempre podrían tomar una captura de pantalla.) Para Excel o Word, guárdalos como PDF antes de subirlos.</p>
+    </fieldset>`;
+  if (id) renderIntelFiles();
 }
+
+/* Attachments: encrypted with the portal key, shown view-only in the portal */
+const INTEL_FILE_ACCEPT = 'application/pdf,.pdf,image/png,image/jpeg,image/webp,image/gif';
+const intelFileOk = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) || /^image\/(png|jpeg|webp|gif)$/.test(f.type);
+const curIntel = () => INTEL.find(i => i.id === INTEL_CUR);
+
+function renderIntelFiles() {
+  const files = (curIntel() || {}).files || [];
+  $('intel-files').innerHTML = files.length
+    ? `<table><tbody>${files.map((f, k) => `<tr><td>${esc(f.name)}</td><td class="mono small">${esc(f.size)}</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-sm" onclick="viewIntelFile(${k})">Ver</button> <button class="btn btn-sm btn-danger" onclick="removeIntelFile(${k}, this)">Quitar</button></td></tr>`).join('')}</tbody></table>`
+    : '<p class="muted small" style="margin:0">Sin archivos.</p>';
+}
+
+async function uploadIntelFiles(input) {
+  const files = [...input.files];
+  input.value = '';
+  const it = curIntel();
+  const bad = files.filter(f => !intelFileOk(f) || f.size > MAX_UPLOAD);
+  const ok = files.filter(f => !bad.includes(f));
+  const key = await SP.importKey(PORTAL_RAW);
+  it.files = it.files || [];
+  for (const [n, f] of ok.entries()) {
+    $('intel-file-status').textContent = `Cifrando ${n + 1} de ${ok.length}…`;
+    const rid = SP.randomId() + '.bin';
+    await writeFile('data/intel-files/' + rid, await SP.sealFile(key, new Uint8Array(await f.arrayBuffer())));
+    it.files.push({ file: rid, name: f.name, mime: intelFileOk(f) && f.type ? f.type : 'application/pdf', size: fmtSize(f.size) });
+  }
+  if (ok.length) { await saveIntel(); $('intel-file-status').textContent = 'Publicando…'; await publish('archivos de market intelligence'); }
+  renderIntelFiles();
+  $('intel-file-status').textContent = (ok.length ? `${ok.length} archivo(s) adjuntado(s). ` : '') +
+    (bad.length ? `No se subieron (solo PDF o imágenes de hasta 95 MB): ${bad.map(f => f.name).join(', ')}` : '');
+}
+
+async function viewIntelFile(k) {
+  const f = curIntel().files[k];
+  const bytes = await readFile('data/intel-files/' + f.file, true);
+  if (!bytes) { alert('No encontré el archivo cifrado.'); return; }
+  const plain = await SP.openFile(await SP.importKey(PORTAL_RAW), bytes);
+  window.open(URL.createObjectURL(new Blob([plain], { type: f.mime })), '_blank');
+}
+
+async function removeIntelFile(k, btn) {
+  const it = curIntel(), f = it.files[k];
+  if (!confirm(`¿Quitar "${f.name}"?`)) return;
+  await busy(btn, '…', async () => {
+    await removeFile('data/intel-files/' + f.file);
+    it.files.splice(k, 1);
+    await saveIntel();
+    await publish('archivos de market intelligence');
+    renderIntelFiles();
+  });
+}
+
 async function saveIntelItem(btn) {
-  const item = { id: INTEL_CUR || SP.randomId(), date: $('i-date').value || today(), tag: $('i-tag').value.trim(), title: $('i-title').value.trim(), summary: $('i-summary').value.trim(), url: $('i-url').value.trim() };
+  const item = { id: INTEL_CUR || SP.randomId(), date: $('i-date').value || today(), tag: $('i-tag').value.trim(), title: $('i-title').value.trim(), summary: $('i-summary').value.trim(), url: $('i-url').value.trim(), files: (curIntel() || {}).files || [] };
   if (!item.title) return msg('intel-msg', 'Escribe un título.');
   if (item.url && !/^https?:\/\//i.test(item.url)) return msg('intel-msg', 'El link debe empezar con https://');
   await busy(btn, 'Guardando…', async () => {
@@ -797,6 +865,7 @@ async function saveIntelItem(btn) {
 async function deleteIntelItem(btn) {
   if (!confirm('¿Eliminar esta publicación?')) return;
   await busy(btn, 'Eliminando…', async () => {
+    for (const f of (curIntel() || {}).files || []) await removeFile('data/intel-files/' + f.file);
     INTEL = INTEL.filter(i => i.id !== INTEL_CUR);
     INTEL_CUR = null;
     await saveIntel();

@@ -270,6 +270,20 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-empty{font-size:13px;color:var(--steel-400);padding:12px 0}
 .cp-engage-item{text-decoration:none;color:inherit}
 .cp-support-status{font-size:12px;color:var(--graphite-500);min-height:18px}
+/* ── View-only viewer ─────────────────────────────────── */
+.cp-viewer{position:fixed;inset:0;z-index:1300;background:rgba(11,13,15,0.92);display:flex;flex-direction:column;user-select:none;-webkit-user-select:none}
+.cp-viewer[hidden]{display:none}
+.cp-viewer-head{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-inverse);color:#fff;flex-wrap:wrap}
+.cp-viewer-title{font-family:var(--font-serif);font-weight:600;font-size:20px;flex:1;min-width:200px}
+.cp-viewer-files{display:flex;gap:6px;flex-wrap:wrap}
+.cp-viewer-tab{height:30px;padding:0 12px;border-radius:var(--radius-md);border:1px solid var(--border-inverse);background:none;color:var(--silver-200);font-family:var(--font-sans);font-size:12px;cursor:pointer}
+.cp-viewer-tab.active{background:#fff;color:var(--ink-900)}
+.cp-viewer-close{width:36px;height:36px;border-radius:var(--radius-md);border:1px solid var(--border-inverse);background:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cp-viewer-close svg{width:18px;height:18px}
+.cp-viewer-body{flex:1;overflow:auto;padding:24px 16px;display:flex;flex-direction:column;align-items:center;gap:16px}
+.cp-viewer-body canvas{display:block;max-width:100%;height:auto;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,0.4);pointer-events:none}
+.cp-viewer-msg{color:var(--silver-200);font-size:14px;margin-top:40px}
+@media print{body.cp-viewing{display:none}}
 /* ── Animations ───────────────────────────────────────── */
 @keyframes cp-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes cp-fade{from{opacity:0}to{opacity:1}}
@@ -634,6 +648,7 @@ const SESSION_KEY = 'sp_session';
 let ME = null;     // decrypted client payload
 let DEK = null;    // client data key (documents)
 let DEK_RAW = null, MY_ID = null;
+let PORTAL_KEY = null, INTEL = [];  // market intelligence key + items
 
 /* ── Helpers ────────────────────────────────────── */
 function _set(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
@@ -704,8 +719,8 @@ async function _openVault(vault, raw, id) {
   _buildChart(ME.chart || []);
   let intel = [];
   try {
-    const box = await _fetchJSON('intel.json');
-    intel = await SP.openJSON(await SP.importKey(SP.unb64(ME.portalKey)), box);
+    PORTAL_KEY = await SP.importKey(SP.unb64(ME.portalKey));
+    intel = await SP.openJSON(PORTAL_KEY, await _fetchJSON('intel.json'));
   } catch {}
   _renderIntel(intel);
   _showPortal();
@@ -856,18 +871,100 @@ function _tagClass(tag) {
 }
 
 function _renderIntel(items) {
-  items = (items || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  INTEL = items = (items || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const empty = '<div class="cp-empty">No market updates yet.</div>';
-  document.getElementById('cp-intel-mini').innerHTML = items.length ? items.slice(0, 3).map(i =>
-    `<div class="cp-intel-item"><div class="cp-intel-meta"><span class="cp-intel-tag ${_tagClass(i.tag)}">${_esc(i.tag || 'Update')}</span><span class="cp-intel-date">${_fmtDate(i.date)}</span></div><div class="cp-intel-title">${_esc(i.title)}</div><div class="cp-intel-summary">${_esc(i.summary)}</div></div>`
+  const nFiles = i => (i.files || []).length;
+  document.getElementById('cp-intel-mini').innerHTML = items.length ? items.slice(0, 3).map((i, n) =>
+    `<div class="cp-intel-item"><div class="cp-intel-meta"><span class="cp-intel-tag ${_tagClass(i.tag)}">${_esc(i.tag || 'Update')}</span><span class="cp-intel-date">${_fmtDate(i.date)}</span></div><div class="cp-intel-title">${_esc(i.title)}</div><div class="cp-intel-summary">${_esc(i.summary)}</div>${nFiles(i) ? `<button class="cp-card-link" style="align-self:flex-start;margin-top:2px" onclick="viewIntelFile(${n},0)">View ${nFiles(i) > 1 ? 'attachments (' + nFiles(i) + ')' : 'attachment'} →</button>` : ''}</div>`
   ).join('') : empty;
-  document.getElementById('cp-intel-full').innerHTML = items.length ? items.map(i => {
+  document.getElementById('cp-intel-full').innerHTML = items.length ? items.map((i, n) => {
     const d = _date(i.date);
     const dateHtml = d && !isNaN(d) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '<br>' + d.getFullYear() : '';
     const url = _safeUrl(i.url);
-    return `<div class="cp-intel-page-item"><div class="cp-intel-page-date">${dateHtml}</div><div class="cp-intel-page-body"><div class="cp-intel-page-title">${_esc(i.title)}</div><div class="cp-intel-page-summary">${_esc(i.summary)}</div><div class="cp-intel-page-tags"><span class="cp-intel-tag ${_tagClass(i.tag)}">${_esc(i.tag || 'Update')}</span></div></div><div class="cp-intel-page-action">${url ? `<a class="cp-read-btn" href="${_esc(url)}" target="_blank" rel="noopener">Read →</a>` : ''}</div></div>`;
+    const files = (i.files || []).map((f, k) => `<button class="cp-read-btn" onclick="viewIntelFile(${n},${k})" title="${_esc(f.name)}">View${i.files.length > 1 ? ' ' + (k + 1) : ''} →</button>`).join('');
+    return `<div class="cp-intel-page-item"><div class="cp-intel-page-date">${dateHtml}</div><div class="cp-intel-page-body"><div class="cp-intel-page-title">${_esc(i.title)}</div><div class="cp-intel-page-summary">${_esc(i.summary)}</div><div class="cp-intel-page-tags"><span class="cp-intel-tag ${_tagClass(i.tag)}">${_esc(i.tag || 'Update')}</span></div></div><div class="cp-intel-page-action" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">${files}${url ? `<a class="cp-read-btn" href="${_esc(url)}" target="_blank" rel="noopener">Read →</a>` : ''}</div></div>`;
   }).join('') : '<div style="padding:24px">' + empty + '</div>';
 }
+
+/* ── View-only viewer (intelligence attachments) ──
+   Files are drawn onto canvases: no file URL, no download button,
+   context menu / drag / print / Ctrl+S disabled while open. */
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let _pdfjs = null, _viewGen = 0;
+function _loadPdfJs() {
+  return _pdfjs || (_pdfjs = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = PDFJS + 'pdf.min.js';
+    s.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; res(pdfjsLib); };
+    s.onerror = () => { _pdfjs = null; rej(new Error('pdfjs')); };
+    document.head.appendChild(s);
+  }));
+}
+
+async function viewIntelFile(n, k) {
+  const item = INTEL[n], files = item.files || [];
+  const f = files[k];
+  if (!f) return;
+  const gen = ++_viewGen;
+  const v = document.getElementById('cp-viewer'), body = document.getElementById('cp-viewer-body');
+  _set('cp-viewer-title', item.title);
+  document.getElementById('cp-viewer-files').innerHTML = files.length > 1
+    ? files.map((x, j) => `<button class="cp-viewer-tab ${j === k ? 'active' : ''}" onclick="viewIntelFile(${n},${j})">${_esc(x.name.replace(/\.[^.]+$/, ''))}</button>`).join('') : '';
+  body.innerHTML = '<div class="cp-viewer-msg">Loading…</div>';
+  v.removeAttribute('hidden');
+  document.body.classList.add('cp-viewing');
+  try {
+    const res = await fetch(DATA + 'intel-files/' + f.file + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('http');
+    const bytes = await SP.openFile(PORTAL_KEY, await res.arrayBuffer());
+    // Render width; fall back if layout isn't measurable yet (e.g. background tab)
+    let width = Math.min((body.clientWidth || 0) - 32, 1000);
+    if (!(width >= 240)) width = Math.min(window.innerWidth - 32, 1000) >= 240 ? Math.min(window.innerWidth - 32, 1000) : 1000;
+    const dpr = window.devicePixelRatio || 1;
+    const pages = [];
+    if (/^image\//.test(f.mime)) {
+      const bmp = await createImageBitmap(new Blob([bytes], { type: f.mime }));
+      const c = document.createElement('canvas');
+      c.width = bmp.width; c.height = bmp.height;
+      c.getContext('2d').drawImage(bmp, 0, 0); bmp.close();
+      c.style.width = Math.min(width, c.width) + 'px';
+      pages.push(c);
+    } else {
+      const pdfjs = await _loadPdfJs();
+      const doc = await pdfjs.getDocument({ data: bytes }).promise;
+      if (gen !== _viewGen) return;
+      body.innerHTML = '';
+      for (let p = 1; p <= doc.numPages; p++) {
+        const page = await doc.getPage(p);
+        const scale = width / page.getViewport({ scale: 1 }).width;
+        const vp = page.getViewport({ scale: scale * dpr });
+        const c = document.createElement('canvas');
+        c.width = vp.width; c.height = vp.height; c.style.width = width + 'px';
+        await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+        if (gen !== _viewGen) return;
+        body.appendChild(c);
+      }
+      doc.destroy();
+      return;
+    }
+    if (gen !== _viewGen) return;
+    body.innerHTML = '';
+    pages.forEach(c => body.appendChild(c));
+  } catch {
+    if (gen === _viewGen) body.innerHTML = '<div class="cp-viewer-msg">This file could not be displayed. Please try again in a few minutes or contact your advisor.</div>';
+  }
+}
+function closeViewer() {
+  _viewGen++;
+  document.getElementById('cp-viewer').setAttribute('hidden', '');
+  document.getElementById('cp-viewer-body').innerHTML = '';
+  document.body.classList.remove('cp-viewing');
+}
+document.addEventListener('keydown', e => {
+  if (!document.body.classList.contains('cp-viewing')) return;
+  if (e.key === 'Escape') closeViewer();
+  if ((e.ctrlKey || e.metaKey) && /^[sp]$/i.test(e.key)) e.preventDefault();
+});
 
 /* ── Navigation ─────────────────────────────────── */
 const SECTION_TITLES = {
@@ -1155,6 +1252,20 @@ function filterDocs(btn, type) {
       <button class="cp-btn-dark" onclick="closeAccessModal()">Close</button>
     </div>
   </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     VIEW-ONLY VIEWER
+═══════════════════════════════════════════════════ -->
+<div class="cp-viewer" id="cp-viewer" hidden oncontextmenu="return false" ondragstart="return false">
+  <div class="cp-viewer-head">
+    <div class="cp-viewer-title" id="cp-viewer-title"></div>
+    <div class="cp-viewer-files" id="cp-viewer-files"></div>
+    <button class="cp-viewer-close" aria-label="Close" onclick="closeViewer()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="cp-viewer-body" id="cp-viewer-body"></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════
