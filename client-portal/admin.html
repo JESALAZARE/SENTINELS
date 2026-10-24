@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Portal Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink-900:#0B0D0F;--ink-800:#14171A;--ink-600:#2C3138;--graphite-500:#444B53;--steel-400:#646C75;
+  --silver-300:#8C949D;--mist-100:#E6E9EC;--paper-50:#F4F5F6;--white:#fff;
+  --border:#D2D7DC;--border-subtle:#E3E6E8;
+  --pos:#3E6B53;--pos-soft:#E7EEEA;--neg:#8C3A36;--neg-soft:#F4E7E6;--notice:#8A6D3B;--notice-soft:#F2EBDD;
+  --gold:linear-gradient(150deg,#F0E080 0%,#D4A832 26%,#9E7B18 52%,#C89D2A 74%,#EAD472 100%);
+  --serif:'Cormorant Garamond',Georgia,serif;--sans:'Hanken Grotesk',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);font-size:14px;line-height:1.5;color:var(--ink-900);background:var(--paper-50)}
+header{background:var(--ink-800);color:var(--mist-100);padding:14px 24px;display:flex;align-items:center;gap:14px}
+header img{width:30px}
+header .t{font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:13px}
+header .s{color:var(--silver-300);font-size:12px}
+header .sp{flex:1}
+header button{background:none;border:1px solid rgba(255,255,255,.2);color:var(--mist-100);border-radius:4px;height:32px;padding:0 12px;cursor:pointer;font-family:var(--sans)}
+main{max-width:1200px;margin:0 auto;padding:24px}
+h1,h2,h3{font-family:var(--serif);font-weight:600;margin:0}
+h1{font-size:30px}h2{font-size:22px}h3{font-size:17px;margin-bottom:12px}
+.card{background:var(--white);border:1px solid var(--border-subtle);border-radius:6px;padding:24px;box-shadow:0 2px 8px rgba(11,13,15,.05)}
+.center{max-width:520px;margin:48px auto}
+.muted{color:var(--steel-400)}
+.small{font-size:12px}
+label{display:block;font-size:12px;font-weight:600;color:var(--graphite-500);margin-bottom:4px}
+input,select,textarea{width:100%;height:38px;padding:0 12px;border:1px solid var(--border);border-radius:4px;font-family:var(--sans);font-size:14px;color:var(--ink-900);background:#fff;outline:none}
+textarea{height:auto;min-height:90px;padding:8px 12px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--ink-900)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:38px;padding:0 16px;border-radius:4px;border:1px solid var(--border);background:#fff;color:var(--ink-900);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--paper-50)}
+.btn:disabled{opacity:.55;cursor:default}
+.btn-dark{background:var(--ink-900);color:#fff;border-color:var(--ink-900)}
+.btn-dark:hover{background:var(--ink-600)}
+.btn-gold{background:var(--gold);color:#1C1200;border:0}
+.btn-danger{color:var(--neg);border-color:#E4C3C1}
+.btn-danger:hover{background:var(--neg-soft)}
+.btn-sm{height:30px;padding:0 10px;font-size:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.stack>*+*{margin-top:14px}
+.msg{padding:10px 14px;border-radius:4px;font-size:13px}
+.msg-err{background:var(--neg-soft);color:var(--neg)}
+.msg-ok{background:var(--pos-soft);color:var(--pos)}
+.msg-notice{background:var(--notice-soft);color:var(--notice)}
+.tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border)}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--steel-400);cursor:pointer}
+.tab.active{color:var(--ink-900);border-color:var(--ink-900)}
+.layout{display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start}
+.list{display:flex;flex-direction:column;gap:6px}
+.li{text-align:left;background:#fff;border:1px solid var(--border-subtle);border-radius:4px;padding:10px 12px;cursor:pointer;font-family:var(--sans)}
+.li:hover{border-color:var(--border)}
+.li.active{border-color:var(--ink-900);box-shadow:inset 3px 0 0 var(--ink-900)}
+.li b{display:block;font-size:14px}
+.li span{font-size:12px;color:var(--steel-400)}
+fieldset{border:1px solid var(--border-subtle);border-radius:6px;padding:16px;margin:0}
+legend{font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--steel-400);padding:0 6px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--steel-400);padding:8px;border-bottom:1px solid var(--border)}
+td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middle}
+.mono{font-family:var(--mono)}
+.modal{position:fixed;inset:0;background:rgba(11,13,15,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100}
+.modal[hidden]{display:none}
+.modal .card{max-width:560px;width:100%}
+.pw{font-family:var(--mono);font-size:20px;background:var(--paper-50);border:1px dashed var(--border);padding:12px;border-radius:4px;text-align:center;letter-spacing:.04em;user-select:all}
+#publish{position:sticky;top:0;z-index:50;margin-bottom:16px}
+.hidden{display:none!important}
+@media (max-width:860px){.layout{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <img src="../crest.png" alt="" onerror="this.style.display='none'">
+  <div><div class="t">Sentinels</div><div class="s">Administración del portal de clientes</div></div>
+  <div class="sp"></div>
+  <button id="btn-lock" class="hidden" onclick="location.reload()">Bloquear</button>
+</header>
+
+<main>
+  <!-- 1 · Conectar carpeta -->
+  <section id="v-connect" class="card center stack">
+    <h1>Panel de administración</h1>
+    <p class="muted">Este panel guarda los datos de tus clientes <b>cifrados</b> dentro de la carpeta de tu sitio. Después los publicas con VS Code (Commit → Sync Changes), igual que cualquier cambio de tu página.</p>
+    <p class="muted small">Usa Microsoft Edge o Google Chrome. Cuando te lo pida, elige tu carpeta <b>SENTINELS</b> y permite que el panel la edite.</p>
+    <div id="connect-msg"></div>
+    <button class="btn btn-dark" onclick="connectFolder()">Conectar carpeta del sitio</button>
+  </section>
+
+  <!-- 2 · Configuración inicial -->
+  <section id="v-setup" class="card center stack hidden">
+    <h1>Configuración inicial</h1>
+    <p class="muted">Crea la <b>contraseña de administrador</b>. Con ella abres este panel y puedes ver y editar a todos los clientes.</p>
+    <div class="msg msg-notice small">Usa una frase larga (mínimo 14 caracteres) y guárdala en un lugar seguro. <b>Si la pierdes no se puede recuperar</b> y tendrías que volver a crear a los clientes.</div>
+    <div><label>Contraseña de administrador</label><input id="setup-pw" type="password" autocomplete="new-password"></div>
+    <div><label>Confirmar contraseña</label><input id="setup-pw2" type="password" autocomplete="new-password"></div>
+    <div id="setup-msg"></div>
+    <button class="btn btn-dark" id="setup-btn" onclick="doSetup()">Crear portal</button>
+  </section>
+
+  <!-- 3 · Desbloquear -->
+  <section id="v-unlock" class="card center stack hidden">
+    <h1>Desbloquear</h1>
+    <p class="muted">Escribe tu contraseña de administrador.</p>
+    <form onsubmit="doUnlock(event)" class="stack">
+      <input id="unlock-pw" type="password" autocomplete="current-password">
+      <div id="unlock-msg"></div>
+      <button class="btn btn-dark" id="unlock-btn" type="submit">Entrar</button>
+    </form>
+  </section>
+
+  <!-- 4 · Panel -->
+  <section id="v-main" class="hidden">
+    <div id="publish" class="msg msg-notice hidden">
+      <b>Tienes cambios sin publicar.</b> En VS Code: <b>Source Control</b> → escribe un mensaje → <b>Commit</b> → <b>Sync Changes</b>. Tus clientes los verán 1–2 minutos después.
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="clients" onclick="showTab('clients')">Clientes</button>
+      <button class="tab" data-tab="intel" onclick="showTab('intel')">Market Intelligence</button>
+    </div>
+
+    <!-- Clientes -->
+    <div id="t-clients" class="layout">
+      <div class="stack">
+        <button class="btn btn-gold" style="width:100%" onclick="newClient()">+ Nuevo cliente</button>
+        <div class="list" id="client-list"></div>
+      </div>
+      <div id="editor" class="card stack">
+        <p class="muted" style="margin:0">Selecciona un cliente o crea uno nuevo.</p>
+      </div>
+    </div>
+
+    <!-- Market Intelligence -->
+    <div id="t-intel" class="layout hidden">
+      <div class="stack">
+        <button class="btn btn-gold" style="width:100%" onclick="editIntel(null)">+ Nueva publicación</button>
+        <div class="list" id="intel-list"></div>
+      </div>
+      <div id="intel-editor" class="card stack">
+        <p class="muted" style="margin:0">Las publicaciones las ven <b>todos</b> los clientes. Selecciona una o crea una nueva.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Contraseña generada -->
+<div class="modal" id="pw-modal" hidden>
+  <div class="card stack">
+    <h2 id="pw-title">Acceso creado</h2>
+    <p class="muted" style="margin:0">Envía estos datos al cliente. <b>Esta contraseña solo se muestra ahora</b>; si se pierde, usa “Nueva contraseña”.</p>
+    <div><label>Usuario</label><div class="mono" id="pw-email"></div></div>
+    <div><label>Contraseña</label><div class="pw" id="pw-value"></div></div>
+    <div><label>Mensaje listo para enviar</label><textarea id="pw-message" rows="7" readonly></textarea></div>
+    <div class="row" style="justify-content:flex-end">
+      <span class="small muted" id="pw-copied"></span>
+      <button class="btn" onclick="copyMessage()">Copiar mensaje</button>
+      <button class="btn btn-dark" onclick="document.getElementById('pw-modal').hidden=true">Listo</button>
+    </div>
+  </div>
+</div>
+
+<script src="crypto.js"></script>
+<script>
+const PORTAL_URL = 'https://sentinels.com.mx/client-portal/';
+const enc = new TextEncoder(), dec = new TextDecoder();
+
+let ROOT = null;        // client-portal folder handle
+let META = null;
+let ADMIN_KEY = null;
+let PORTAL_RAW = null;  // key that encrypts market intelligence
+let INDEX = [];         // [{ id, email, company, updated }]
+let INTEL = [];         // [{ id, date, tag, title, summary, url }]
+let CUR = null;         // { id, vault, dek, key, data } of the open client
+
+/* ── UI helpers ─────────────────────────────────── */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function show(view) { ['connect', 'setup', 'unlock', 'main'].forEach(v => $('v-' + v).classList.toggle('hidden', v !== view)); }
+function msg(id, text, kind = 'err') { $(id).innerHTML = text ? `<div class="msg msg-${kind}">${esc(text)}</div>` : ''; }
+function dirty() { $('publish').classList.remove('hidden'); }
+async function busy(btn, label, fn) {
+  const old = btn.textContent; btn.disabled = true; btn.textContent = label;
+  try { return await fn(); } finally { btn.disabled = false; btn.textContent = old; }
+}
+function fmtSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+
+/* ── Folder access ──────────────────────────────── */
+async function dirAt(parts, create) { let d = ROOT; for (const p of parts) d = await d.getDirectoryHandle(p, { create }); return d; }
+async function readFile(path, asBytes) {
+  const parts = path.split('/'), name = parts.pop();
+  try {
+    const f = await (await (await dirAt(parts, false)).getFileHandle(name)).getFile();
+    return asBytes ? new Uint8Array(await f.arrayBuffer()) : await f.text();
+  } catch (e) { if (e.name === 'NotFoundError') return null; throw e; }
+}
+async function readJSON(path) { const t = await readFile(path); return t == null ? null : JSON.parse(t); }
+async function writeFile(path, content) {
+  const parts = path.split('/'), name = parts.pop();
+  const fh = await (await dirAt(parts, true)).getFileHandle(name, { create: true });
+  const w = await fh.createWritable(); await w.write(content); await w.close();
+  dirty();
+}
+const writeJSON = (path, obj) => writeFile(path, JSON.stringify(obj, null, 1) + '\n');
+async function removeFile(path) {
+  const parts = path.split('/'), name = parts.pop();
+  try { await (await dirAt(parts, false)).removeEntry(name); dirty(); } catch (e) { if (e.name !== 'NotFoundError') throw e; }
+}
+
+async function connectFolder() {
+  if (!window.showDirectoryPicker) { msg('connect-msg', 'Este navegador no permite editar carpetas. Abre este archivo con Microsoft Edge o Google Chrome.'); return; }
+  let h;
+  try { h = await window.showDirectoryPicker({ id: 'sentinels-site', mode: 'readwrite' }); } catch { return; }
+  try {
+    // Accept the SENTINELS root or the client-portal folder itself
+    try { h = await h.getDirectoryHandle('client-portal'); } catch {}
+    await h.getFileHandle('crypto.js'); await h.getFileHandle('index.html');
+  } catch { msg('connect-msg', 'Esa carpeta no es la del sitio. Elige la carpeta SENTINELS (la que contiene client-portal).'); return; }
+  if ((await h.requestPermission({ mode: 'readwrite' })) !== 'granted') { msg('connect-msg', 'Necesito permiso para editar la carpeta.'); return; }
+  ROOT = h;
+  META = await readJSON('data/meta.json');
+  show(META ? 'unlock' : 'setup');
+  (META ? $('unlock-pw') : $('setup-pw')).focus();
+}
+
+/* ── Setup / unlock ─────────────────────────────── */
+async function doSetup() {
+  const pw = $('setup-pw').value, pw2 = $('setup-pw2').value;
+  if (pw.length < 14) return msg('setup-msg', 'La contraseña debe tener al menos 14 caracteres.');
+  if (pw !== pw2) return msg('setup-msg', 'Las contraseñas no coinciden.');
+  await busy($('setup-btn'), 'Creando…', async () => {
+    const salt = SP.rand(16);
+    ADMIN_KEY = await SP.deriveKey(pw, salt);
+    PORTAL_RAW = SP.rand(32);
+    META = {
+      v: 1,
+      lookupSalt: SP.b64(SP.rand(16)),
+      admin: { salt: SP.b64(salt), iter: SP.ITER, check: await SP.seal(ADMIN_KEY, enc.encode('sentinels-admin')) },
+      portalKey: await SP.seal(ADMIN_KEY, PORTAL_RAW)
+    };
+    INDEX = []; INTEL = [];
+    await saveIndex(); await saveIntel();
+    await writeJSON('data/meta.json', META);
+    enterMain();
+  });
+}
+
+async function doUnlock(e) {
+  e.preventDefault();
+  msg('unlock-msg', '');
+  await busy($('unlock-btn'), 'Verificando…', async () => {
+    const key = await SP.deriveKey($('unlock-pw').value, SP.unb64(META.admin.salt), META.admin.iter);
+    try {
+      if (dec.decode(await SP.open(key, META.admin.check)) !== 'sentinels-admin') throw 0;
+    } catch { return msg('unlock-msg', 'Contraseña incorrecta.'); }
+    ADMIN_KEY = key;
+    PORTAL_RAW = await SP.open(ADMIN_KEY, META.portalKey);
+    const idx = await readJSON('data/admin-index.json');
+    INDEX = idx ? await SP.openJSON(ADMIN_KEY, idx) : [];
+    const intel = await readJSON('data/intel.json');
+    INTEL = intel ? await SP.openJSON(await SP.importKey(PORTAL_RAW), intel) : [];
+    enterMain();
+  });
+}
+
+function enterMain() {
+  show('main'); $('btn-lock').classList.remove('hidden');
+  renderClientList(); renderIntelList();
+}
+function showTab(t) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+  $('t-clients').classList.toggle('hidden', t !== 'clients');
+  $('t-intel').classList.toggle('hidden', t !== 'intel');
+}
+
+const saveIndex = async () => writeJSON('data/admin-index.json', await SP.sealJSON(ADMIN_KEY, INDEX));
+const saveIntel = async () => writeJSON('data/intel.json', await SP.sealJSON(await SP.importKey(PORTAL_RAW), INTEL));
+
+/* ── Clients ────────────────────────────────────── */
+// [key, label, type, placeholder]
+const FIELDS = [
+  ['Empresa y contacto', [
+    ['company', 'Empresa *', 'text', 'Acme Steel'],
+    ['account_id', 'Número de cuenta', 'text', 'SEP-0001'],
+    ['contact_name', 'Nombre del contacto', 'text'],
+    ['contact_role', 'Puesto del contacto', 'text', 'Energy Manager']]],
+  ['Indicadores del dashboard', [
+    ['rate', 'Tarifa activa (MXN/kWh)', 'number', '1.82'],
+    ['cfe_rate', 'Tarifa CFE de referencia (MXN/kWh)', 'number', '2.11'],
+    ['savings_monthly', 'Ahorro mensual estimado (MXN)', 'number', '847200'],
+    ['ytd_gwh', 'Consumo acumulado del año (GWh)', 'number', '98.4']]],
+  ['Contrato', [
+    ['contract_id', 'ID de contrato', 'text'],
+    ['contract_title', 'Título', 'text', 'Power Purchase Agreement'],
+    ['contract_start', 'Inicio', 'date'],
+    ['contract_end', 'Fin', 'date'],
+    ['counterparty', 'Contraparte', 'text'],
+    ['counterparty_note', 'Nota contraparte', 'text', 'Operator · Sonora portfolio'],
+    ['volume_gwh', 'Volumen anual (GWh)', 'number', '130'],
+    ['volume_note', 'Nota volumen', 'text', 'Take-or-pay minimum: 117 GWh'],
+    ['base_price', 'Precio base (MXN/kWh)', 'number', '1.78'],
+    ['price_note', 'Nota precio', 'text', 'Fixed · 70% of volume'],
+    ['escalation', 'Escalamiento', 'text', 'CPI – 1.2%'],
+    ['escalation_note', 'Nota escalamiento', 'text', 'Annual, applied Jan 1'],
+    ['mem_portion', 'Porción indexada a MEM', 'text', '30%'],
+    ['mem_note', 'Nota MEM', 'text', 'Settled at CENACE MEM monthly avg.'],
+    ['billed_label', 'Etiqueta facturación', 'text', 'Billed — May 2026'],
+    ['billed_gwh', 'Facturado (GWh)', 'number', '24.7'],
+    ['billed_note', 'Nota facturación', 'text', 'Invoice due Jun 20, 2026'],
+    ['renewal_note', 'Nota de renovación', 'text', 'Renewal discussion Q4 2026']]],
+  ['Asesor', [
+    ['advisor_name', 'Nombre del asesor', 'text'],
+    ['advisor_email', 'Email del asesor', 'email', 'nombre@sentinels.com.mx'],
+    ['call_url', 'Link para agendar llamada (opcional)', 'url', 'https://calendly.com/…']]]
+];
+
+function renderClientList() {
+  const list = INDEX.slice().sort((a, b) => (a.company || '').localeCompare(b.company || ''));
+  $('client-list').innerHTML = list.length ? list.map(c =>
+    `<button class="li ${CUR && CUR.id === c.id ? 'active' : ''}" onclick="openClient('${c.id}')"><b>${esc(c.company)}</b><span>${esc(c.email)}</span></button>`
+  ).join('') : '<p class="muted small">Aún no hay clientes.</p>';
+}
+
+async function openClient(id) {
+  const vault = await readJSON(`data/clients/${id}.json`);
+  if (!vault) { alert('No encontré el archivo de este cliente.'); return; }
+  const dek = await SP.open(ADMIN_KEY, vault.admin);
+  const key = await SP.importKey(dek);
+  CUR = { id, vault, dek, key, data: await SP.openJSON(key, vault.data) };
+  renderClientList(); renderEditor();
+}
+
+function newClient() {
+  CUR = { id: null, data: { email: '', profile: {}, chart: [], docs: [] } };
+  renderClientList(); renderEditor();
+}
+
+function chartToText(chart) { return (chart || []).map(p => [p.label, p.rate, p.cfe ?? ''].join('; ')).join('\n'); }
+function textToChart(text) {
+  const out = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let parts = line.split(/\t|;/);
+    if (parts.length < 2) parts = line.split(',');
+    const num = s => { const n = parseFloat(String(s || '').trim().replace(',', '.')); return isFinite(n) ? n : null; };
+    const rate = num(parts[1]);
+    if (rate == null) throw new Error(`No entendí esta línea de la gráfica: "${line}"`);
+    out.push({ label: parts[0].trim(), rate, cfe: num(parts[2]) });
+  }
+  return out;
+}
+
+function renderEditor() {
+  const d = CUR.data, p = d.profile || {}, isNew = !CUR.id;
+  const fields = FIELDS.map(([title, fs]) => `<fieldset><legend>${title}</legend><div class="grid">${fs.map(([k, label, type, ph]) =>
+    `<div><label for="f-${k}">${label}</label><input id="f-${k}" data-k="${k}" type="${type}" ${type === 'number' ? 'step="any"' : ''} placeholder="${esc(ph || '')}" value="${esc(p[k] ?? '')}"></div>`).join('')}</div></fieldset>`).join('');
+  $('editor').innerHTML = `
+    <div class="row" style="justify-content:space-between">
+      <h2>${isNew ? 'Nuevo cliente' : esc(p.company)}</h2>
+      ${isNew ? '' : `<div class="row"><button class="btn btn-sm" onclick="resetPassword(this)">Nueva contraseña</button><button class="btn btn-sm btn-danger" onclick="deleteClient(this)">Eliminar cliente</button></div>`}
+    </div>
+    <p class="muted small" style="margin:0">Los textos que ve el cliente en el portal están en inglés; escribe las notas en inglés para que se vean consistentes.</p>
+    <fieldset><legend>Acceso</legend>
+      <label for="f-email">Email del cliente (usuario) *</label>
+      <input id="f-email" type="email" value="${esc(d.email)}" placeholder="nombre@empresa.com">
+      ${isNew ? '<p class="small muted" style="margin:6px 0 0">Al guardar se genera una contraseña segura para enviarle.</p>' : ''}
+    </fieldset>
+    ${fields}
+    <fieldset><legend>Gráfica de tarifas</legend>
+      <label for="f-chart">Una línea por mes: <span class="mono">Mes; tarifa Sentinel; tarifa CFE</span> (puedes pegar desde Excel)</label>
+      <textarea id="f-chart" rows="6" class="mono" placeholder="Jul 25; 1.82; 2.05&#10;Aug 25; 1.83; 2.08">${esc(chartToText(d.chart))}</textarea>
+    </fieldset>
+    <div id="editor-msg"></div>
+    <div class="row"><button class="btn btn-dark" id="save-btn" onclick="saveClient(this)">${isNew ? 'Crear cliente' : 'Guardar cambios'}</button></div>
+    <fieldset><legend>Documentos</legend>
+      ${isNew ? '<p class="muted small" style="margin:0">Primero crea el cliente; después podrás subir sus PDFs.</p>' : `
+      <div class="row" style="margin-bottom:12px">
+        <select id="doc-type" style="width:auto"><option value="report">Report</option><option value="analysis">Analysis</option><option value="contract">Contract</option><option value="permit">Permit</option><option value="other">Other</option></select>
+        <label class="btn btn-sm" style="margin:0">Subir PDF<input type="file" accept="application/pdf,.pdf" multiple hidden onchange="uploadDocs(this)"></label>
+        <span class="small muted" id="doc-status"></span>
+      </div>
+      <table><thead><tr><th>Nombre</th><th>Tipo</th><th>Fecha</th><th>Tamaño</th><th></th></tr></thead><tbody>
+      ${(d.docs || []).length ? d.docs.map((x, i) => `<tr><td>${esc(x.name)}</td><td>${esc(x.type)}</td><td class="mono small">${esc(x.date)}</td><td class="mono small">${esc(x.size)}</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-sm" onclick="viewDoc(${i})">Ver</button> <button class="btn btn-sm btn-danger" onclick="deleteDoc(${i})">Quitar</button></td></tr>`).join('')
+        : '<tr><td colspan="5" class="muted">Sin documentos.</td></tr>'}
+      </tbody></table>`}
+    </fieldset>`;
+}
+
+function collectForm() {
+  const email = $('f-email').value.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Escribe un email válido para el cliente.');
+  const profile = {};
+  document.querySelectorAll('#editor input[data-k]').forEach(i => {
+    const v = i.value.trim();
+    if (v !== '') profile[i.dataset.k] = i.type === 'number' ? Number(v) : v;
+  });
+  if (!profile.company) throw new Error('Escribe el nombre de la empresa.');
+  return { email, profile, chart: textToChart($('f-chart').value) };
+}
+
+async function writeVault() {
+  CUR.vault.data = await SP.sealJSON(CUR.key, CUR.data);
+  await writeJSON(`data/clients/${CUR.id}.json`, CUR.vault);
+}
+
+async function saveClient(btn) {
+  msg('editor-msg', '');
+  let form;
+  try { form = collectForm(); } catch (e) { return msg('editor-msg', e.message); }
+  await busy(btn, 'Guardando…', async () => {
+    const id = await SP.clientId(form.email, META.lookupSalt);
+    if (id !== CUR.id && INDEX.some(c => c.id === id)) return msg('editor-msg', 'Ya existe un cliente con ese email.');
+    let password = null;
+    if (!CUR.id) {
+      const dek = SP.rand(32);
+      password = SP.genPassword();
+      CUR.dek = dek;
+      CUR.key = await SP.importKey(dek);
+      CUR.vault = { v: 1, client: await SP.wrapWithPassword(password, dek), admin: await SP.seal(ADMIN_KEY, dek) };
+      CUR.data.docs = [];
+    }
+    Object.assign(CUR.data, form, { portalKey: SP.b64(PORTAL_RAW) });
+    const oldId = CUR.id;
+    CUR.id = id;
+    await writeVault();
+    if (oldId && oldId !== id) await removeFile(`data/clients/${oldId}.json`);
+    INDEX = INDEX.filter(c => c.id !== oldId && c.id !== id);
+    INDEX.push({ id, email: form.email, company: form.profile.company, updated: today() });
+    await saveIndex();
+    renderClientList(); renderEditor();
+    if (password) showPassword(password, 'Acceso creado');
+    else msg('editor-msg', 'Cambios guardados.', 'ok');
+  });
+}
+
+async function resetPassword(btn) {
+  if (!confirm('¿Generar una nueva contraseña? La anterior dejará de funcionar cuando publiques el cambio.')) return;
+  await busy(btn, 'Generando…', async () => {
+    const password = SP.genPassword();
+    CUR.vault.client = await SP.wrapWithPassword(password, CUR.dek);
+    await writeVault();
+    showPassword(password, 'Nueva contraseña');
+  });
+}
+
+async function deleteClient(btn) {
+  const name = CUR.data.profile.company;
+  if (!confirm(`¿Eliminar a ${name}? Se borran su acceso y sus documentos de la carpeta.`)) return;
+  await busy(btn, 'Eliminando…', async () => {
+    for (const x of CUR.data.docs || []) await removeFile('data/docs/' + x.file);
+    await removeFile(`data/clients/${CUR.id}.json`);
+    INDEX = INDEX.filter(c => c.id !== CUR.id);
+    await saveIndex();
+    CUR = null;
+    await rotatePortalKey();
+    renderClientList();
+    $('editor').innerHTML = '<div class="msg msg-ok">Cliente eliminado.</div>';
+  });
+}
+
+// After removing a client, re-key Market Intelligence so their old copy of the key stops working
+async function rotatePortalKey() {
+  const raw = SP.rand(32);
+  for (const c of INDEX) {
+    const vault = await readJSON(`data/clients/${c.id}.json`);
+    if (!vault) continue;
+    const key = await SP.importKey(await SP.open(ADMIN_KEY, vault.admin));
+    const data = await SP.openJSON(key, vault.data);
+    data.portalKey = SP.b64(raw);
+    vault.data = await SP.sealJSON(key, data);
+    await writeJSON(`data/clients/${c.id}.json`, vault);
+  }
+  PORTAL_RAW = raw;
+  await saveIntel();
+  META.portalKey = await SP.seal(ADMIN_KEY, raw);
+  await writeJSON('data/meta.json', META);
+}
+
+function showPassword(password, title) {
+  const p = CUR.data.profile || {};
+  $('pw-title').textContent = title;
+  $('pw-email').textContent = CUR.data.email;
+  $('pw-value').textContent = password;
+  $('pw-message').value =
+`Hola${p.contact_name ? ' ' + p.contact_name : ''},
+
+Ya tienes acceso al portal de clientes de Sentinel Energy Partners.
+
+Portal: ${PORTAL_URL}
+Usuario: ${CUR.data.email}
+Contraseña: ${password}
+
+Te recomendamos guardarla en un lugar seguro.`;
+  $('pw-copied').textContent = '';
+  $('pw-modal').hidden = false;
+}
+async function copyMessage() {
+  const t = $('pw-message');
+  try { await navigator.clipboard.writeText(t.value); } catch { t.select(); document.execCommand('copy'); }
+  $('pw-copied').textContent = 'Copiado ✓';
+}
+
+/* ── Documents ──────────────────────────────────── */
+async function uploadDocs(input) {
+  const files = [...input.files];
+  input.value = '';
+  const type = $('doc-type').value;
+  for (const [n, f] of files.entries()) {
+    $('doc-status').textContent = `Cifrando ${n + 1} de ${files.length}…`;
+    const rid = SP.randomId() + '.bin';
+    await writeFile('data/docs/' + rid, await SP.sealFile(CUR.key, new Uint8Array(await f.arrayBuffer())));
+    CUR.data.docs.push({ file: rid, name: f.name.replace(/\.pdf$/i, ''), filename: f.name, mime: f.type || 'application/pdf', type, date: today(), size: fmtSize(f.size) });
+  }
+  await writeVault();
+  renderEditor();
+  $('doc-status').textContent = files.length ? `${files.length} documento(s) agregado(s).` : '';
+}
+async function viewDoc(i) {
+  const x = CUR.data.docs[i];
+  const bytes = await readFile('data/docs/' + x.file, true);
+  if (!bytes) { alert('No encontré el archivo cifrado.'); return; }
+  const blob = new Blob([await SP.openFile(CUR.key, bytes)], { type: x.mime || 'application/pdf' });
+  window.open(URL.createObjectURL(blob), '_blank');
+}
+async function deleteDoc(i) {
+  const x = CUR.data.docs[i];
+  if (!confirm(`¿Quitar "${x.name}"?`)) return;
+  await removeFile('data/docs/' + x.file);
+  CUR.data.docs.splice(i, 1);
+  await writeVault();
+  renderEditor();
+}
+
+/* ── Market Intelligence ────────────────────────── */
+let INTEL_CUR = null;
+function renderIntelList() {
+  const list = INTEL.slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  $('intel-list').innerHTML = list.length ? list.map(i =>
+    `<button class="li ${INTEL_CUR === i.id ? 'active' : ''}" onclick="editIntel('${i.id}')"><b>${esc(i.title)}</b><span>${esc(i.date)} · ${esc(i.tag)}</span></button>`
+  ).join('') : '<p class="muted small">Aún no hay publicaciones.</p>';
+}
+function editIntel(id) {
+  INTEL_CUR = id;
+  const it = INTEL.find(i => i.id === id) || { date: today(), tag: '', title: '', summary: '', url: '' };
+  renderIntelList();
+  $('intel-editor').innerHTML = `
+    <h2>${id ? 'Editar publicación' : 'Nueva publicación'}</h2>
+    <div class="grid">
+      <div><label>Fecha</label><input id="i-date" type="date" value="${esc(it.date)}"></div>
+      <div><label>Etiqueta</label><input id="i-tag" list="tags" value="${esc(it.tag)}" placeholder="MEM Update">
+        <datalist id="tags"><option>MEM Update</option><option>CFE Tariff</option><option>PPA Market</option><option>CENACE</option><option>Monthly Report</option><option>Quarterly Analysis</option></datalist></div>
+    </div>
+    <div><label>Título</label><input id="i-title" value="${esc(it.title)}"></div>
+    <div><label>Resumen</label><textarea id="i-summary" rows="5">${esc(it.summary)}</textarea></div>
+    <div><label>Link “Read →” (opcional)</label><input id="i-url" type="url" value="${esc(it.url)}" placeholder="https://…"></div>
+    <div id="intel-msg"></div>
+    <div class="row">
+      <button class="btn btn-dark" onclick="saveIntelItem(this)">${id ? 'Guardar cambios' : 'Publicar'}</button>
+      ${id ? '<button class="btn btn-danger" onclick="deleteIntelItem(this)">Eliminar</button>' : ''}
+    </div>`;
+}
+async function saveIntelItem(btn) {
+  const item = { id: INTEL_CUR || SP.randomId(), date: $('i-date').value || today(), tag: $('i-tag').value.trim(), title: $('i-title').value.trim(), summary: $('i-summary').value.trim(), url: $('i-url').value.trim() };
+  if (!item.title) return msg('intel-msg', 'Escribe un título.');
+  if (item.url && !/^https?:\/\//i.test(item.url)) return msg('intel-msg', 'El link debe empezar con https://');
+  await busy(btn, 'Guardando…', async () => {
+    INTEL = INTEL.filter(i => i.id !== item.id).concat(item);
+    await saveIntel();
+    editIntel(item.id);
+    msg('intel-msg', 'Guardado.', 'ok');
+  });
+}
+async function deleteIntelItem(btn) {
+  if (!confirm('¿Eliminar esta publicación?')) return;
+  await busy(btn, 'Eliminando…', async () => {
+    INTEL = INTEL.filter(i => i.id !== INTEL_CUR);
+    INTEL_CUR = null;
+    await saveIntel();
+    renderIntelList();
+    $('intel-editor').innerHTML = '<div class="msg msg-ok">Publicación eliminada.</div>';
+  });
+}
+</script>
+</body>
+</html>

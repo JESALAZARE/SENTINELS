@@ -266,6 +266,10 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-access-done-sub{font-family:var(--font-sans);font-size:14px;color:#444B53;max-width:38ch;margin:0 auto 28px;line-height:1.6}
 .cp-req-access{background:none;border:0;font-family:var(--font-sans);font-size:13px;font-weight:600;color:var(--silver-300);cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px;transition:color 150ms}
 .cp-req-access:hover{color:#fff}
+/* ── Empty states / support status ────────────────────── */
+.cp-empty{font-size:13px;color:var(--steel-400);padding:12px 0}
+.cp-engage-item{text-decoration:none;color:inherit}
+.cp-support-status{font-size:12px;color:var(--graphite-500);min-height:18px}
 /* ── Animations ───────────────────────────────────────── */
 @keyframes cp-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes cp-fade{from{opacity:0}to{opacity:1}}
@@ -298,30 +302,6 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       Return to website
     </a>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════
-     SET PASSWORD SCREEN
-═══════════════════════════════════════════════════ -->
-<div id="cp-setpw" style="display:none;position:fixed;inset:0;z-index:200;background:var(--ink-900);display:none;align-items:center;justify-content:center">
-  <div class="cp-login-bg"></div>
-  <div class="cp-login-panel">
-    <img class="cp-login-crest" src="https://sentinels.com.mx/logo-shield-knockout.png" alt="Sentinel Energy Partners" onerror="this.onerror=null;this.src='https://sentinels.com.mx/crest.png'">
-    <div class="cp-login-eyebrow">Client Portal</div>
-    <h1 class="cp-login-title">Set your password.</h1>
-    <p style="font-family:var(--font-sans);font-size:13px;color:var(--steel-400);margin:0 0 24px;text-align:center">Choose a secure password to access your portal.</p>
-    <form class="cp-login-form" id="cp-setpw-form" onsubmit="doSetPassword(event)">
-      <div class="cp-field">
-        <label for="cp-newpw">New Password</label>
-        <input id="cp-newpw" type="password" placeholder="Min. 8 characters" autocomplete="new-password" minlength="8" required>
-      </div>
-      <div class="cp-field">
-        <label for="cp-newpw2">Confirm Password</label>
-        <input id="cp-newpw2" type="password" placeholder="Repeat password" autocomplete="new-password" minlength="8" required>
-      </div>
-      <button class="cp-login-btn" id="cp-setpw-btn" type="submit">Activate Account</button>
-    </form>
   </div>
 </div>
 
@@ -385,7 +365,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
     <!-- Top Bar -->
     <header id="cp-topbar">
       <div class="cp-topbar-title" id="cp-topbar-title">Dashboard</div>
-      <div class="cp-topbar-date">June 9, 2026</div>
+      <div class="cp-topbar-date" id="cp-topbar-date"></div>
       <div class="cp-topbar-bell">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         <div class="cp-topbar-dot"></div>
@@ -410,7 +390,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
           <div class="cp-kpi-card">
             <div class="cp-kpi-eyebrow">Est. Monthly Savings</div>
             <div class="cp-kpi-value"><span id="kpi-savings">—</span><span class="cp-kpi-unit">k MXN</span></div>
-            <div class="cp-kpi-delta cp-kpi-delta--pos">vs CFE reference tariff</div>
+            <div class="cp-kpi-delta cp-kpi-delta--pos" id="kpi-savings-note">vs CFE reference tariff</div>
           </div>
           <div class="cp-kpi-card">
             <div class="cp-kpi-eyebrow">YTD Consumption</div>
@@ -430,7 +410,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
             <div class="cp-card-head">
               <div class="cp-card-head-left">
                 <div class="cp-card-title">Rate Comparison</div>
-                <div class="cp-card-sub">Jul 2025 – Jun 2026 · MXN/kWh</div>
+                <div class="cp-card-sub" id="cp-chart-sub">MXN/kWh</div>
                 <div class="cp-chart-legend">
                   <span class="cp-legend-item"><span class="cp-legend-dot cp-legend-dot--s"></span>Sentinel rate</span>
                   <span class="cp-legend-item"><span class="cp-legend-dot cp-legend-dot--cfe"></span>CFE GDMTH</span>
@@ -439,6 +419,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
             </div>
             <div class="cp-chart-svg-wrap">
               <svg id="cp-chart-svg" width="100%" height="200" viewBox="0 0 560 200" preserveAspectRatio="none"></svg>
+              <div class="cp-empty" id="cp-chart-empty" style="display:none">Rate history will appear here once your advisor publishes it.</div>
             </div>
           </div>
           <div class="cp-card cp-intel-card">
@@ -446,23 +427,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
               <div class="cp-card-title">Market Intelligence</div>
               <button class="cp-card-link" data-section="intelligence">View all →</button>
             </div>
-            <div class="cp-intel-list" id="cp-intel-mini">
-              <div class="cp-intel-item">
-                <div class="cp-intel-meta"><span class="cp-intel-tag cp-intel-tag--mem">MEM</span><span class="cp-intel-date">Jun 5, 2026</span></div>
-                <div class="cp-intel-title">Spot prices fall 8% in northern zone</div>
-                <div class="cp-intel-summary">CENACE forecasts continued softness through Q3 driven by new solar capacity.</div>
-              </div>
-              <div class="cp-intel-item">
-                <div class="cp-intel-meta"><span class="cp-intel-tag cp-intel-tag--cfe">CFE</span><span class="cp-intel-date">May 28, 2026</span></div>
-                <div class="cp-intel-title">GDMTH tariff revision — Q2 2026</div>
-                <div class="cp-intel-summary">CFE raised GDMTH base 2.11 MXN/kWh; your contract spread widens.</div>
-              </div>
-              <div class="cp-intel-item">
-                <div class="cp-intel-meta"><span class="cp-intel-tag cp-intel-tag--report">Monthly</span><span class="cp-intel-date">Jun 1, 2026</span></div>
-                <div class="cp-intel-title">Benchmark report — May 2026</div>
-                <div class="cp-intel-summary">Your rate performed 13.7% below GDMTH. Full analysis in Documents.</div>
-              </div>
-            </div>
+            <div class="cp-intel-list" id="cp-intel-mini"></div>
           </div>
         </div>
 
@@ -475,32 +440,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
             </div>
             <button class="cp-card-link" data-section="documents">View all →</button>
           </div>
-          <div class="cp-docs-grid">
-            <div class="cp-doc-mini">
-              <div class="cp-doc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-              <div class="cp-doc-name">Benchmark — May 2026</div>
-              <div class="cp-doc-badge">Monthly Report</div>
-              <div class="cp-doc-meta">Jun 1, 2026 · PDF</div>
-            </div>
-            <div class="cp-doc-mini">
-              <div class="cp-doc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-              <div class="cp-doc-name">Analysis Q1 2026</div>
-              <div class="cp-doc-badge">Analysis</div>
-              <div class="cp-doc-meta">Apr 15, 2026 · PDF</div>
-            </div>
-            <div class="cp-doc-mini">
-              <div class="cp-doc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-              <div class="cp-doc-name">PPA Term Sheet Draft</div>
-              <div class="cp-doc-badge">Contract</div>
-              <div class="cp-doc-meta">Mar 3, 2026 · PDF</div>
-            </div>
-            <div class="cp-doc-mini">
-              <div class="cp-doc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-              <div class="cp-doc-name">GDMTH Comparison Apr 2026</div>
-              <div class="cp-doc-badge">Analysis</div>
-              <div class="cp-doc-meta">Apr 28, 2026 · PDF</div>
-            </div>
-          </div>
+          <div class="cp-docs-grid" id="cp-docs-recent"></div>
         </div>
 
       </section><!-- /dashboard -->
@@ -516,62 +456,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
           </div>
         </div>
         <div class="cp-card" style="padding:0">
-          <div class="cp-intel-page-list" id="cp-intel-full">
-            <div class="cp-intel-page-item">
-              <div class="cp-intel-page-date">Jun 5<br>2026</div>
-              <div class="cp-intel-page-body">
-                <div class="cp-intel-page-title">MEM spot prices fall 8% in northern zone</div>
-                <div class="cp-intel-page-summary">CENACE forecasts continued softness through Q3 driven by new solar capacity coming online. This is positive for any MEM-indexed portion of your contract and may create a renewal opportunity for Q4 negotiation.</div>
-                <div class="cp-intel-page-tags"><span class="cp-intel-tag cp-intel-tag--mem">MEM Update</span></div>
-              </div>
-              <div class="cp-intel-page-action"><a class="cp-read-btn" href="#">Read →</a></div>
-            </div>
-            <div class="cp-intel-page-item">
-              <div class="cp-intel-page-date">Jun 1<br>2026</div>
-              <div class="cp-intel-page-body">
-                <div class="cp-intel-page-title">Monthly benchmark — May 2026</div>
-                <div class="cp-intel-page-summary">Your contract delivered 1.82 MXN/kWh against CFE GDMTH at 2.11, a 13.7% spread. Estimated savings for the month: $847,200 MXN. Cumulative YTD savings stand at $4.12M MXN.</div>
-                <div class="cp-intel-page-tags"><span class="cp-intel-tag cp-intel-tag--report">Monthly Report</span></div>
-              </div>
-              <div class="cp-intel-page-action"><a class="cp-read-btn" href="#">Read →</a></div>
-            </div>
-            <div class="cp-intel-page-item">
-              <div class="cp-intel-page-date">May 28<br>2026</div>
-              <div class="cp-intel-page-body">
-                <div class="cp-intel-page-title">CFE GDMTH tariff revision — Q2 2026</div>
-                <div class="cp-intel-page-summary">CFE published the revised GDMTH base at 2.11 MXN/kWh for Q2 2026, representing a 1.4% increase from Q1. Your fixed-rate PPA remains unaffected, widening your cost advantage.</div>
-                <div class="cp-intel-page-tags"><span class="cp-intel-tag cp-intel-tag--cfe">CFE Tariff</span></div>
-              </div>
-              <div class="cp-intel-page-action"><a class="cp-read-btn" href="#">Read →</a></div>
-            </div>
-            <div class="cp-intel-page-item">
-              <div class="cp-intel-page-date">May 12<br>2026</div>
-              <div class="cp-intel-page-body">
-                <div class="cp-intel-page-title">Solar PPA origination — 2028 vintage opportunities</div>
-                <div class="cp-intel-page-summary">Several 15-year solar PPAs in Sonora and Chihuahua are being marketed for 2028 delivery at indicative prices of 1.65–1.72 MXN/kWh. We recommend beginning a new-term analysis before July.</div>
-                <div class="cp-intel-page-tags"><span class="cp-intel-tag cp-intel-tag--ppa">PPA Market</span></div>
-              </div>
-              <div class="cp-intel-page-action"><a class="cp-read-btn" href="#">Read →</a></div>
-            </div>
-            <div class="cp-intel-page-item">
-              <div class="cp-intel-page-date">Apr 30<br>2026</div>
-              <div class="cp-intel-page-body">
-                <div class="cp-intel-page-title">CENACE grid alert — transmission constraint, northwest corridor</div>
-                <div class="cp-intel-page-summary">A recurring constraint in the Sonora–Sinaloa corridor may affect dispatch of your contracted plant in peak summer hours. Your advisor is monitoring; no financial impact expected under current contract terms.</div>
-                <div class="cp-intel-page-tags"><span class="cp-intel-tag">CENACE</span></div>
-              </div>
-              <div class="cp-intel-page-action"><a class="cp-read-btn" href="#">Read →</a></div>
-            </div>
-            <div class="cp-intel-page-item">
-              <div class="cp-intel-page-date">Apr 15<br>2026</div>
-              <div class="cp-intel-page-body">
-                <div class="cp-intel-page-title">Q1 2026 full benchmark analysis</div>
-                <div class="cp-intel-page-summary">Comprehensive benchmark for Q1: average rate 1.81 MXN/kWh vs CFE 2.09 average. Total Q1 savings: $2.34M MXN. Load factor improved 4pp from Q4 2025. Full 28-page report available in Documents.</div>
-                <div class="cp-intel-page-tags"><span class="cp-intel-tag cp-intel-tag--report">Quarterly Analysis</span></div>
-              </div>
-              <div class="cp-intel-page-action"><a class="cp-read-btn" href="#">Read →</a></div>
-            </div>
-          </div>
+          <div class="cp-intel-page-list" id="cp-intel-full"></div>
         </div>
       </section>
 
@@ -599,32 +484,32 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
           <div class="cp-term">
             <div class="cp-term-label">Counterparty</div>
             <div class="cp-term-value" id="ctr-counterparty" style="font-family:var(--font-serif);font-size:16px;font-weight:600">—</div>
-            <div class="cp-term-note">Operator · Sonora portfolio</div>
+            <div class="cp-term-note" id="ctr-counterparty-note"></div>
           </div>
           <div class="cp-term">
             <div class="cp-term-label">Annual Volume</div>
-            <div class="cp-term-value"><span id="ctr-volume">—</span><span style="font-size:12px;color:var(--steel-400)"> ±10%</span></div>
-            <div class="cp-term-note">Take-or-pay minimum: 117 GWh</div>
+            <div class="cp-term-value"><span id="ctr-volume">—</span></div>
+            <div class="cp-term-note" id="ctr-volume-note"></div>
           </div>
           <div class="cp-term">
             <div class="cp-term-label">Base Price</div>
             <div class="cp-term-value"><span id="ctr-price">—</span> <span style="font-size:13px">MXN/kWh</span></div>
-            <div class="cp-term-note">Fixed · 70% of volume</div>
+            <div class="cp-term-note" id="ctr-price-note"></div>
           </div>
           <div class="cp-term">
             <div class="cp-term-label">Price Escalation</div>
-            <div class="cp-term-value">CPI – 1.2%</div>
-            <div class="cp-term-note">Annual, applied Jan 1</div>
+            <div class="cp-term-value" id="ctr-escalation">—</div>
+            <div class="cp-term-note" id="ctr-escalation-note"></div>
           </div>
           <div class="cp-term">
             <div class="cp-term-label">MEM-indexed portion</div>
-            <div class="cp-term-value">30%</div>
-            <div class="cp-term-note">Settled at CENACE MEM monthly avg.</div>
+            <div class="cp-term-value" id="ctr-mem">—</div>
+            <div class="cp-term-note" id="ctr-mem-note"></div>
           </div>
           <div class="cp-term">
-            <div class="cp-term-label">Billed — May 2026</div>
-            <div class="cp-term-value">24.7 <span style="font-size:13px">GWh</span></div>
-            <div class="cp-term-note">Invoice due Jun 20, 2026</div>
+            <div class="cp-term-label" id="ctr-billed-label">Last billed</div>
+            <div class="cp-term-value"><span id="ctr-billed">—</span> <span style="font-size:13px">GWh</span></div>
+            <div class="cp-term-note" id="ctr-billed-note"></div>
           </div>
         </div>
         <!-- Contract meter -->
@@ -635,9 +520,9 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
             <div class="cp-meter-dates"><span id="ctr-meter-start">—</span><span id="ctr-meter-pct">—</span><span id="ctr-meter-end">—</span></div>
           </div>
           <div style="flex:none;text-align:right">
-            <div style="font-family:var(--font-mono);font-size:28px;font-weight:500;color:var(--ink-900);line-height:1">18 <span style="font-size:14px;color:var(--silver-300)">mo.</span></div>
+            <div style="font-family:var(--font-mono);font-size:28px;font-weight:500;color:var(--ink-900);line-height:1"><span id="ctr-months-left">—</span> <span style="font-size:14px;color:var(--silver-300)">mo.</span></div>
             <div style="font-size:11px;color:var(--steel-400);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px">remaining</div>
-            <div style="font-size:11px;color:var(--signal-notice);font-weight:600;margin-top:6px">Renewal discussion Q4 2026</div>
+            <div style="font-size:11px;color:var(--signal-notice);font-weight:600;margin-top:6px" id="ctr-renewal-note"></div>
           </div>
         </div>
         <!-- Advisor -->
@@ -651,7 +536,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                 <span id="adv-email-txt">—</span>
               </a>
-              <a class="cp-advisor-link" href="#">
+              <a class="cp-advisor-link" id="adv-call" href="#" target="_blank" rel="noopener">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 14 19.79 19.79 0 0 1 1.61 5.42 2 2 0 0 1 3.58 3.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 17l.19-.08z"/></svg>
                 Schedule a call
               </a>
@@ -685,56 +570,8 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
             <div class="cp-doc-th">Size</div>
             <div class="cp-doc-th"></div>
           </div>
-          <div class="cp-doc-row" data-type="report">
-            <div class="cp-doc-cell cp-doc-cell--name"><div class="cp-doc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>Benchmark Report — May 2026</div>
-            <div class="cp-doc-cell"><span class="cp-doc-badge">Report</span></div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">Jun 1, 2026</div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">1.2 MB</div>
-            <div class="cp-doc-cell"><button class="cp-doc-dl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
-          </div>
-          <div class="cp-doc-row" data-type="report">
-            <div class="cp-doc-cell cp-doc-cell--name"><div class="cp-doc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>Benchmark Report — April 2026</div>
-            <div class="cp-doc-cell"><span class="cp-doc-badge">Report</span></div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">May 3, 2026</div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">1.1 MB</div>
-            <div class="cp-doc-cell"><button class="cp-doc-dl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
-          </div>
-          <div class="cp-doc-row" data-type="analysis">
-            <div class="cp-doc-cell cp-doc-cell--name"><div class="cp-doc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>Full Benchmark Analysis — Q1 2026</div>
-            <div class="cp-doc-cell"><span class="cp-doc-badge">Analysis</span></div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">Apr 15, 2026</div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">2.8 MB</div>
-            <div class="cp-doc-cell"><button class="cp-doc-dl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
-          </div>
-          <div class="cp-doc-row" data-type="analysis">
-            <div class="cp-doc-cell cp-doc-cell--name"><div class="cp-doc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>GDMTH Comparison — April 2026</div>
-            <div class="cp-doc-cell"><span class="cp-doc-badge">Analysis</span></div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">Apr 28, 2026</div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">980 KB</div>
-            <div class="cp-doc-cell"><button class="cp-doc-dl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
-          </div>
-          <div class="cp-doc-row" data-type="contract">
-            <div class="cp-doc-cell cp-doc-cell--name"><div class="cp-doc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>PPA Solar Noroeste — Signed Contract</div>
-            <div class="cp-doc-cell"><span class="cp-doc-badge">Contract</span></div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">Jan 1, 2025</div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">4.2 MB</div>
-            <div class="cp-doc-cell"><button class="cp-doc-dl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
-          </div>
-          <div class="cp-doc-row" data-type="permit">
-            <div class="cp-doc-cell cp-doc-cell--name"><div class="cp-doc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>CENACE Qualified User Permit</div>
-            <div class="cp-doc-cell"><span class="cp-doc-badge">Permit</span></div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">Nov 15, 2024</div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">892 KB</div>
-            <div class="cp-doc-cell"><button class="cp-doc-dl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
-          </div>
-          <div class="cp-doc-row" data-type="analysis">
-            <div class="cp-doc-cell cp-doc-cell--name"><div class="cp-doc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>Initial Load &amp; Baseline Analysis</div>
-            <div class="cp-doc-cell"><span class="cp-doc-badge">Analysis</span></div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">Oct 5, 2024</div>
-            <div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">1.6 MB</div>
-            <div class="cp-doc-cell"><button class="cp-doc-dl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
-          </div>
         </div>
+        <div class="cp-empty" id="cp-docs-empty" style="display:none">No documents have been shared yet.</div>
       </section>
 
       <!-- ╔══════════════════════════════════════════╗
@@ -751,28 +588,29 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
           <div class="cp-card cp-support-card">
             <div class="cp-support-title">Send a message</div>
             <div class="cp-support-sub">Your advisor responds within one business day.</div>
-            <div class="cp-support-form">
-              <input class="cp-support-input" type="text" placeholder="Subject">
-              <textarea class="cp-support-textarea" placeholder="Describe your question or request…"></textarea>
-              <button class="cp-support-send">Send message</button>
-            </div>
+            <form class="cp-support-form" id="cp-support-form" onsubmit="submitSupport(event)">
+              <input class="cp-support-input" name="subject" type="text" placeholder="Subject" required>
+              <textarea class="cp-support-textarea" name="message" placeholder="Describe your question or request…" required></textarea>
+              <button class="cp-support-send" id="cp-support-send" type="submit">Send message</button>
+              <div class="cp-support-status" id="cp-support-status"></div>
+            </form>
           </div>
           <div class="cp-card cp-support-card">
             <div class="cp-support-title">Quick access</div>
-            <div class="cp-support-sub">Your advisor: Jorge Luis Espinoza</div>
+            <div class="cp-support-sub" id="cp-support-advisor">Your advisory team</div>
             <div class="cp-engage-items">
-              <div class="cp-engage-item">
+              <a class="cp-engage-item" id="qa-call" href="#" target="_blank" rel="noopener">
                 <div class="cp-engage-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 14 19.79 19.79 0 0 1 1.61 5.42 2 2 0 0 1 3.58 3.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 17l.19-.08z"/></svg></div>
                 <div><div class="cp-engage-label">Schedule a call</div><div class="cp-engage-desc">Book 30 min with your advisor</div></div>
-              </div>
-              <div class="cp-engage-item">
+              </a>
+              <a class="cp-engage-item" id="qa-email" href="#">
                 <div class="cp-engage-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
-                <div><div class="cp-engage-label">Send email</div><div class="cp-engage-desc"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7a10541f090a131415001b3a091f140e13141f160954191517541702">[email&#160;protected]</a></div></div>
-              </div>
-              <div class="cp-engage-item">
+                <div><div class="cp-engage-label">Send email</div><div class="cp-engage-desc" id="qa-email-txt">—</div></div>
+              </a>
+              <a class="cp-engage-item" id="qa-renewal" href="#">
                 <div class="cp-engage-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-                <div><div class="cp-engage-label">Request a renewal review</div><div class="cp-engage-desc">Start your 2028 contract analysis</div></div>
-              </div>
+                <div><div class="cp-engage-label">Request a renewal review</div><div class="cp-engage-desc">Start your next contract analysis</div></div>
+              </a>
             </div>
           </div>
         </div>
@@ -782,125 +620,118 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
   </main>
 </div><!-- /cp-app -->
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="crypto.js"></script>
 <script>
-/* ── Supabase init ──────────────────────────────── */
-const _SB = supabase.createClient(
-  'https://bhhczgvzaoruptoduxva.supabase.co',
-  'sb_publishable_vVZzMbF7BddPycx7CoZUww_2-iIG8PF'
-);
+/* ── Config ─────────────────────────────────────── */
+const FORMSPREE = 'https://formspree.io/f/mlgknepp';
+const DATA = 'data/';
+const SESSION_KEY = 'sp_session';
+let ME = null;   // decrypted client payload
+let DEK = null;  // client data key (documents)
 
-/* ── Session check on load ─────────────────────────────── */
-window.addEventListener('DOMContentLoaded', async () => {
-  // Detect invite / password-recovery token in URL hash
-  const hash = window.location.hash;
-  const params = new URLSearchParams(hash.replace(/^#/, ''));
-  const type = params.get('type');
-  if (type === 'invite' || type === 'recovery') {
-    // Exchange the token so we have a valid session
-    await _SB.auth.getSession();
-    // Show set-password screen
-    document.getElementById('cp-login').style.display = 'none';
-    const spEl = document.getElementById('cp-setpw');
-    spEl.style.display = 'flex';
-    return;
-  }
-  const { data: { session } } = await _SB.auth.getSession();
-  if (session) await _showPortal(session.user);
-});
+/* ── Helpers ────────────────────────────────────── */
+function _set(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function _date(d) {
+  if (!d) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  return m ? new Date(+m[1], m[2] - 1, +m[3]) : new Date(d);
+}
+function _fmtDate(d) { const x = _date(d); return x && !isNaN(x) ? x.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'; }
+function _initials(name) { return (name || '?').split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase(); }
+const _safeUrl = u => /^https?:\/\//i.test(u || '') ? u : '';
 
-/* ── Set Password (invite / recovery flow) ────────────── */
-async function doSetPassword(e) {
-  e.preventDefault();
-  const pw1 = document.getElementById('cp-newpw').value;
-  const pw2 = document.getElementById('cp-newpw2').value;
-  const btn = document.getElementById('cp-setpw-btn');
-  let errEl = document.getElementById('cp-setpw-error');
-  if (errEl) errEl.textContent = '';
-  if (pw1 !== pw2) {
-    if (!errEl) {
-      errEl = document.createElement('div');
-      errEl.id = 'cp-setpw-error';
-      errEl.style.cssText = 'color:#E57373;font-size:12px;text-align:center;font-family:var(--font-sans);margin-bottom:8px';
-      btn.before(errEl);
-    }
-    errEl.textContent = 'Passwords do not match.';
-    return;
-  }
-  btn.textContent = 'Activating…';
-  btn.disabled = true;
-  const { data, error } = await _SB.auth.updateUser({ password: pw1 });
-  if (error) {
-    btn.textContent = 'Activate Account';
-    btn.disabled = false;
-    if (!errEl) {
-      errEl = document.createElement('div');
-      errEl.id = 'cp-setpw-error';
-      errEl.style.cssText = 'color:#E57373;font-size:12px;text-align:center;font-family:var(--font-sans);margin-bottom:8px';
-      btn.before(errEl);
-    }
-    errEl.textContent = error.message || 'Could not set password. Try again.';
-    return;
-  }
-  // Password set — clean URL and show portal
-  window.history.replaceState(null, '', window.location.pathname);
-  document.getElementById('cp-setpw').style.display = 'none';
-  await _showPortal(data.user);
+async function _fetchJSON(path) {
+  const res = await fetch(DATA + path + '?t=' + Date.now(), { cache: 'no-store' });
+  if (!res.ok) throw new Error(res.status === 404 ? 'not-found' : 'http-' + res.status);
+  return res.json();
 }
 
-/* ── Login ─────────────────────────────────────── */
+_set('cp-topbar-date', new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
+
+/* ── Login ──────────────────────────────────────── */
+function _loginError(msg) {
+  let errEl = document.getElementById('cp-login-error');
+  const btn = document.getElementById('cp-signin-btn');
+  if (!errEl) {
+    errEl = document.createElement('div');
+    errEl.id = 'cp-login-error';
+    errEl.style.cssText = 'color:#E57373;font-size:12px;text-align:center;font-family:var(--font-sans);margin-bottom:4px';
+    btn.before(errEl);
+  }
+  errEl.textContent = msg;
+}
+
 async function doLogin(e) {
   e.preventDefault();
   const btn = document.getElementById('cp-signin-btn');
-  let errEl = document.getElementById('cp-login-error');
-  if (errEl) errEl.textContent = '';
+  const email = document.getElementById('cp-email').value.trim();
+  const pw = document.getElementById('cp-pw').value;
+  _loginError('');
+  if (!email || !pw) { _loginError('Enter your email and password.'); return; }
   btn.textContent = 'Signing in…';
   btn.classList.add('cp-loading');
   btn.disabled = true;
-  const { data, error } = await _SB.auth.signInWithPassword({
-    email: document.getElementById('cp-email').value.trim(),
-    password: document.getElementById('cp-pw').value
-  });
-  if (error) {
+  try {
+    const meta = await _fetchJSON('meta.json');
+    const id = await SP.clientId(email, meta.lookupSalt);
+    let vault, raw;
+    try { vault = await _fetchJSON('clients/' + id + '.json'); } catch { throw new Error('auth'); }
+    try { raw = await SP.unwrapWithPassword(pw, vault.client); } catch { throw new Error('auth'); }
+    try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ id, dek: SP.b64(raw) })); } catch {}
+    await _openVault(vault, raw);
+  } catch (err) {
     btn.textContent = 'Sign In';
     btn.classList.remove('cp-loading');
     btn.disabled = false;
-    if (!errEl) {
-      errEl = document.createElement('div');
-      errEl.id = 'cp-login-error';
-      errEl.style.cssText = 'color:#E57373;font-size:12px;text-align:center;font-family:var(--font-sans);margin-bottom:4px';
-      btn.before(errEl);
-    }
-    errEl.textContent = 'Incorrect email or password.';
-    return;
+    _loginError(err.message === 'auth' ? 'Incorrect email or password.' : 'Could not reach the portal. Please try again.');
   }
-  await _showPortal(data.user);
 }
 
-async function _showPortal(user) {
+async function _openVault(vault, raw) {
+  DEK = await SP.importKey(raw);
+  ME = await SP.openJSON(DEK, vault.data);
+  ME.docs = (ME.docs || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  _populatePortal(ME);
+  _renderDocs(ME.docs);
+  _buildChart(ME.chart || []);
+  let intel = [];
+  try {
+    const box = await _fetchJSON('intel.json');
+    intel = await SP.openJSON(await SP.importKey(SP.unb64(ME.portalKey)), box);
+  } catch {}
+  _renderIntel(intel);
+  _showPortal();
+}
+
+function _showPortal() {
   document.getElementById('cp-login').classList.add('cp-fade-out');
   document.getElementById('cp-app').style.display = 'grid';
   setTimeout(() => document.getElementById('cp-app').classList.add('cp-visible'), 50);
-  const [{ data: client }, { data: docs }, { data: intel }] = await Promise.all([
-    _SB.from('clients').select('*').eq('user_id', user.id).single(),
-    _SB.from('documents').select('*').order('created_at', { ascending: false }),
-    _SB.from('intelligence').select('*').order('published', { ascending: false })
-  ]);
-  if (client) _populatePortal(client);
-  if (docs && docs.length) _renderDocs(docs);
-  if (intel && intel.length) _renderIntel(intel);
 }
 
-function _set(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
-function _fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'; }
-function _initials(name) { return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+// Restore the session after a page reload (same tab only)
+(async () => {
+  let s = null;
+  try { s = JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch {}
+  if (!s) return;
+  try { await _openVault(await _fetchJSON('clients/' + s.id + '.json'), SP.unb64(s.dek)); }
+  catch { try { sessionStorage.removeItem(SESSION_KEY); } catch {} }
+})();
 
-function _populatePortal(c) {
+function doSignOut() {
+  try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+  window.location.reload();
+}
+
+/* ── Populate ───────────────────────────────────── */
+function _populatePortal(d) {
+  const c = d.profile || {};
   _set('cp-client-company', c.company || '—');
   _set('cp-client-account', 'Account #' + (c.account_id || '—'));
-  _set('cp-user-name', c.contact_name || '—');
+  _set('cp-user-name', c.contact_name || d.email || '—');
   _set('cp-user-role', c.contact_role || '—');
-  _set('cp-user-avatar', _initials(c.contact_name));
+  _set('cp-user-avatar', _initials(c.contact_name || c.company));
   if (c.rate) {
     _set('kpi-rate', Number(c.rate).toFixed(2));
     if (c.cfe_rate) {
@@ -908,21 +739,34 @@ function _populatePortal(c) {
       _set('kpi-rate-delta', '↓ ' + pct + '% vs CFE GDMTH');
     }
   }
-  if (c.savings_monthly) _set('kpi-savings', '$' + Math.round(c.savings_monthly / 1000));
+  if (c.savings_monthly) _set('kpi-savings', '$' + Math.round(c.savings_monthly / 1000).toLocaleString('en-US'));
   if (c.ytd_gwh) _set('kpi-ytd', Number(c.ytd_gwh).toFixed(1));
   if (c.contract_end) {
-    const end = new Date(c.contract_end);
-    const months = Math.round((end - new Date()) / (1000 * 60 * 60 * 24 * 30.4));
+    const end = _date(c.contract_end);
+    const months = Math.max(0, Math.round((end - new Date()) / (1000 * 60 * 60 * 24 * 30.4)));
     _set('kpi-contract-end', end.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }));
     _set('kpi-contract-remain', months + ' months remaining');
+    _set('ctr-months-left', months);
   }
   _set('ctr-id', 'CONTRACT ID · ' + (c.contract_id || '—'));
+  _set('ctr-title', c.contract_title || 'Power Purchase Agreement');
   _set('ctr-counterparty', c.counterparty || '—');
-  if (c.volume_gwh) _set('ctr-volume', c.volume_gwh + ' GWh');
-  if (c.base_price) _set('ctr-price', Number(c.base_price).toFixed(2));
+  _set('ctr-counterparty-note', c.counterparty_note || '');
+  _set('ctr-volume', c.volume_gwh ? c.volume_gwh + ' GWh' : '—');
+  _set('ctr-volume-note', c.volume_note || '');
+  _set('ctr-price', c.base_price ? Number(c.base_price).toFixed(2) : '—');
+  _set('ctr-price-note', c.price_note || '');
+  _set('ctr-escalation', c.escalation || '—');
+  _set('ctr-escalation-note', c.escalation_note || '');
+  _set('ctr-mem', c.mem_portion || '—');
+  _set('ctr-mem-note', c.mem_note || '');
+  _set('ctr-billed-label', c.billed_label || 'Last billed');
+  _set('ctr-billed', c.billed_gwh || '—');
+  _set('ctr-billed-note', c.billed_note || '');
+  _set('ctr-renewal-note', c.renewal_note || '');
   if (c.contract_start && c.contract_end) {
-    const s = new Date(c.contract_start), en = new Date(c.contract_end);
-    _set('ctr-period', s.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + ' — ' + en.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}));
+    const s = _date(c.contract_start), en = _date(c.contract_end);
+    _set('ctr-period', s.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) + ' — ' + en.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
     const pct = Math.min(100, Math.max(0, ((new Date() - s) / (en - s)) * 100));
     const fill = document.querySelector('.cp-meter-fill');
     if (fill) fill.style.width = pct.toFixed(0) + '%';
@@ -930,50 +774,86 @@ function _populatePortal(c) {
     _set('ctr-meter-start', _fmtDate(c.contract_start));
     _set('ctr-meter-end', _fmtDate(c.contract_end));
   }
-  _set('adv-name', c.advisor_name || '—');
-  _set('adv-avatar', _initials(c.advisor_name));
-  _set('adv-email-txt', c.advisor_email || '—');
-  const advLink = document.getElementById('adv-email');
-  if (advLink && c.advisor_email) advLink.href = 'mailto:' + c.advisor_email;
+  // Advisor
+  _set('adv-name', c.advisor_name || 'Sentinel Advisory Team');
+  _set('adv-avatar', _initials(c.advisor_name || 'Sentinel'));
+  const advEmail = c.advisor_email || 'contacto@sentinels.com.mx';
+  _set('adv-email-txt', advEmail);
+  _set('qa-email-txt', advEmail);
+  _set('cp-support-advisor', c.advisor_name ? 'Your advisor: ' + c.advisor_name : 'Your advisory team');
+  const mail = subj => 'mailto:' + advEmail + (subj ? '?subject=' + encodeURIComponent(subj + ' — ' + (c.company || '')) : '');
+  const callUrl = _safeUrl(c.call_url) || mail('Schedule a call');
+  document.getElementById('adv-email').href = mail('');
+  document.getElementById('qa-email').href = mail('');
+  document.getElementById('adv-call').href = callUrl;
+  document.getElementById('qa-call').href = callUrl;
+  document.getElementById('qa-renewal').href = mail('Renewal review request');
 }
+
+/* ── Documents ──────────────────────────────────── */
+const DOC_TYPES = { report: 'Report', analysis: 'Analysis', contract: 'Contract', permit: 'Permit', other: 'Other' };
+const FILE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+const DL_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
 
 function _renderDocs(docs) {
   const table = document.getElementById('cp-doc-table');
-  if (!table) return;
   table.querySelectorAll('.cp-doc-row').forEach(r => r.remove());
-  const fileIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
-  const dlIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
-  docs.forEach(d => {
+  docs.forEach((d, i) => {
     const row = document.createElement('div');
     row.className = 'cp-doc-row';
-    row.dataset.type = d.doc_type || 'report';
-    const label = (d.doc_type || 'report').charAt(0).toUpperCase() + (d.doc_type || 'report').slice(1);
-    const path = d.storage_path || '';
-    row.innerHTML = `<div class="cp-doc-cell cp-doc-cell--name"><div class="cp-doc-icon">${fileIcon}</div>${d.name}</div><div class="cp-doc-cell"><span class="cp-doc-badge">${label}</span></div><div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">${_fmtDate(d.created_at)}</div><div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">${d.file_size||'—'}</div><div class="cp-doc-cell"><button class="cp-doc-dl" onclick="_dlDoc('${path}','${d.name}')">${dlIcon}</button></div>`;
+    row.dataset.type = d.type || 'report';
+    row.innerHTML = `<div class="cp-doc-cell cp-doc-cell--name"><div class="cp-doc-icon">${FILE_ICON}</div>${_esc(d.name)}</div><div class="cp-doc-cell"><span class="cp-doc-badge">${DOC_TYPES[d.type] || 'Report'}</span></div><div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">${_fmtDate(d.date)}</div><div class="cp-doc-cell" style="font-family:var(--font-mono);font-size:11px">${_esc(d.size || '—')}</div><div class="cp-doc-cell"><button class="cp-doc-dl" title="Download" onclick="_dlDoc(${i}, this)">${DL_ICON}</button></div>`;
     table.appendChild(row);
   });
+  table.style.display = docs.length ? '' : 'none';
+  document.getElementById('cp-docs-empty').style.display = docs.length ? 'none' : '';
+  document.getElementById('cp-docs-recent').innerHTML = docs.length
+    ? docs.slice(0, 4).map((d, i) => `<div class="cp-doc-mini" style="cursor:pointer" onclick="_dlDoc(${i})"><div class="cp-doc-icon">${FILE_ICON}</div><div class="cp-doc-name">${_esc(d.name)}</div><div class="cp-doc-badge">${DOC_TYPES[d.type] || 'Report'}</div><div class="cp-doc-meta">${_fmtDate(d.date)} · PDF</div></div>`).join('')
+    : '<div class="cp-empty" style="grid-column:1/-1">No documents have been shared yet.</div>';
 }
 
-async function _dlDoc(path) {
-  if (!path) return;
-  const { data } = await _SB.storage.from('documents').createSignedUrl(path, 120);
-  if (data && data.signedUrl) window.open(data.signedUrl, '_blank');
+async function _dlDoc(i, btn) {
+  const d = ME && ME.docs[i];
+  if (!d) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(DATA + 'docs/' + d.file + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('http-' + res.status);
+    const bytes = await SP.openFile(DEK, await res.arrayBuffer());
+    const url = URL.createObjectURL(new Blob([bytes], { type: d.mime || 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = d.filename || (d.name + '.pdf');
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch {
+    alert('This document could not be downloaded. Please try again in a few minutes or contact your advisor.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/* ── Market Intelligence ────────────────────────── */
+function _tagClass(tag) {
+  const t = (tag || '').toLowerCase();
+  if (t.includes('mem')) return 'cp-intel-tag--mem';
+  if (t.includes('cfe')) return 'cp-intel-tag--cfe';
+  if (t.includes('ppa')) return 'cp-intel-tag--ppa';
+  if (/report|monthly|analysis|quarterly/.test(t)) return 'cp-intel-tag--report';
+  return '';
 }
 
 function _renderIntel(items) {
-  const mini = document.getElementById('cp-intel-mini');
-  if (mini) mini.innerHTML = items.slice(0, 3).map(i =>
-    `<div class="cp-intel-item"><div class="cp-intel-meta"><span class="cp-intel-tag">${i.tag||'Update'}</span><span class="cp-intel-date">${_fmtDate(i.published)}</span></div><div class="cp-intel-title">${i.title}</div><div class="cp-intel-summary">${i.summary||''}</div></div>`
-  ).join('');
-  const full = document.getElementById('cp-intel-full');
-  if (full) full.innerHTML = items.map(i =>
-    `<div class="cp-intel-page-item"><div class="cp-intel-page-date">${_fmtDate(i.published)}</div><div class="cp-intel-page-body"><div class="cp-intel-page-title">${i.title}</div><div class="cp-intel-page-summary">${i.summary||''}</div><div class="cp-intel-page-tags"><span class="cp-intel-tag">${i.tag||'Update'}</span></div></div><div class="cp-intel-page-action"><a class="cp-read-btn" href="#">Read →</a></div></div>`
-  ).join('');
-}
-
-async function doSignOut() {
-  await _SB.auth.signOut();
-  window.location.reload();
+  items = (items || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const empty = '<div class="cp-empty">No market updates yet.</div>';
+  document.getElementById('cp-intel-mini').innerHTML = items.length ? items.slice(0, 3).map(i =>
+    `<div class="cp-intel-item"><div class="cp-intel-meta"><span class="cp-intel-tag ${_tagClass(i.tag)}">${_esc(i.tag || 'Update')}</span><span class="cp-intel-date">${_fmtDate(i.date)}</span></div><div class="cp-intel-title">${_esc(i.title)}</div><div class="cp-intel-summary">${_esc(i.summary)}</div></div>`
+  ).join('') : empty;
+  document.getElementById('cp-intel-full').innerHTML = items.length ? items.map(i => {
+    const d = _date(i.date);
+    const dateHtml = d && !isNaN(d) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '<br>' + d.getFullYear() : '';
+    const url = _safeUrl(i.url);
+    return `<div class="cp-intel-page-item"><div class="cp-intel-page-date">${dateHtml}</div><div class="cp-intel-page-body"><div class="cp-intel-page-title">${_esc(i.title)}</div><div class="cp-intel-page-summary">${_esc(i.summary)}</div><div class="cp-intel-page-tags"><span class="cp-intel-tag ${_tagClass(i.tag)}">${_esc(i.tag || 'Update')}</span></div></div><div class="cp-intel-page-action">${url ? `<a class="cp-read-btn" href="${_esc(url)}" target="_blank" rel="noopener">Read →</a>` : ''}</div></div>`;
+  }).join('') : '<div style="padding:24px">' + empty + '</div>';
 }
 
 /* ── Navigation ─────────────────────────────────── */
@@ -1010,45 +890,75 @@ document.querySelectorAll('[data-section]').forEach(el => {
 });
 
 /* ── Chart ──────────────────────────────────────── */
-function buildChart() {
+// points: [{ label, rate, cfe }]
+function _buildChart(points) {
   const svg = document.getElementById('cp-chart-svg');
-  if (!svg) return;
+  const pts = (points || []).filter(p => p && isFinite(p.rate));
+  const hasData = pts.length >= 2;
+  svg.style.display = hasData ? '' : 'none';
+  document.getElementById('cp-chart-empty').style.display = hasData ? 'none' : '';
+  if (!hasData) return;
+  _set('cp-chart-sub', pts[0].label + ' – ' + pts[pts.length - 1].label + ' · MXN/kWh');
+
   const W = 560, H = 200, pL = 44, pR = 14, pT = 12, pB = 26;
   const pw = W - pL - pR, ph = H - pT - pB;
-  const yMin = 1.5, yMax = 2.35;
-  const months = ['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
-  const sentinel = [1.82,1.83,1.81,1.80,1.79,1.80,1.81,1.82,1.81,1.80,1.82,1.82];
-  const cfe      = [2.05,2.08,2.12,2.15,2.18,2.20,2.22,2.19,2.14,2.11,2.09,2.11];
-  const n = months.length;
+  const hasCfe = pts.every(p => isFinite(p.cfe));
+  const vals = pts.flatMap(p => hasCfe ? [p.rate, p.cfe] : [p.rate]);
+  let lo = Math.floor(Math.min(...vals) * 10) / 10 - 0.1;
+  let hi = Math.ceil(Math.max(...vals) * 10) / 10 + 0.1;
+  const step = Math.max(1, Math.ceil((hi - lo) / 0.1 / 8)) * 0.1;
+  const n = pts.length;
   const xp = i => pL + (i / (n - 1)) * pw;
-  const yp = v => pT + (1 - (v - yMin) / (yMax - yMin)) * ph;
+  const yp = v => pT + (1 - (v - lo) / (hi - lo)) * ph;
+  const line = key => pts.map((p, i) => `${xp(i).toFixed(1)},${yp(p[key]).toFixed(1)}`).join(' ');
 
-  const sPts = sentinel.map((v,i) => `${xp(i).toFixed(1)},${yp(v).toFixed(1)}`).join(' ');
-  const cPts = cfe.map((v,i) => `${xp(i).toFixed(1)},${yp(v).toFixed(1)}`).join(' ');
-  const fillPts = [
-    ...cfe.map((v,i) => `${xp(i).toFixed(1)},${yp(v).toFixed(1)}`),
-    ...[...sentinel].reverse().map((v,i) => `${xp(n-1-i).toFixed(1)},${yp(v).toFixed(1)}`)
-  ].join(' ');
-
-  const gridVals = [1.6,1.7,1.8,1.9,2.0,2.1,2.2,2.3];
-  const grid = gridVals.map(v => {
+  let grid = '';
+  for (let v = lo; v <= hi + 1e-9; v += step) {
     const y = yp(v).toFixed(1);
-    return `<line x1="${pL}" y1="${y}" x2="${W-pR}" y2="${y}" stroke="#E3E6E8" stroke-width="1"/>
-    <text x="${pL-5}" y="${(parseFloat(y)+3.5).toFixed(1)}" text-anchor="end" fill="#8C949D" font-size="9" font-family="IBM Plex Mono,monospace">${v.toFixed(1)}</text>`;
-  }).join('');
+    grid += `<line x1="${pL}" y1="${y}" x2="${W - pR}" y2="${y}" stroke="#E3E6E8" stroke-width="1"/>
+    <text x="${pL - 5}" y="${(parseFloat(y) + 3.5).toFixed(1)}" text-anchor="end" fill="#8C949D" font-size="9" font-family="IBM Plex Mono,monospace">${v.toFixed(2)}</text>`;
+  }
+  const every = Math.ceil(n / 12);
+  const labels = pts.map((p, i) => i % every ? '' :
+    `<text x="${xp(i).toFixed(1)}" y="${H - 4}" text-anchor="middle" fill="#8C949D" font-size="9" font-family="IBM Plex Mono,monospace">${_esc(p.label)}</text>`).join('');
 
-  const labels = months.map((m,i) => {
-    const x = xp(i).toFixed(1);
-    return `<text x="${x}" y="${H-4}" text-anchor="middle" fill="#8C949D" font-size="9" font-family="IBM Plex Mono,monospace">${m}</text>`;
-  }).join('');
-
-  svg.innerHTML = `${grid}
-    <polygon points="${fillPts}" fill="#3E6B53" opacity="0.09"/>
-    <polyline points="${cPts}" fill="none" stroke="#C7CCD0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    <polyline points="${sPts}" fill="none" stroke="#0B0D0F" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  let fill = '', cfeLine = '';
+  if (hasCfe) {
+    const fillPts = [
+      ...pts.map((p, i) => `${xp(i).toFixed(1)},${yp(p.cfe).toFixed(1)}`),
+      ...pts.slice().reverse().map((p, i) => `${xp(n - 1 - i).toFixed(1)},${yp(p.rate).toFixed(1)}`)
+    ].join(' ');
+    fill = `<polygon points="${fillPts}" fill="#3E6B53" opacity="0.09"/>`;
+    cfeLine = `<polyline points="${line('cfe')}" fill="none" stroke="#C7CCD0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+  svg.innerHTML = `${grid}${fill}${cfeLine}
+    <polyline points="${line('rate')}" fill="none" stroke="#0B0D0F" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
     ${labels}`;
 }
-buildChart();
+
+/* ── Support message ────────────────────────────── */
+async function submitSupport(e) {
+  e.preventDefault();
+  const form = e.target;
+  const btn = document.getElementById('cp-support-send');
+  const status = document.getElementById('cp-support-status');
+  const c = (ME && ME.profile) || {};
+  const fd = new FormData(form);
+  fd.append('email', (ME && ME.email) || '');
+  fd.append('company', c.company || '');
+  fd.append('source', 'client-portal');
+  fd.append('_subject', 'Client portal — ' + (c.company || 'client') + ': ' + fd.get('subject'));
+  btn.textContent = 'Sending…'; btn.disabled = true; status.textContent = '';
+  try {
+    const res = await fetch(FORMSPREE, { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error();
+    form.reset();
+    status.textContent = 'Message sent. Your advisor will reply within one business day.';
+  } catch {
+    status.textContent = 'Could not send your message. Please try again or email your advisor.';
+  }
+  btn.textContent = 'Send message'; btn.disabled = false;
+}
 
 /* ── Access Modal ──────────────────────────────── */
 function openAccessModal() {
@@ -1069,7 +979,7 @@ async function submitAccessForm(e) {
   const btn = document.getElementById('ca-submit');
   btn.textContent = 'Sending…'; btn.disabled = true;
   try {
-    const res = await fetch('https://formspree.io/f/mlgknepp', {
+    const res = await fetch(FORMSPREE, {
       method:'POST', body: new FormData(e.target),
       headers:{'Accept':'application/json'}
     });
