@@ -292,6 +292,98 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-viewer-body canvas{display:block;max-width:100%;height:auto;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,0.4);pointer-events:none}
 .cp-viewer-msg{color:var(--silver-200);font-size:14px;margin-top:40px}
 @media print{body.cp-viewing{display:none}}
+
+/* ── Responsive (tablet & phone) ──────────────────────── */
+.cp-topbar-menu{display:none;width:40px;height:40px;margin-left:-8px;border:0;background:none;color:var(--ink-900);cursor:pointer;align-items:center;justify-content:center;flex:none}
+.cp-topbar-menu svg{width:22px;height:22px}
+#cp-sb-backdrop{display:none}
+#cp-app{height:100dvh}
+.cp-login-form{width:100%;text-align:left}
+@media (max-width:1180px){
+  .cp-kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .cp-split-row{grid-template-columns:1fr}
+  .cp-docs-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:900px){
+  #cp-app{grid-template-columns:1fr}
+  #cp-sidebar{position:fixed;top:0;bottom:0;left:0;width:272px;max-width:85vw;z-index:160;transform:translateX(-100%);transition:transform 260ms var(--ease-out);box-shadow:0 0 40px rgba(0,0,0,0.35)}
+  #cp-app.cp-sb-open #cp-sidebar{transform:none}
+  #cp-sb-backdrop{position:fixed;inset:0;z-index:150;background:rgba(11,13,15,0.5)}
+  #cp-app.cp-sb-open #cp-sb-backdrop{display:block}
+  .cp-topbar-menu{display:inline-flex}
+  #cp-topbar{padding:0 20px;gap:10px}
+  #cp-content{padding:24px 20px 40px}
+  .cp-terms-grid{grid-template-columns:repeat(2,1fr)}
+  .cp-support-grid{grid-template-columns:1fr}
+  .cp-intel-page-item{grid-template-columns:52px 1fr;padding:18px 20px}
+  .cp-intel-page-action{grid-column:2;flex-direction:row !important;flex-wrap:wrap;align-items:flex-start !important}
+  .cp-nav-item{padding:12px}
+}
+@media (max-width:600px){
+  #cp-topbar{height:56px;padding:0 12px 0 16px}
+  .cp-topbar-title{font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cp-topbar-date{display:none}
+  #cp-content{padding:16px 14px 32px}
+  .cp-page-title{font-size:23px}
+  .cp-page-head{margin-bottom:16px}
+
+  .cp-kpi-grid{gap:10px;margin-bottom:16px}
+  .cp-kpi-card{padding:16px 14px 14px}
+  .cp-kpi-card::before{left:14px}
+  .cp-kpi-eyebrow{font-size:10px;letter-spacing:0.08em}
+  .cp-kpi-value{font-size:24px;flex-wrap:wrap;gap:2px 4px}
+  .cp-kpi-unit{font-size:11px}
+  .cp-kpi-delta{font-size:11px;margin-top:6px}
+
+  .cp-split-row{gap:14px;margin-bottom:16px}
+  .cp-chart-card,.cp-recent-card,.cp-intel-card{padding:16px}
+  .cp-chart-legend{flex-wrap:wrap;gap:8px 14px}
+  .cp-docs-grid{grid-template-columns:1fr}
+
+  .cp-intel-page-item{grid-template-columns:1fr;gap:6px;padding:16px}
+  .cp-intel-page-date br{display:none}
+  .cp-intel-page-action{grid-column:1}
+  .cp-intel-page-title{font-size:16px}
+
+  .cp-contract-header{padding:18px}
+  .cp-contract-title{font-size:21px}
+  .cp-terms-grid{grid-template-columns:1fr}
+  .cp-term{padding:14px 16px}
+  .cp-contract-meter{padding:16px}
+  .cp-advisor-card{padding:18px;flex-direction:column;align-items:flex-start;gap:12px}
+
+  /* Documents: name + date, download button on the right */
+  .cp-doc-filters{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin-bottom:14px}
+  .cp-doc-filter{flex:none}
+  .cp-doc-thead{display:none}
+  .cp-doc-row{grid-template-columns:1fr 48px}
+  .cp-doc-row .cp-doc-cell:nth-child(1){grid-column:1;grid-row:1;padding-bottom:2px}
+  .cp-doc-row .cp-doc-cell:nth-child(2),.cp-doc-row .cp-doc-cell:nth-child(4){display:none}
+  .cp-doc-row .cp-doc-cell:nth-child(3){grid-column:1;grid-row:2;padding-top:0;padding-left:54px}
+  .cp-doc-row .cp-doc-cell:nth-child(5){grid-column:2;grid-row:1 / span 2;padding:0}
+  .cp-doc-dl{width:40px;height:40px}
+
+  .cp-support-card{padding:20px 16px}
+
+  /* Login and dialogs fit the screen; 16px inputs stop iOS from zooming */
+  .cp-login-panel{width:calc(100% - 32px);max-width:380px;padding:36px 22px}
+  .cp-login-title{font-size:30px;margin-bottom:24px}
+  .cp-access-modal{padding:12px;align-items:flex-end}
+  .cp-access-panel{padding:32px 20px 24px;max-height:calc(100dvh - 24px);overflow-y:auto}
+  .cp-access-title{font-size:24px;margin-bottom:20px}
+  .cp-access-row{grid-template-columns:1fr}
+  .cp-access-actions{flex-direction:column-reverse}
+  .cp-access-actions button,.cp-access-done .cp-btn-dark{width:100%}
+  .cp-field input,.cp-f input,.cp-f select,.cp-support-input,.cp-support-textarea{font-size:16px}
+  .cp-field input,.cp-f input,.cp-f select,.cp-support-input{height:46px}
+  .cp-support-send{width:100%;height:46px}
+
+  .cp-viewer-head{padding:10px 12px;gap:10px}
+  .cp-viewer-title{font-size:16px;min-width:0;flex-basis:calc(100% - 52px)}
+  .cp-viewer-files{order:3;width:100%;overflow-x:auto;flex-wrap:nowrap}
+  .cp-viewer-tab{flex:none}
+  .cp-viewer-body{padding:12px 8px;gap:10px}
+}
 /* ── Animations ───────────────────────────────────────── */
 @keyframes cp-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes cp-fade{from{opacity:0}to{opacity:1}}
@@ -334,6 +426,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 <div id="cp-app">
 
   <!-- SIDEBAR -->
+  <div id="cp-sb-backdrop" onclick="toggleSidebar(false)"></div>
   <aside id="cp-sidebar">
     <div class="cp-sb-brand">
       <img src="https://sentinels.com.mx/logo-shield-knockout.png" alt="Sentinel" onerror="this.onerror=null;this.src='https://sentinels.com.mx/crest.png'">
@@ -391,6 +484,9 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
   <main id="cp-main">
     <!-- Top Bar -->
     <header id="cp-topbar">
+      <button class="cp-topbar-menu" aria-label="Open menu" onclick="toggleSidebar(true)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
       <div class="cp-topbar-title" id="cp-topbar-title">Dashboard</div>
       <div class="cp-topbar-date" id="cp-topbar-date"></div>
       <div class="cp-topbar-bell">
@@ -1010,7 +1106,17 @@ const SECTION_TITLES = {
   support: 'Support'
 };
 
+// Redraw the chart when the screen size changes (rotation, window resize)
+let _chartT;
+window.addEventListener('resize', () => { clearTimeout(_chartT); _chartT = setTimeout(() => { if (ME) _buildChart(ME.chart || []); }, 150); });
+
+// Phone / tablet: the sidebar slides in as a drawer
+function toggleSidebar(open) {
+  document.getElementById('cp-app').classList.toggle('cp-sb-open', open);
+}
+
 function goTo(id) {
+  toggleSidebar(false);
   // Deactivate all
   document.querySelectorAll('.cp-nav-item').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.cp-section').forEach(s => s.classList.remove('active'));
@@ -1045,7 +1151,9 @@ function _buildChart(points) {
   if (!hasData) return;
   _set('cp-chart-sub', pts[0].label + ' – ' + pts[pts.length - 1].label + ' · MXN/kWh');
 
-  const W = 560, H = 200, pL = 44, pR = 14, pT = 12, pB = 26;
+  // Draw at the real on-screen width so text isn't stretched on phones
+  const W = Math.max(280, Math.round(svg.parentNode.getBoundingClientRect().width) || 560), H = 200, pL = 44, pR = 14, pT = 12, pB = 26;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   const pw = W - pL - pR, ph = H - pT - pB;
   const hasCfe = pts.every(p => isFinite(p.cfe));
   const vals = pts.flatMap(p => hasCfe ? [p.rate, p.cfe] : [p.rate]);
@@ -1063,9 +1171,9 @@ function _buildChart(points) {
     grid += `<line x1="${pL}" y1="${y}" x2="${W - pR}" y2="${y}" stroke="#E3E6E8" stroke-width="1"/>
     <text x="${pL - 5}" y="${(parseFloat(y) + 3.5).toFixed(1)}" text-anchor="end" fill="#8C949D" font-size="9" font-family="IBM Plex Mono,monospace">${v.toFixed(2)}</text>`;
   }
-  const every = Math.ceil(n / 12);
+  const every = Math.ceil(n / Math.max(2, Math.floor((W - pL - pR) / 58)));  // ~58px per label
   const labels = pts.map((p, i) => i % every ? '' :
-    `<text x="${xp(i).toFixed(1)}" y="${H - 4}" text-anchor="middle" fill="#8C949D" font-size="9" font-family="IBM Plex Mono,monospace">${_esc(p.label)}</text>`).join('');
+    `<text x="${xp(i).toFixed(1)}" y="${H - 4}" text-anchor="${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}" fill="#8C949D" font-size="10" font-family="IBM Plex Mono,monospace">${_esc(p.label)}</text>`).join('');
 
   let fill = '', cfeLine = '';
   if (hasCfe) {

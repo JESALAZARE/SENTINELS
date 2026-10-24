@@ -227,6 +227,13 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
   .mk-clients__grid{grid-template-columns:1fr;gap:var(--space-7)}
   .mk-clients__media{display:none}
 }
+@media(max-width:980px){
+  .mk-header__inner,.mk-hero__content{padding-left:var(--space-6);padding-right:var(--space-6)}
+  .mk-header__mobile{padding-left:var(--space-6);padding-right:var(--space-6)}
+  .mk-header__mcta{margin-top:var(--space-4)}
+  .mk-section{padding:var(--space-9) 0}
+  .mk-hero{min-height:560px}
+}
 @media(max-width:600px){
   .mk-wrap{padding:0 var(--space-5)}
   .mk-services__grid{grid-template-columns:1fr}
@@ -234,6 +241,50 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
   .mk-proof__stats{grid-template-columns:1fr}
   .mk-footer__grid{grid-template-columns:1fr}
   .mk-footer__cta{flex-direction:column;align-items:flex-start}
+
+  /* Header: brand + menu only; the CTA moves into the menu */
+  .mk-header__inner{height:60px;padding:0 var(--space-4);gap:var(--space-3)}
+  .mk-header__shield{height:30px}
+  .mk-header__words{font-size:11px;letter-spacing:0.14em;white-space:nowrap}
+  .mk-header__btn{display:none}
+  .mk-header__burger{width:44px;height:44px}
+  .mk-header__mobile{padding:var(--space-2) var(--space-4) var(--space-5)}
+  .mk-header__mcta{margin-top:var(--space-4);height:48px;width:100%}
+
+  /* Hero: readable text over the photo, full-width buttons */
+  .mk-hero{min-height:auto}
+  .mk-hero__content{padding:var(--space-9) var(--space-5) var(--space-8)}
+  .mk-hero__shade{background:linear-gradient(to bottom,rgba(11,13,15,0.78),rgba(11,13,15,0.92)) !important}
+  .mk-hero__title{font-size:36px;margin:0 0 var(--space-4)}
+  .mk-hero__lede{font-size:16px;margin-bottom:var(--space-6)}
+  .mk-hero__cta{flex-direction:column;margin-bottom:0}
+  .mk-hero__cta .btn{width:100%}
+
+  /* Sections */
+  .mk-section{padding:var(--space-8) 0}
+  .mk-section__head{margin-bottom:var(--space-6)}
+  .mk-section__title{font-size:30px}
+  .mk-section__title br{display:none}
+  .mk-service{min-height:0}
+  .mk-card{padding:var(--space-5)}
+  .mk-card--crested::before{left:var(--space-5)}
+  .mk-divider{margin:0 var(--space-5) !important}
+  .mk-client{flex-direction:column;gap:2px}
+  .mk-client__d{text-align:left}
+
+  /* Footer */
+  .mk-footer{padding-top:var(--space-8)}
+  .mk-footer__cta > div:last-child{width:100%;flex-direction:column}
+  .mk-footer__cta .btn{width:100%}
+  .mk-footer__base{flex-direction:column;gap:var(--space-2);align-items:flex-start}
+
+  /* Modal: fits the screen and scrolls; 16px inputs stop iOS from zooming */
+  .mk-modal{padding:var(--space-3);align-items:flex-end}
+  .mk-modal__panel{padding:var(--space-6) var(--space-5);max-height:calc(100dvh - 24px);overflow-y:auto}
+  .mk-modal__title{font-size:24px;margin-bottom:var(--space-5)}
+  .mk-modal__actions{flex-direction:column-reverse}
+  .mk-modal__actions .btn{width:100%;height:48px}
+  .field input,.field select{height:46px;font-size:16px}
 }
 </style>
 </head>
@@ -264,6 +315,8 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
     <a class="mk-header__mlink" href="#services" onclick="mkNav('services');closeMobile();return false">Services</a>
     <a class="mk-header__mlink" href="#clients" onclick="mkNav('clients');closeMobile();return false">Clients</a>
     <a class="mk-header__mlink" href="#about" onclick="mkNav('about');closeMobile();return false">About</a>
+    <a class="mk-header__mlink" href="client-portal">Client Sign In</a>
+    <button class="btn btn--foil mk-header__mcta" onclick="closeMobile();openModal()">Become a client</button>
   </div>
 </header>
 
@@ -272,7 +325,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
      ============================================================ -->
 <section class="mk-hero" id="top">
   <div class="mk-hero__bg" style="background-image:url('hero.png');background-size:cover;background-position:center right;background-repeat:no-repeat;"></div>
-  <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(11,13,15,0.92) 38%,rgba(11,13,15,0.45) 65%,rgba(11,13,15,0.15) 100%);pointer-events:none"></div>
+  <div class="mk-hero__shade" style="position:absolute;inset:0;background:linear-gradient(to right,rgba(11,13,15,0.92) 38%,rgba(11,13,15,0.45) 65%,rgba(11,13,15,0.15) 100%);pointer-events:none"></div>
 
   <div class="mk-hero__content">
 
@@ -296,7 +349,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
   <div class="mk-wrap">
     <div class="mk-section__head">
       <span class="sntl-eyebrow"><span class="sntl-eyebrow__tick"></span>Our Services</span>
-      <h2 class="mk-section__title">Seven disciplines, one mandate —<br>procure energy with confidence.</h2>
+      <h2 class="mk-section__title">Seven disciplines, one mandate — <br>procure energy with confidence.</h2>
     </div>
     <div class="mk-services__grid">
       <div class="mk-card mk-card--crested mk-service">
@@ -348,13 +401,13 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
 <!-- ============================================================
      CLIENTS
      ============================================================ -->
-<div style="height:1px;background:linear-gradient(to right,transparent,var(--border-subtle) 20%,var(--border-subtle) 80%,transparent);margin:0 var(--space-7)"></div>
+<div class="mk-divider" style="height:1px;background:linear-gradient(to right,transparent,var(--border-subtle) 20%,var(--border-subtle) 80%,transparent);margin:0 var(--space-7)"></div>
 <section class="mk-section mk-clients" id="clients" style="padding-top:var(--space-8)">
   <div class="mk-wrap mk-clients__grid">
 
     <div class="mk-clients__body">
       <span class="sntl-eyebrow"><span class="sntl-eyebrow__tick"></span>Our Clients</span>
-      <h2 class="mk-section__title">We work exclusively with<br>industrial energy consumers.</h2>
+      <h2 class="mk-section__title">We work exclusively with <br>industrial energy consumers.</h2>
       <p class="mk-clients__lede">The organizations we serve treat energy as a competitive advantage. Our primary verticals:</p>
       <ul class="mk-clients__list">
         <li class="mk-client">

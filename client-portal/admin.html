@@ -81,6 +81,38 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
 .hidden{display:none!important}
 .badge-off{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--neg);background:var(--neg-soft);border-radius:3px;padding:1px 6px;margin-left:4px;vertical-align:middle}
 @media (max-width:860px){.layout{grid-template-columns:1fr}}
+
+/* ── Responsive (tablet & phone) ───────────────── */
+.list{max-height:none}
+@media (max-width:860px){
+  main{padding:16px}
+  .list{max-height:260px;overflow-y:auto}
+}
+@media (max-width:600px){
+  header{padding:10px 14px;gap:8px}
+  header img{width:26px}
+  header img + div{display:none}
+  header button{height:34px;padding:0 10px;font-size:12px}
+  main{padding:12px}
+  .card{padding:16px}
+  .center{margin:16px auto}
+  h1{font-size:26px}h2{font-size:20px}
+  .tabs{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex:none;padding:10px 12px}
+  .grid{grid-template-columns:1fr}
+  fieldset{padding:12px}
+  /* 16px inputs stop iOS from zooming; bigger touch targets */
+  input,select,textarea{font-size:16px}
+  input,select{height:44px}
+  .btn{height:42px}
+  .btn-sm{height:36px}
+  .row > .btn-dark,.row > .btn-gold{flex:1 1 auto}
+  table{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
+  .modal{padding:10px;align-items:flex-end}
+  .modal .card{max-height:calc(100dvh - 20px);overflow-y:auto}
+  .pw{font-size:17px;word-break:break-all}
+  #publish{font-size:12px}
+}
 </style>
 </head>
 <body>
@@ -565,7 +597,11 @@ async function openClient(id) {
   // While inactive the profile is re-keyed; documents stay on the client's original key
   const docKey = vault.prevDek ? await SP.importKey(await SP.open(ADMIN_KEY, vault.prevDek)) : key;
   CUR = { id, vault, dek, key, docKey, data: await SP.openJSON(key, vault.data) };
-  renderClientList(); renderEditor();
+  renderClientList(); renderEditor(); revealOnPhone('editor');
+}
+// On narrow screens the editor sits below the list: bring it into view
+function revealOnPhone(id) {
+  if (window.innerWidth <= 860) $(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 const isInactive = () => !!(CUR && CUR.vault && CUR.vault.status === 'inactive');
 
@@ -607,7 +643,7 @@ async function setActive(active, btn) {
 
 function newClient() {
   CUR = { id: null, data: { email: '', profile: {}, chart: [], docs: [] } };
-  renderClientList(); renderEditor();
+  renderClientList(); renderEditor(); revealOnPhone('editor');
 }
 
 function chartToText(chart) { return (chart || []).map(p => [p.label, p.rate, p.cfe ?? ''].join('; ')).join('\n'); }
@@ -925,6 +961,7 @@ function editIntel(id) {
   INTEL_CUR = id;
   const it = INTEL.find(i => i.id === id) || { date: today(), tag: '', title: '', summary: '', url: '' };
   renderIntelList();
+  setTimeout(() => revealOnPhone('intel-editor'));
   $('intel-editor').innerHTML = `
     <h2>${id ? 'Editar publicación' : 'Nueva publicación'}</h2>
     <div class="grid">
