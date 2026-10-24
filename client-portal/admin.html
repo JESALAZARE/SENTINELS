@@ -394,10 +394,10 @@ function renderEditor() {
     <div id="editor-msg"></div>
     <div class="row"><button class="btn btn-dark" id="save-btn" onclick="saveClient(this)">${isNew ? 'Crear cliente' : 'Guardar cambios'}</button></div>
     <fieldset><legend>Documentos</legend>
-      ${isNew ? '<p class="muted small" style="margin:0">Primero crea el cliente; después podrás subir sus PDFs.</p>' : `
+      ${isNew ? '<p class="muted small" style="margin:0">Primero crea el cliente; después podrás subir sus archivos.</p>' : `
       <div class="row" style="margin-bottom:12px">
         <select id="doc-type" style="width:auto"><option value="report">Report</option><option value="analysis">Analysis</option><option value="contract">Contract</option><option value="permit">Permit</option><option value="other">Other</option></select>
-        <label class="btn btn-sm" style="margin:0">Subir PDF<input type="file" accept="application/pdf,.pdf" multiple hidden onchange="uploadDocs(this)"></label>
+        <label class="btn btn-sm" style="margin:0">Subir archivos<input type="file" multiple hidden onchange="uploadDocs(this)"></label>
         <span class="small muted" id="doc-status"></span>
       </div>
       <table><thead><tr><th>Nombre</th><th>Tipo</th><th>Fecha</th><th>Tamaño</th><th></th></tr></thead><tbody>
@@ -560,26 +560,36 @@ async function applyRequest(btn) {
 }
 
 /* ── Documents ──────────────────────────────────── */
+const MAX_UPLOAD = 95 * 1024 * 1024;
 async function uploadDocs(input) {
   const files = [...input.files];
   input.value = '';
   const type = $('doc-type').value;
-  for (const [n, f] of files.entries()) {
-    $('doc-status').textContent = `Cifrando ${n + 1} de ${files.length}…`;
+  // GitHub rejects files over 100 MB
+  const tooBig = files.filter(f => f.size > MAX_UPLOAD);
+  const ok = files.filter(f => f.size <= MAX_UPLOAD);
+  for (const [n, f] of ok.entries()) {
+    $('doc-status').textContent = `Cifrando ${n + 1} de ${ok.length}…`;
     const rid = SP.randomId() + '.bin';
     await writeFile('data/docs/' + rid, await SP.sealFile(CUR.key, new Uint8Array(await f.arrayBuffer())));
-    CUR.data.docs.push({ file: rid, name: f.name.replace(/\.pdf$/i, ''), filename: f.name, mime: f.type || 'application/pdf', type, date: today(), size: fmtSize(f.size) });
+    CUR.data.docs.push({ file: rid, name: f.name.replace(/\.[^.]+$/, '') || f.name, filename: f.name, mime: f.type || 'application/octet-stream', type, date: today(), size: fmtSize(f.size) });
   }
-  await writeVault();
+  if (ok.length) await writeVault();
   renderEditor();
-  $('doc-status').textContent = files.length ? `${files.length} documento(s) agregado(s).` : '';
+  $('doc-status').textContent = (ok.length ? `${ok.length} archivo(s) agregado(s). ` : '') +
+    (tooBig.length ? `No se subieron (más de 95 MB, GitHub no los acepta): ${tooBig.map(f => f.name).join(', ')}` : '');
 }
 async function viewDoc(i) {
   const x = CUR.data.docs[i];
   const bytes = await readFile('data/docs/' + x.file, true);
   if (!bytes) { alert('No encontré el archivo cifrado.'); return; }
-  const blob = new Blob([await SP.openFile(CUR.key, bytes)], { type: x.mime || 'application/pdf' });
-  window.open(URL.createObjectURL(blob), '_blank');
+  const mime = x.mime || 'application/pdf';
+  const url = URL.createObjectURL(new Blob([await SP.openFile(CUR.key, bytes)], { type: mime }));
+  // PDFs, images and text open in a tab; anything else downloads with its real name
+  if (/^(application\/pdf|image\/|text\/)/.test(mime)) { window.open(url, '_blank'); return; }
+  const a = document.createElement('a');
+  a.href = url; a.download = x.filename || x.name;
+  document.body.appendChild(a); a.click(); a.remove();
 }
 async function deleteDoc(i) {
   const x = CUR.data.docs[i];

@@ -802,6 +802,12 @@ const DOC_TYPES = { report: 'Report', analysis: 'Analysis', contract: 'Contract'
 const FILE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
 const DL_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
 
+// File extension shown on cards, e.g. "PDF", "XLSX"
+function _ext(d) {
+  const m = /\.([a-z0-9]{1,6})$/i.exec(d.filename || '');
+  return m ? m[1].toUpperCase() : 'PDF';
+}
+
 function _renderDocs(docs) {
   const table = document.getElementById('cp-doc-table');
   table.querySelectorAll('.cp-doc-row').forEach(r => r.remove());
@@ -815,7 +821,7 @@ function _renderDocs(docs) {
   table.style.display = docs.length ? '' : 'none';
   document.getElementById('cp-docs-empty').style.display = docs.length ? 'none' : '';
   document.getElementById('cp-docs-recent').innerHTML = docs.length
-    ? docs.slice(0, 4).map((d, i) => `<div class="cp-doc-mini" style="cursor:pointer" onclick="_dlDoc(${i})"><div class="cp-doc-icon">${FILE_ICON}</div><div class="cp-doc-name">${_esc(d.name)}</div><div class="cp-doc-badge">${DOC_TYPES[d.type] || 'Report'}</div><div class="cp-doc-meta">${_fmtDate(d.date)} · PDF</div></div>`).join('')
+    ? docs.slice(0, 4).map((d, i) => `<div class="cp-doc-mini" style="cursor:pointer" onclick="_dlDoc(${i})"><div class="cp-doc-icon">${FILE_ICON}</div><div class="cp-doc-name">${_esc(d.name)}</div><div class="cp-doc-badge">${DOC_TYPES[d.type] || 'Report'}</div><div class="cp-doc-meta">${_fmtDate(d.date)} · ${_esc(_ext(d))}</div></div>`).join('')
     : '<div class="cp-empty" style="grid-column:1/-1">No documents have been shared yet.</div>';
 }
 
@@ -827,7 +833,7 @@ async function _dlDoc(i, btn) {
     const res = await fetch(DATA + 'docs/' + d.file + '?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) throw new Error('http-' + res.status);
     const bytes = await SP.openFile(DEK, await res.arrayBuffer());
-    const url = URL.createObjectURL(new Blob([bytes], { type: d.mime || 'application/pdf' }));
+    const url = URL.createObjectURL(new Blob([bytes], { type: d.mime || 'application/octet-stream' }));
     const a = document.createElement('a');
     a.href = url; a.download = d.filename || (d.name + '.pdf');
     document.body.appendChild(a); a.click(); a.remove();
