@@ -81,7 +81,25 @@ const SP = (() => {
     return out;
   }
 
-  return { ITER, b64, unb64, rand, hex, deriveKey, importKey, seal, open, sealJSON, openJSON,
+  // Passwords protect files anyone can download, so they must resist offline
+  // guessing. Returns a message, or null when the password is acceptable.
+  const COMMON = ['password', 'contrasena', 'sentinel', 'qwerty', 'welcome', 'bienvenido', 'admin', 'letmein', '123456', 'abc123', 'iloveyou'];
+  function passwordIssue(pw, min = 12, email = '', lang = 'en') {
+    const es = lang === 'es';
+    if (pw.length < min) return es ? `Usa al menos ${min} caracteres.` : `Use at least ${min} characters.`;
+    const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(r => r.test(pw)).length;
+    if (pw.length < 20 && classes < 3)
+      return es ? 'Combina al menos 3 tipos: minúsculas, mayúsculas, números y símbolos (o usa una frase de 20+ caracteres).'
+                : 'Mix at least 3 of: lowercase, uppercase, numbers, symbols (or use a 20+ character passphrase).';
+    const low = pw.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const user = (email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (COMMON.some(w => low.includes(w)) || (user.length >= 4 && low.includes(user)) || /(.)\1{3,}/.test(pw))
+      return es ? 'Esa contraseña es fácil de adivinar. Evita palabras comunes, tu nombre o caracteres repetidos.'
+                : 'That password is easy to guess. Avoid common words, your name or repeated characters.';
+    return null;
+  }
+
+  return { ITER, b64, passwordIssue, unb64, rand, hex, deriveKey, importKey, seal, open, sealJSON, openJSON,
            sealFile, openFile, wrapWithPassword, unwrapWithPassword, clientId, genPassword,
            randomId: () => hex(rand(16)) };
 })();

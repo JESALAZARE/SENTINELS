@@ -5,6 +5,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://sentinels.com.mx; connect-src 'self' https://formspree.io; form-action 'self' https://formspree.io; base-uri 'self'; object-src 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<script>
+// Always use HTTPS and never render inside another site's frame
+if (location.protocol === 'http:' && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) location.replace('https:' + location.href.slice(5));
+if (window.top !== window.self) { document.documentElement.style.display = 'none'; try { window.top.location = window.self.location.href; } catch (e) {} }
+</script>
 <title>Sentinel Energy Partners</title>
 <link rel="icon" type="image/png" href="crest.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -438,6 +445,7 @@ body{margin:0;font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:16px;l
       </div>
       <h3 class="mk-modal__title">Tell us about your load.</h3>
       <form class="mk-modal__form" id="sntl-form" onsubmit="submitToFormspree(event)">
+        <input type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true" style="display:none">
         <div class="mk-modal__row">
           <div class="field">
             <label for="f-company">Company</label>

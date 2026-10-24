@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://api.github.com; form-action 'none'; base-uri 'self'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<script>
+// Always use HTTPS and never render inside another site's frame
+if (location.protocol === 'http:' && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) location.replace('https:' + location.href.slice(5));
+if (window.top !== window.self) { document.documentElement.style.display = 'none'; try { window.top.location = window.self.location.href; } catch (e) {} }
+</script>
 <title>Portal Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -81,6 +88,7 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
   <img src="../crest.png" alt="" onerror="this.style.display='none'">
   <div><div class="t">Sentinels</div><div class="s">Administración del portal de clientes</div></div>
   <div class="sp"></div>
+  <button id="btn-adminpw" class="hidden" onclick="openAdminPwModal()">Cambiar contraseña</button>
   <button id="btn-lock" class="hidden" onclick="location.reload()">Bloquear</button>
 </header>
 
@@ -92,11 +100,10 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
     <form onsubmit="connectGitHub(event)" class="stack">
       <div><label for="gh-repo">Repositorio</label><input id="gh-repo" value="JESALAZARE/SENTINELS" autocomplete="off"></div>
       <div><label for="gh-token">Llave de acceso de GitHub</label><input id="gh-token" type="password" autocomplete="off" placeholder="github_pat_…"></div>
-      <label class="small" style="display:flex;gap:8px;align-items:center;font-weight:500"><input id="gh-remember" type="checkbox" checked style="width:auto;height:auto"> Recordar en este navegador</label>
+      <p class="small muted" style="margin:0">Solo la pegas una vez: al entrar se guarda cifrada con tu contraseña de administrador.</p>
       <div id="connect-msg"></div>
       <div class="row">
         <button class="btn btn-dark" id="gh-btn" type="submit">Conectar</button>
-        <button class="btn btn-sm hidden" id="gh-forget" type="button" onclick="forgetToken()">Olvidar llave guardada</button>
       </div>
     </form>
     <details class="small muted">
@@ -142,6 +149,10 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
       <b>Tienes cambios sin publicar.</b> En VS Code: <b>Source Control</b> → escribe un mensaje → <b>Commit</b> → <b>Sync Changes</b>. Tus clientes los verán 1–2 minutos después.
     </div>
     <div id="pub-status" class="hidden"></div>
+    <div id="pw-warn" class="msg msg-err hidden" style="margin-bottom:16px">
+      <b>Tu contraseña de administrador es débil.</b> Protege los datos de todos tus clientes y el acceso a tu sitio; cámbiala por una más fuerte.
+      <button class="btn btn-sm" style="margin-left:8px" onclick="openAdminPwModal()">Cambiar ahora</button>
+    </div>
     <div class="tabs">
       <button class="tab active" data-tab="clients" onclick="showTab('clients')">Clientes</button>
       <button class="tab" data-tab="intel" onclick="showTab('intel')">Market Intelligence</button>
@@ -184,6 +195,22 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
       <span class="small muted" id="pw-copied"></span>
       <button class="btn" onclick="copyMessage()">Copiar mensaje</button>
       <button class="btn btn-dark" onclick="document.getElementById('pw-modal').hidden=true">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cambiar contraseña de administrador -->
+<div class="modal" id="adminpw-modal" hidden>
+  <div class="card stack">
+    <h2>Cambiar contraseña de administrador</h2>
+    <p class="muted" style="margin:0">Se vuelven a cifrar las llaves de todos tus clientes, de Market Intelligence y de GitHub con la nueva contraseña. Tus clientes no notan nada.</p>
+    <div><label>Contraseña actual</label><input id="apw-cur" type="password" autocomplete="current-password"></div>
+    <div><label>Nueva contraseña (mínimo 14 caracteres)</label><input id="apw-new" type="password" autocomplete="new-password"></div>
+    <div><label>Confirmar nueva contraseña</label><input id="apw-new2" type="password" autocomplete="new-password"></div>
+    <div id="apw-msg"></div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn" onclick="document.getElementById('adminpw-modal').hidden=true">Cancelar</button>
+      <button class="btn btn-dark" id="apw-btn" onclick="changeAdminPassword(this)">Cambiar</button>
     </div>
   </div>
 </div>
@@ -364,19 +391,9 @@ async function storeTokenInRepo() {
   await writeJSON('data/meta.json', META);
   await publish('llave de acceso cifrada');
 }
-(() => {
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(GH_KEY)); } catch {}
-  if (saved && saved.token) {
-    $('gh-repo').value = saved.repo || $('gh-repo').value;
-    $('gh-token').value = saved.token;
-    $('gh-forget').classList.remove('hidden');
-  }
-})();
-function forgetToken() {
-  try { localStorage.removeItem(GH_KEY); } catch {}
-  $('gh-token').value = ''; $('gh-forget').classList.add('hidden');
-}
+// Earlier versions kept the GitHub key in plain text in this browser; it now lives
+// only encrypted in meta.json, so remove any leftover copy.
+try { localStorage.removeItem(GH_KEY); } catch {}
 
 async function connectGitHub(e) {
   e.preventDefault();
@@ -393,10 +410,7 @@ async function connectGitHub(e) {
       if ((await readFile('crypto.js')) == null) throw new Error('Ese repositorio no tiene la carpeta client-portal del sitio.');
       META = await readJSON('data/meta.json');
     } catch (err) { GH = null; return msg('connect-msg', err.message); }
-    try {
-      if ($('gh-remember').checked) localStorage.setItem(GH_KEY, JSON.stringify({ repo, token }));
-      else localStorage.removeItem(GH_KEY);
-    } catch {}
+    $('gh-token').value = '';
     show(META ? 'unlock' : 'setup');
     (META ? $('unlock-pw') : $('setup-pw')).focus();
   });
@@ -421,7 +435,8 @@ async function connectFolder() {
 /* ── Setup / unlock ─────────────────────────────── */
 async function doSetup() {
   const pw = $('setup-pw').value, pw2 = $('setup-pw2').value;
-  if (pw.length < 14) return msg('setup-msg', 'La contraseña debe tener al menos 14 caracteres.');
+  const weak = SP.passwordIssue(pw, 14, '', 'es');
+  if (weak) return msg('setup-msg', weak);
   if (pw !== pw2) return msg('setup-msg', 'Las contraseñas no coinciden.');
   await busy($('setup-btn'), 'Creando…', async () => {
     const salt = SP.rand(16);
@@ -469,12 +484,23 @@ async function doUnlock(e) {
     const intel = await readJSON('data/intel.json');
     INTEL = intel ? await SP.openJSON(await SP.importKey(PORTAL_RAW), intel) : [];
     enterMain();
+    if (SP.passwordIssue($('unlock-pw').value, 14, '', 'es')) $('pw-warn').classList.remove('hidden');
+    $('unlock-pw').value = '';
     await storeTokenInRepo();
   });
 }
 
+// Lock the panel after 15 minutes without activity (keys live only in memory)
+let _lastActive = Date.now();
+['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(ev => document.addEventListener(ev, () => { _lastActive = Date.now(); }, { passive: true, capture: true }));
+setInterval(() => {
+  if (!ADMIN_KEY || Date.now() - _lastActive < 15 * 60 * 1000) return;
+  if (GH && GH.pending.size) return;  // unpublished changes: wait until they're pushed
+  location.reload();
+}, 30000);
+
 function enterMain() {
-  show('main'); $('btn-lock').classList.remove('hidden');
+  show('main'); $('btn-lock').classList.remove('hidden'); $('btn-adminpw').classList.remove('hidden');
   renderClientList(); renderIntelList();
 }
 function showTab(t) {
@@ -764,6 +790,48 @@ async function copyMessage() {
   $('pw-copied').textContent = 'Copiado ✓';
 }
 
+/* ── Change the admin password ──────────────────────
+   Re-wraps every key held for the admin; client passwords are untouched. */
+function openAdminPwModal() {
+  ['apw-cur', 'apw-new', 'apw-new2'].forEach(i => $(i).value = '');
+  msg('apw-msg', ''); $('adminpw-modal').hidden = false; $('apw-cur').focus();
+}
+
+async function changeAdminPassword(btn) {
+  msg('apw-msg', '');
+  const cur = $('apw-cur').value, n1 = $('apw-new').value, n2 = $('apw-new2').value;
+  const weak = SP.passwordIssue(n1, 14, '', 'es');
+  if (weak) return msg('apw-msg', weak);
+  if (n1 !== n2) return msg('apw-msg', 'Las contraseñas nuevas no coinciden.');
+  if (n1 === cur) return msg('apw-msg', 'La nueva contraseña debe ser distinta de la actual.');
+  await busy(btn, 'Cambiando…', async () => {
+    try {
+      const k = await SP.deriveKey(cur, SP.unb64(META.admin.salt), META.admin.iter);
+      if (dec.decode(await SP.open(k, META.admin.check)) !== 'sentinels-admin') throw 0;
+    } catch { return msg('apw-msg', 'La contraseña actual es incorrecta.'); }
+    const salt = SP.rand(16);
+    const NEW = await SP.deriveKey(n1, salt);
+    const rewrap = async box => SP.seal(NEW, await SP.open(ADMIN_KEY, box));
+    for (const c of INDEX) {
+      const v = await readJSON(`data/clients/${c.id}.json`);
+      if (!v) continue;
+      v.admin = await rewrap(v.admin);
+      if (v.prevDek) v.prevDek = await rewrap(v.prevDek);
+      await writeJSON(`data/clients/${c.id}.json`, v);
+    }
+    META.admin = { salt: SP.b64(salt), iter: SP.ITER, check: await SP.seal(NEW, enc.encode('sentinels-admin')) };
+    META.portalKey = await rewrap(META.portalKey);
+    if (META.ghToken) META.ghToken = await rewrap(META.ghToken);
+    ADMIN_KEY = NEW;
+    await saveIndex();
+    await writeJSON('data/meta.json', META);
+    await publish('cambiar contraseña de administrador');
+    if (CUR && CUR.id) await openClient(CUR.id);
+    $('pw-warn').classList.add('hidden');
+    msg('apw-msg', 'Contraseña cambiada. Úsala la próxima vez que entres.', 'ok');
+  });
+}
+
 /* ── Client password-change requests ────────────── */
 function openRequestModal() {
   $('req-code').value = ''; msg('req-msg', '');
@@ -778,7 +846,7 @@ async function applyRequest(btn) {
     if (!code.startsWith('SPREQ1:')) throw 0;
     req = JSON.parse(atob(code.slice(7)));
     const w = req.wrap;
-    if (!req.id || !req.ts || !w || !w.salt || !w.iv || !w.ct || !(w.iter >= 100000)) throw 0;
+    if (!/^[0-9a-f]{32}$/.test(req.id) || !Number.isFinite(req.ts) || !w || !w.salt || !w.iv || !w.ct || !(w.iter >= 100000)) throw 0;
   } catch { return msg('req-msg', 'Ese código no es válido. Copia el campo request_code completo del correo.'); }
   const entry = INDEX.find(c => c.id === req.id);
   if (!entry) return msg('req-msg', 'Esa solicitud es de un cliente que ya no existe.');
