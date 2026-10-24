@@ -72,6 +72,7 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
 .pw{font-family:var(--mono);font-size:20px;background:var(--paper-50);border:1px dashed var(--border);padding:12px;border-radius:4px;text-align:center;letter-spacing:.04em;user-select:all}
 #publish{position:sticky;top:0;z-index:50;margin-bottom:16px}
 .hidden{display:none!important}
+.badge-off{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--neg);background:var(--neg-soft);border-radius:3px;padding:1px 6px;margin-left:4px;vertical-align:middle}
 @media (max-width:860px){.layout{grid-template-columns:1fr}}
 </style>
 </head>
@@ -526,7 +527,7 @@ const FIELDS = [
 function renderClientList() {
   const list = INDEX.slice().sort((a, b) => (a.company || '').localeCompare(b.company || ''));
   $('client-list').innerHTML = list.length ? list.map(c =>
-    `<button class="li ${CUR && CUR.id === c.id ? 'active' : ''}" onclick="openClient('${c.id}')"><b>${esc(c.company)}</b><span>${esc(c.email)}</span></button>`
+    `<button class="li ${CUR && CUR.id === c.id ? 'active' : ''}" onclick="openClient('${c.id}')"><b>${esc(c.company)}${c.status === 'inactive' ? ' <span class="badge-off">Inactivo</span>' : ''}</b><span>${esc(c.email)}</span></button>`
   ).join('') : '<p class="muted small">Aún no hay clientes.</p>';
 }
 
@@ -535,8 +536,47 @@ async function openClient(id) {
   if (!vault) { alert('No encontré el archivo de este cliente.'); return; }
   const dek = await SP.open(ADMIN_KEY, vault.admin);
   const key = await SP.importKey(dek);
-  CUR = { id, vault, dek, key, data: await SP.openJSON(key, vault.data) };
+  // While inactive the profile is re-keyed; documents stay on the client's original key
+  const docKey = vault.prevDek ? await SP.importKey(await SP.open(ADMIN_KEY, vault.prevDek)) : key;
+  CUR = { id, vault, dek, key, docKey, data: await SP.openJSON(key, vault.data) };
   renderClientList(); renderEditor();
+}
+const isInactive = () => !!(CUR && CUR.vault && CUR.vault.status === 'inactive');
+
+/* ── Active / inactive ──────────────────────────────
+   Inactive: the profile is re-encrypted with a new key the client doesn't
+   have, so their password still "works" (the portal can tell them the
+   account is inactive) but opens nothing. Market Intelligence is re-keyed.
+   Reactivating restores the original key: same password, same documents. */
+async function setActive(active, btn) {
+  const name = CUR.data.profile.company;
+  if (!confirm(active
+    ? `¿Reactivar el acceso de ${name}? Podrá entrar con su misma contraseña.`
+    : `¿Desactivar el acceso de ${name}? No podrá ver su portal hasta que lo reactives. Sus datos y documentos se conservan.`)) return;
+  await busy(btn, active ? 'Reactivando…' : 'Desactivando…', async () => {
+    const v = CUR.vault;
+    if (active) {
+      const dek = await SP.open(ADMIN_KEY, v.prevDek);
+      CUR.dek = dek; CUR.key = CUR.docKey = await SP.importKey(dek);
+      v.admin = await SP.seal(ADMIN_KEY, dek);
+      delete v.prevDek; delete v.status;
+      CUR.data.portalKey = SP.b64(PORTAL_RAW);
+    } else {
+      const dek2 = SP.rand(32);
+      v.prevDek = await SP.seal(ADMIN_KEY, CUR.dek);
+      v.admin = await SP.seal(ADMIN_KEY, dek2);
+      v.status = 'inactive';
+      CUR.dek = dek2; CUR.key = await SP.importKey(dek2);
+    }
+    await writeVault();
+    const entry = INDEX.find(c => c.id === CUR.id);
+    if (entry) entry.status = active ? 'active' : 'inactive';
+    await saveIndex();
+    if (!active) await rotatePortalKey();  // stop new Market Intelligence reaching them
+    await publish(active ? 'reactivar cliente' : 'desactivar cliente');
+    await openClient(CUR.id);  // reload: the key rotation rewrote this vault too
+    msg('editor-msg', active ? 'Acceso reactivado.' : 'Acceso desactivado. Al intentar entrar verá un aviso para contactar a soporte.', 'ok');
+  });
 }
 
 function newClient() {
@@ -566,8 +606,12 @@ function renderEditor() {
   $('editor').innerHTML = `
     <div class="row" style="justify-content:space-between">
       <h2>${isNew ? 'Nuevo cliente' : esc(p.company)}</h2>
-      ${isNew ? '' : `<div class="row"><button class="btn btn-sm" onclick="resetPassword(this)">Nueva contraseña</button><button class="btn btn-sm btn-danger" onclick="deleteClient(this)">Eliminar cliente</button></div>`}
+      ${isNew ? '' : `<div class="row">${isInactive()
+        ? `<button class="btn btn-sm btn-dark" onclick="setActive(true, this)">Reactivar acceso</button>`
+        : `<button class="btn btn-sm" onclick="resetPassword(this)">Nueva contraseña</button><button class="btn btn-sm" onclick="setActive(false, this)">Desactivar acceso</button>`}
+        <button class="btn btn-sm btn-danger" onclick="deleteClient(this)">Eliminar cliente</button></div>`}
     </div>
+    ${isInactive() ? '<div class="msg msg-notice small"><b>Acceso desactivado.</b> El cliente ve un aviso para contactar a soporte. Puedes editar sus datos; para subir archivos o cambiar su contraseña, reactívalo primero.</div>' : ''}
     <p class="muted small" style="margin:0">Los textos que ve el cliente en el portal están en inglés; escribe las notas en inglés para que se vean consistentes.</p>
     <fieldset><legend>Acceso</legend>
       <label for="f-email">Email del cliente (usuario) *</label>
@@ -583,7 +627,7 @@ function renderEditor() {
     <div class="row"><button class="btn btn-dark" id="save-btn" onclick="saveClient(this)">${isNew ? 'Crear cliente' : 'Guardar cambios'}</button></div>
     <fieldset><legend>Documentos</legend>
       ${isNew ? '<p class="muted small" style="margin:0">Primero crea el cliente; después podrás subir sus archivos.</p>' : `
-      <div class="row" style="margin-bottom:12px">
+      <div class="row" style="margin-bottom:12px${isInactive() ? ';display:none' : ''}">
         <select id="doc-type" style="width:auto"><option value="report">Report</option><option value="analysis">Analysis</option><option value="contract">Contract</option><option value="permit">Permit</option><option value="other">Other</option></select>
         <label class="btn btn-sm" style="margin:0">Subir archivos<input type="file" multiple hidden onchange="uploadDocs(this)"></label>
         <span class="small muted" id="doc-status"></span>
@@ -624,7 +668,7 @@ async function saveClient(btn) {
       const dek = SP.rand(32);
       password = SP.genPassword();
       CUR.dek = dek;
-      CUR.key = await SP.importKey(dek);
+      CUR.key = CUR.docKey = await SP.importKey(dek);
       CUR.vault = { v: 1, client: await SP.wrapWithPassword(password, dek), admin: await SP.seal(ADMIN_KEY, dek) };
       CUR.data.docs = [];
     }
@@ -634,7 +678,7 @@ async function saveClient(btn) {
     await writeVault();
     if (oldId && oldId !== id) await removeFile(`data/clients/${oldId}.json`);
     INDEX = INDEX.filter(c => c.id !== oldId && c.id !== id);
-    INDEX.push({ id, email: form.email, company: form.profile.company, updated: today() });
+    INDEX.push({ id, email: form.email, company: form.profile.company, updated: today(), status: isInactive() ? 'inactive' : 'active' });
     await saveIndex();
     await publish('guardar cliente');
     renderClientList(); renderEditor();
@@ -657,7 +701,8 @@ async function resetPassword(btn) {
 
 async function deleteClient(btn) {
   const name = CUR.data.profile.company;
-  if (!confirm(`¿Eliminar a ${name}? Se borran su acceso y sus documentos de la carpeta.`)) return;
+  const typed = prompt(`Eliminar a ${name} borra su acceso, sus datos y sus documentos del portal. Si solo quieres bloquearlo temporalmente, usa "Desactivar acceso".\n\nPara confirmar, escribe ELIMINAR:`);
+  if ((typed || '').trim().toUpperCase() !== 'ELIMINAR') return;
   await busy(btn, 'Eliminando…', async () => {
     for (const x of CUR.data.docs || []) await removeFile('data/docs/' + x.file);
     await removeFile(`data/clients/${CUR.id}.json`);
@@ -739,6 +784,7 @@ async function applyRequest(btn) {
   if (!entry) return msg('req-msg', 'Esa solicitud es de un cliente que ya no existe.');
   await busy(btn, 'Verificando…', async () => {
     const vault = await readJSON(`data/clients/${req.id}.json`);
+    if (vault.status === 'inactive') return msg('req-msg', 'Ese cliente está inactivo. Reactívalo antes de aplicar la solicitud.');
     const dek = await SP.open(ADMIN_KEY, vault.admin);
     const key = await SP.importKey(dek);
     // The proof is encrypted with the client's own data key: only a signed-in client can produce it
@@ -769,7 +815,7 @@ async function uploadDocs(input) {
   for (const [n, f] of ok.entries()) {
     $('doc-status').textContent = `Cifrando ${n + 1} de ${ok.length}…`;
     const rid = SP.randomId() + '.bin';
-    await writeFile('data/docs/' + rid, await SP.sealFile(CUR.key, new Uint8Array(await f.arrayBuffer())));
+    await writeFile('data/docs/' + rid, await SP.sealFile(CUR.docKey, new Uint8Array(await f.arrayBuffer())));
     CUR.data.docs.push({ file: rid, name: f.name.replace(/\.[^.]+$/, '') || f.name, filename: f.name, mime: f.type || 'application/octet-stream', type, date: today(), size: fmtSize(f.size) });
   }
   if (ok.length) { await writeVault(); $('doc-status').textContent = 'Publicando…'; await publish('subir documentos'); }
@@ -782,7 +828,7 @@ async function viewDoc(i) {
   const bytes = await readFile('data/docs/' + x.file, true);
   if (!bytes) { alert('No encontré el archivo cifrado.'); return; }
   const mime = x.mime || 'application/pdf';
-  const url = URL.createObjectURL(new Blob([await SP.openFile(CUR.key, bytes)], { type: mime }));
+  const url = URL.createObjectURL(new Blob([await SP.openFile(CUR.docKey, bytes)], { type: mime }));
   // PDFs, images and text open in a tab; anything else downloads with its real name
   if (/^(application\/pdf|image\/|text\/)/.test(mime)) { window.open(url, '_blank'); return; }
   const a = document.createElement('a');

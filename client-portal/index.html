@@ -699,6 +699,11 @@ async function doLogin(e) {
     let vault, raw;
     try { vault = await _fetchJSON('clients/' + id + '.json'); } catch { throw new Error('auth'); }
     try { raw = await SP.unwrapWithPassword(pw, vault.client); } catch { throw new Error('auth'); }
+    if (vault.status === 'inactive') {
+      btn.textContent = 'Sign In'; btn.classList.remove('cp-loading'); btn.disabled = false;
+      _showInactive(email);
+      return;
+    }
     try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ id, dek: SP.b64(raw) })); } catch {}
     await _openVault(vault, raw, id);
   } catch (err) {
@@ -737,9 +742,22 @@ function _showPortal() {
   let s = null;
   try { s = JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch {}
   if (!s) return;
-  try { await _openVault(await _fetchJSON('clients/' + s.id + '.json'), SP.unb64(s.dek), s.id); }
+  try {
+    const vault = await _fetchJSON('clients/' + s.id + '.json');
+    if (vault.status === 'inactive') { try { sessionStorage.removeItem(SESSION_KEY); } catch {} _showInactive(''); return; }
+    await _openVault(vault, SP.unb64(s.dek), s.id);
+  }
   catch { try { sessionStorage.removeItem(SESSION_KEY); } catch {} }
 })();
+
+// Account set to inactive by the advisor (e.g. pending payment)
+const SUPPORT_EMAIL = 'contacto@sentinels.com.mx';
+function _showInactive(email) {
+  const link = document.getElementById('cp-inactive-mail');
+  link.href = 'mailto:' + SUPPORT_EMAIL + '?subject=' + encodeURIComponent('Client portal access' + (email ? ' — ' + email : ''));
+  _set('cp-inactive-email', SUPPORT_EMAIL);
+  document.getElementById('cp-inactive-modal').removeAttribute('hidden');
+}
 
 function doSignOut() {
   try { sessionStorage.removeItem(SESSION_KEY); } catch {}
@@ -1250,6 +1268,23 @@ function filterDocs(btn, type) {
       <div class="cp-access-done-title">Request received.</div>
       <p class="cp-access-done-sub">An advisor will reply within one business day with your benchmark scope.</p>
       <button class="cp-btn-dark" onclick="closeAccessModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     INACTIVE ACCOUNT
+═══════════════════════════════════════════════════ -->
+<div class="cp-access-modal" id="cp-inactive-modal" hidden>
+  <div class="cp-access-panel cp-access-done" style="padding:40px">
+    <img src="https://sentinels.com.mx/crest.png" alt="Sentinel" style="width:56px;height:auto;margin-bottom:16px" onerror="this.style.display='none'">
+    <div class="cp-access-eyebrow" style="justify-content:center;width:100%"><span></span>Account inactive</div>
+    <div class="cp-access-done-title">Your portal access is paused.</div>
+    <p class="cp-access-done-sub">Your account is currently inactive. Please contact our support team to restore access — your data and documents are safe.</p>
+    <p class="cp-access-done-sub" style="margin-top:-16px"><b id="cp-inactive-email"></b></p>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="cp-btn-ghost" onclick="document.getElementById('cp-inactive-modal').setAttribute('hidden','')">Close</button>
+      <a class="cp-btn-dark" id="cp-inactive-mail" href="#" style="text-decoration:none">Contact support</a>
     </div>
   </div>
 </div>
