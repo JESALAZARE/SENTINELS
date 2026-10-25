@@ -28,7 +28,7 @@ const SitesPage = (() => {
     if (!sel || !list.some(s => s.id === sel)) sel = list[0].id;
     const s = list.find(x => x.id === sel), b = s.last;
     const bills = s.bills.slice().reverse();
-    const info = [s.city, s.tariff ? 'Tariff ' + s.tariff : '', s.rpu ? 'RPU ' + s.rpu : '', s.contracted_kw ? 'Contracted ' + fx(s.contracted_kw) + ' kW' : ''].filter(Boolean).join(' · ');
+    const info = [s.city, s.tariff ? 'Tariff ' + s.tariff : '', s.rpu ? 'RPU ' + s.rpu : '', s.contracted_kw ? 'Contracted ' + fx(s.contracted_kw) + ' kW' : '', s.iva_rate === 8 ? 'IVA 8% (border region)' : ''].filter(Boolean).join(' · ');
     const d = s.costKwh != null && s.costKwhPrev ? (s.costKwh / s.costKwhPrev - 1) * 100 : null;
     const saved = b ? Energy.savingsOf(b) : null;
     const q = Energy.isQualified();  // CFE equivalent / savings columns only for Qualified Supply
@@ -58,7 +58,7 @@ const SitesPage = (() => {
               <td>${est(x)}${money(Energy.subtotalOf(x))}</td><td>${est(x)}${money(Energy.ivaOf(x))}</td><td>${money(x.total_mxn)}</td><td>${fx(Energy.costKwhOf(x), 3)}</td>${q ? `<td>${money(x.ref_cfe_mxn)}</td><td class="${sv != null && sv > 0 ? 'cp-good' : ''}">${money(sv)}</td>` : ''}
               <td>${docIdx >= 0 ? `<button class="cp-read-btn" onclick="viewDoc(${docIdx})" title="Preview the bill (download it from Documents)">View PDF</button>` : ''}</td></tr>`;
           }).join('')}</tbody></table>
-          <div class="cp-card-sub" style="margin-top:10px">Cost per kWh = subtotal before IVA ÷ kWh.${bills.some(x => !Energy.ivaKnown(x)) ? ' ≈ IVA estimated at 16% until your advisor captures the bill breakdown.' : ''}</div></div>
+          <div class="cp-card-sub" style="margin-top:10px">Cost per kWh = subtotal before IVA ÷ kWh.${bills.some(x => !Energy.ivaKnown(x)) ? ` ≈ IVA estimated at ${s.iva_rate}% until your advisor captures the bill breakdown.` : ''}</div></div>
       </div>`;
 
     host.querySelectorAll('[data-site]').forEach(btn => btn.onclick = () => { sel = btn.dataset.site; render(); });

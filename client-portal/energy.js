@@ -17,13 +17,15 @@ const Energy = (() => {
     if (p.supply_type) return p.supply_type === 'qualified';
     return QUALIFIED_KEYS.some(k => p[k] != null && p[k] !== '');
   }
-  // Unit costs exclude IVA: use the captured subtotal, else total − IVA, else estimate it at 16%
-  const IVA_RATE = 0.16;
+  // Unit costs exclude IVA: use the captured subtotal, else total − IVA, else estimate it with
+  // the plant's IVA rate (16% general, 8% in the northern/southern border region)
+  const siteOf = b => sites().find(s => b.site ? s.id === b.site : (s.bills || []).includes(b));
+  const ivaRateOf = b => { const s = siteOf(b); return s && s.iva_rate != null ? s.iva_rate : 16; };
   const ivaKnown = b => b.subtotal_mxn != null || b.iva_mxn != null;
   function subtotalOf(b) {
     if (b.subtotal_mxn != null) return b.subtotal_mxn;
     if (b.total_mxn == null) return null;
-    return b.iva_mxn != null ? b.total_mxn - b.iva_mxn : b.total_mxn / (1 + IVA_RATE);
+    return b.iva_mxn != null ? b.total_mxn - b.iva_mxn : b.total_mxn / (1 + ivaRateOf(b) / 100);
   }
   const ivaOf = b => b.iva_mxn != null ? b.iva_mxn : (b.total_mxn != null && subtotalOf(b) != null ? b.total_mxn - subtotalOf(b) : null);
   const costKwhOf = b => b && kwh(b) && subtotalOf(b) != null ? subtotalOf(b) / kwh(b) : null;
@@ -73,7 +75,7 @@ const Energy = (() => {
       const bills = (s.bills || []).slice().sort((a, b) => a.month.localeCompare(b.month));
       const last = bills[bills.length - 1] || null, prev = bills[bills.length - 2] || null;
       return {
-        id: s.id, name: s.name, city: s.city, tariff: s.tariff, rpu: s.rpu, contracted_kw: s.contracted_kw, bills, last,
+        id: s.id, name: s.name, city: s.city, tariff: s.tariff, rpu: s.rpu, contracted_kw: s.contracted_kw, iva_rate: s.iva_rate != null ? s.iva_rate : 16, bills, last,
         costKwh: costKwhOf(last), costKwhPrev: costKwhOf(prev),
         demandPct: last && last.demand_kw && s.contracted_kw ? last.demand_kw / s.contracted_kw * 100 : null
       };
@@ -105,7 +107,7 @@ const Energy = (() => {
     const L = [];
     const n = (v, d = 0) => v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: d });
     for (const s of siteSummary()) {
-      L.push(`### Plant: ${s.name}${s.city ? ' (' + s.city + ')' : ''} — tariff ${s.tariff || '—'}, RPU ${s.rpu || '—'}, contracted demand ${n(s.contracted_kw)} kW`);
+      L.push(`### Plant: ${s.name}${s.city ? ' (' + s.city + ')' : ''} — tariff ${s.tariff || '—'}, RPU ${s.rpu || '—'}, contracted demand ${n(s.contracted_kw)} kW, IVA ${s.iva_rate}%${s.iva_rate === 8 ? ' (border region)' : ''}`);
       L.push('Month | kWh base | kWh intermediate | kWh peak | kWh total | Max demand kW | Power factor | Energy MXN | Demand MXN | Other MXN | Subtotal before IVA MXN | IVA MXN | Total paid MXN | CFE equivalent MXN | Real savings MXN | Cost MXN/kWh before IVA | Supplier');
       for (const b of s.bills) L.push([b.month, n(b.kwh_base), n(b.kwh_int), n(b.kwh_peak), n(kwh(b)), n(b.demand_kw), b.pf != null ? String(b.pf) : '—',
         n(b.energy_mxn), n(b.demand_mxn), n(b.other_mxn), (ivaKnown(b) ? '' : '~') + n(subtotalOf(b)), (ivaKnown(b) ? '' : '~') + n(ivaOf(b)), n(b.total_mxn), n(b.ref_cfe_mxn), n(savingsOf(b)),
@@ -118,7 +120,7 @@ const Energy = (() => {
       for (const r of m) L.push([r.month, n(r.kwh), (r.ivaEstimated ? '~' : '') + n(r.subtotal), n(r.total), r.refKnown ? n(r.ref) : '—', n(r.savings), r.savingsPct != null ? r.savingsPct.toFixed(1) + '%' : '—', r.costKwh != null ? r.costKwh.toFixed(3) : '—'].join(' | '));
       L.push('');
     }
-    if (allBills().some(b => !ivaKnown(b))) L.push('Note: costs per kWh exclude IVA. Values marked ~ are estimated at 16% IVA because the bill breakdown was not captured.', '');
+    if (allBills().some(b => !ivaKnown(b))) L.push('Note: costs per kWh exclude IVA. Values marked ~ are estimated with the plant\'s IVA rate because the bill breakdown was not captured.', '');
     const y = savingsYTD();
     if (y.months) L.push(`Real savings year to date ${y.year} (computed): ${n(y.saved)} MXN (${y.pct != null ? y.pct.toFixed(1) : '—'}% below CFE) over ${y.months} month(s).`, '');
     if (contracts().length) {
@@ -132,5 +134,5 @@ const Energy = (() => {
     return L.join('\n');
   }
 
-  return { sites, contracts, kwh, label, isQualified, subtotalOf, ivaOf, ivaKnown, costKwhOf, savingsOf, allBills, hasBills, hasRef, hasPeriods, monthly, latestMonth, ytd, savingsYTD, siteSummary, alerts, toText };
+  return { sites, contracts, kwh, label, isQualified, subtotalOf, ivaOf, ivaKnown, ivaRateOf, costKwhOf, savingsOf, allBills, hasBills, hasRef, hasPeriods, monthly, latestMonth, ytd, savingsYTD, siteSummary, alerts, toText };
 })();

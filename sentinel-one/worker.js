@@ -167,9 +167,10 @@ const BILL_FIELDS = {
   energy_mxn: num('Energy charge (MXN)'),
   demand_mxn: num('Demand / capacity / distribution charges (MXN)'),
   other_mxn: num('Other charges and adjustments before IVA (MXN)'),
-  subtotal_mxn: num('Subtotal before IVA as printed on the bill (MXN)'),
+  subtotal_mxn: num('Subtotal before IVA as printed on the bill, e.g. the "Subtotal" line of "Desglose del importe a pagar" (MXN)'),
   iva_mxn: num('IVA (VAT) amount (MXN)'),
-  total_mxn: num('Total amount to pay for the period (MXN)')
+  iva_pct: num('IVA rate printed next to the IVA line, as a percentage: 16 in general or 8 in the border region'),
+  total_mxn: num('Amount billed for this period ("Facturación del Periodo"), excluding any previous balance or payments (MXN)')
 };
 const RECORD_BILL_TOOL = {
   name: 'record_bill',

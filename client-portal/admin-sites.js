@@ -1,11 +1,11 @@
 /* ── Panel admin · plantas, recibos y contratos ──────────────────────
    Todo vive dentro del vault cifrado del cliente (CUR.data):
-     sites:     [{ id, name, city, rpu, tariff, contracted_kw,
+     sites:     [{ id, name, city, rpu, tariff, contracted_kw, iva_rate,
                    bills: [{ month: 'YYYY-MM', supplier, kwh_base, kwh_int, kwh_peak,
                              kwh_total, demand_kw, pf, energy_mxn, demand_mxn, other_mxn,
                              subtotal_mxn, iva_mxn, total_mxn, ref_cfe_mxn, doc }] }]
      El costo por kWh del portal usa el subtotal sin IVA (o total − IVA; si
-     no hay desglose, lo estima con IVA del 16%).
+     no hay desglose, lo estima con el IVA de la planta: iva_rate 16 u 8 en frontera).
      contracts: [{ id, type, name, counterparty, technology, start, end, volume_gwh,
                    price_mxn_kwh, escalation, fixed_pct, sites: [siteId], notes }]
    El PDF de cada recibo se guarda como documento tipo "bill" (cifrado con la
@@ -34,6 +34,15 @@ const Sites = (() => {
   const contracts = () => (CUR.data.contracts = CUR.data.contracts || []);
   const site = () => sites().find(s => s.id === sel);
   const uid = () => SP.randomId().slice(0, 12);
+  // IVA 16% general, 8% for plants in the border region (estímulo fiscal)
+  const ivaRate = s => s.iva_rate != null ? s.iva_rate : 16;
+  // The rate printed on a bill (or implied by its subtotal and IVA) sets the plant's rate
+  function learnIvaRate(s, b) {
+    let pct = b.iva_pct;
+    if (pct == null && b.subtotal_mxn > 0 && b.iva_mxn != null) pct = b.iva_mxn / b.subtotal_mxn * 100;
+    if (pct != null && Math.abs(pct - 8) < 1) s.iva_rate = 8;
+    else if (pct != null && Math.abs(pct - 16) < 1) s.iva_rate = 16;
+  }
   const kwhOf = b => b.kwh_total || ((b.kwh_base || 0) + (b.kwh_int || 0) + (b.kwh_peak || 0)) || 0;
   const fmtN = (v, d = 0) => v == null || v === '' ? '—' : Number(v).toLocaleString('es-MX', { maximumFractionDigits: d });
   const monthLabel = m => { const [y, mo] = String(m).split('-'); return MONTHS[+mo - 1] + ' ' + String(y).slice(2); };
@@ -69,7 +78,7 @@ const Sites = (() => {
 
   function siteDetail(s) {
     const bills = (s.bills || []).slice().sort((a, b) => b.month.localeCompare(a.month));
-    const info = [s.city, s.tariff, s.rpu ? 'RPU ' + s.rpu : '', s.contracted_kw ? 'Demanda contratada ' + fmtN(s.contracted_kw) + ' kW' : ''].filter(Boolean).join(' · ');
+    const info = [s.city, s.tariff, s.rpu ? 'RPU ' + s.rpu : '', s.contracted_kw ? 'Demanda contratada ' + fmtN(s.contracted_kw) + ' kW' : '', 'IVA ' + ivaRate(s) + '%' + (ivaRate(s) === 8 ? ' (frontera)' : '')].filter(Boolean).join(' · ');
     return `
       <div class="row" style="justify-content:space-between;margin-bottom:10px">
         <div class="small muted">${esc(info) || 'Sin datos de la planta.'}</div>
@@ -91,7 +100,7 @@ const Sites = (() => {
           <td style="text-align:right;white-space:nowrap">${b.doc ? `<button class="btn btn-sm" onclick="Sites.viewPdf('${b.month}')">PDF</button> ` : ''}${b.doc && b.subtotal_mxn == null && b.iva_mxn == null ? `<button class="btn btn-sm" title="Lee otra vez el PDF guardado para obtener subtotal e IVA" onclick="Sites.rereadBill('${b.month}', this)">Releer con IA</button> ` : ''}<button class="btn btn-sm" onclick="Sites.editBill('${b.month}')">Editar</button> <button class="btn btn-sm btn-danger" onclick="Sites.deleteBill('${b.month}', this)">Quitar</button></td>
         </tr>`).join('') : '<tr><td colspan="12" class="muted">Sin recibos todavía.</td></tr>'}
       </tbody></table>
-      ${bills.some(b => b.subtotal_mxn == null && b.iva_mxn == null) ? '<p class="small muted" style="margin:6px 0 0">Los recibos sin subtotal o IVA usan un IVA estimado del 16% para el costo por kWh. Captúralos o usa “Releer con IA”.</p>' : ''}`;
+      ${bills.some(b => b.subtotal_mxn == null && b.iva_mxn == null) ? `<p class="small muted" style="margin:6px 0 0">Los recibos sin subtotal o IVA usan un IVA estimado del ${ivaRate(s)}% para el costo por kWh. Captúralos o usa “Releer con IA”.</p>` : ''}`;
   }
 
   /* ── Sites ───────────────────────────────────────── */
@@ -104,6 +113,7 @@ const Sites = (() => {
         <div><label>RPU / número de servicio</label><input id="sx-rpu" value="${esc(s.rpu || '')}"></div>
         <div><label>Tarifa</label><select id="sx-tariff"><option value=""></option>${TARIFFS.map(t => `<option ${t === s.tariff ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
         <div><label>Demanda contratada (kW)</label><input id="sx-kw" type="number" step="any" value="${esc(s.contracted_kw ?? '')}"></div>
+        <div><label>IVA del recibo</label><select id="sx-iva"><option value="16">16% · general</option><option value="8" ${s.iva_rate === 8 ? 'selected' : ''}>8% · región fronteriza</option></select></div>
       </div>
       <div id="sx-msg"></div>
       <div class="row" style="justify-content:flex-end"><button class="btn" onclick="Sites.closeModal()">Cancelar</button><button class="btn btn-dark" onclick="Sites.saveSite('${id || ''}', this)">Guardar</button></div>`);
@@ -112,7 +122,7 @@ const Sites = (() => {
     const name = $('sx-name').value.trim();
     if (!name) return msg('sx-msg', 'Escribe el nombre de la planta.');
     const kw = $('sx-kw').value.trim();
-    const data = { name, city: $('sx-city').value.trim(), rpu: $('sx-rpu').value.trim(), tariff: $('sx-tariff').value, contracted_kw: kw === '' ? null : Number(kw) };
+    const data = { name, city: $('sx-city').value.trim(), rpu: $('sx-rpu').value.trim(), tariff: $('sx-tariff').value, contracted_kw: kw === '' ? null : Number(kw), iva_rate: Number($('sx-iva').value) };
     await busy(btn, 'Guardando…', async () => {
       if (id) Object.assign(sites().find(x => x.id === id), data);
       else { const s = { id: uid(), ...data, bills: [] }; sites().push(s); sel = s.id; }
@@ -174,6 +184,7 @@ const Sites = (() => {
     let pdf = pendingPdf;
     if (!pdf && fileInput && fileInput.files[0]) { const f = fileInput.files[0]; pdf = { bytes: new Uint8Array(await f.arrayBuffer()), name: f.name, size: f.size }; }
     if (pdf && pdf.size > MAX_UPLOAD) return msg('bx-msg', 'El PDF es demasiado grande (máximo 95 MB).');
+    learnIvaRate(s, bill);
     await busy(btn, 'Guardando…', async () => {
       bill.doc = existing ? existing.doc : null;
       if (pdf) {
@@ -248,6 +259,7 @@ const Sites = (() => {
     if (x.tariff && !s.tariff) s.tariff = TARIFFS.includes(x.tariff) ? x.tariff : 'Otra';
     if (x.contracted_kw && !s.contracted_kw) s.contracted_kw = x.contracted_kw;
     if (x.pf != null && x.pf > 1) x.pf = +(x.pf / 100).toFixed(4);
+    learnIvaRate(s, x);
     return x;
   }
   // Read a saved bill PDF again (e.g. to get subtotal and IVA) and open it for review
@@ -377,6 +389,7 @@ const Sites = (() => {
       for (const { bill } of ok) {
         const prev = s.bills.find(b => b.month === bill.month);
         bill.doc = prev ? prev.doc : null;
+        learnIvaRate(s, bill);
         s.bills = s.bills.filter(b => b.month !== bill.month).concat(bill);
       }
       await save('recibos importados');
