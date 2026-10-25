@@ -1,8 +1,8 @@
 /* ── Sentinels Client Portal · My Sites page ─────────────────────────
    One view per plant: its latest bill in figures, consumption by period
-   (interactive chart) and every monthly bill with its PDF.
+   (interactive chart) and every monthly bill with a preview of its PDF.
    Uses Energy (energy.js), Board.charts (board.js) and globals from
-   index.html: ME, _esc, _dlDoc. */
+   index.html: ME, _esc, viewDoc. */
 const SitesPage = (() => {
   let sel = null;
   const fx = (v, d = 0) => v == null ? '—' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -30,6 +30,7 @@ const SitesPage = (() => {
     const info = [s.city, s.tariff ? 'Tariff ' + s.tariff : '', s.rpu ? 'RPU ' + s.rpu : '', s.contracted_kw ? 'Contracted ' + fx(s.contracted_kw) + ' kW' : ''].filter(Boolean).join(' · ');
     const d = s.costKwh != null && s.costKwhPrev ? (s.costKwh / s.costKwhPrev - 1) * 100 : null;
     const saved = b ? Energy.savingsOf(b) : null;
+    const q = Energy.isQualified();  // CFE equivalent / savings columns only for Qualified Supply
 
     host.innerHTML = `
       ${list.length > 1 ? `<div class="cp-doc-filters">${list.map(x => `<button class="cp-doc-filter ${x.id === sel ? 'active' : ''}" data-site="${x.id}">${_esc(x.name)}</button>`).join('')}</div>` : ''}
@@ -47,14 +48,14 @@ const SitesPage = (() => {
       <div class="cp-card" style="padding:0">
         <div class="cp-card-head" style="padding:20px 20px 0"><div><div class="cp-card-title">Monthly bills</div><div class="cp-card-sub">${bills.length} bill${bills.length === 1 ? '' : 's'}</div></div></div>
         <div class="s1-table" style="margin:0 0 4px;padding:0 20px 16px"><table class="cp-mini-table">
-          <thead><tr><th>Month</th><th>kWh</th><th>Base / Int. / Peak</th><th>Demand kW</th><th>PF</th><th>Total MXN</th><th>CFE equiv.</th><th>Savings</th><th></th></tr></thead>
+          <thead><tr><th>Month</th><th>kWh</th><th>Base / Int. / Peak</th><th>Demand kW</th><th>PF</th><th>Total MXN</th>${q ? '<th>CFE equiv.</th><th>Savings</th>' : ''}<th></th></tr></thead>
           <tbody>${bills.map(x => {
             const sv = Energy.savingsOf(x), docIdx = x.doc ? (ME.docs || []).findIndex(dd => dd.file === x.doc) : -1;
             return `<tr><td>${_esc(Energy.label(x.month))}</td><td>${fx(Energy.kwh(x))}</td>
               <td>${x.kwh_base != null || x.kwh_int != null || x.kwh_peak != null ? `${fx(x.kwh_base)} / ${fx(x.kwh_int)} / ${fx(x.kwh_peak)}` : '—'}</td>
               <td>${fx(x.demand_kw)}</td><td class="${x.pf != null && x.pf < 0.9 ? 'cp-bad' : ''}">${x.pf != null ? fx(x.pf, 2) : '—'}</td>
-              <td>${money(x.total_mxn)}</td><td>${money(x.ref_cfe_mxn)}</td><td class="${sv != null && sv > 0 ? 'cp-good' : ''}">${money(sv)}</td>
-              <td>${docIdx >= 0 ? `<button class="cp-read-btn" onclick="_dlDoc(${docIdx})">PDF</button>` : ''}</td></tr>`;
+              <td>${money(x.total_mxn)}</td>${q ? `<td>${money(x.ref_cfe_mxn)}</td><td class="${sv != null && sv > 0 ? 'cp-good' : ''}">${money(sv)}</td>` : ''}
+              <td>${docIdx >= 0 ? `<button class="cp-read-btn" onclick="viewDoc(${docIdx})" title="Preview the bill (download it from Documents)">View PDF</button>` : ''}</td></tr>`;
           }).join('')}</tbody></table></div>
       </div>`;
 

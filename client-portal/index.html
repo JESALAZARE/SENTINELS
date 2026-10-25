@@ -1190,7 +1190,7 @@ function _renderIntel(items) {
   }).join('') : '<div style="padding:24px">' + empty + '</div>';
 }
 
-/* ── View-only viewer (intelligence attachments) ──
+/* ── View-only viewer (intelligence attachments, bill previews) ──
    Files are drawn onto canvases: no file URL, no download button,
    context menu / drag / print / Ctrl+S disabled while open. */
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -1211,25 +1211,38 @@ async function viewIntelFile(n, k) {
   const item = INTEL[n], files = item.files || [];
   const f = files[k];
   if (!f) return;
+  const tabs = files.length > 1
+    ? files.map((x, j) => `<button class="cp-viewer-tab ${j === k ? 'active' : ''}" onclick="viewIntelFile(${n},${j})">${_esc(x.name.replace(/\.[^.]+$/, ''))}</button>`).join('') : '';
+  _openViewer(item.title, tabs, 'intel-files/' + f.file, PORTAL_KEY, f.mime);
+}
+
+// Client documents (e.g. bill PDFs on My Sites): preview only; downloads stay in Documents
+function viewDoc(i) {
+  const d = ME && ME.docs[i];
+  if (!d) return;
+  if (!/^image\/|^application\/pdf$/.test(d.mime || 'application/pdf') && !/\.pdf$/i.test(d.filename || '')) return _dlDoc(i);
+  _openViewer(d.name, '', 'docs/' + d.file, DEK, d.mime || 'application/pdf');
+}
+
+async function _openViewer(title, tabs, path, key, mime) {
   const gen = ++_viewGen;
   const v = document.getElementById('cp-viewer'), body = document.getElementById('cp-viewer-body');
-  _set('cp-viewer-title', item.title);
-  document.getElementById('cp-viewer-files').innerHTML = files.length > 1
-    ? files.map((x, j) => `<button class="cp-viewer-tab ${j === k ? 'active' : ''}" onclick="viewIntelFile(${n},${j})">${_esc(x.name.replace(/\.[^.]+$/, ''))}</button>`).join('') : '';
+  _set('cp-viewer-title', title);
+  document.getElementById('cp-viewer-files').innerHTML = tabs;
   body.innerHTML = '<div class="cp-viewer-msg">Loading…</div>';
   v.removeAttribute('hidden');
   document.body.classList.add('cp-viewing');
   try {
-    const res = await fetch(DATA + 'intel-files/' + f.file + '?t=' + Date.now(), { cache: 'no-store' });
+    const res = await fetch(DATA + path + '?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) throw new Error('http');
-    const bytes = await SP.openFile(PORTAL_KEY, await res.arrayBuffer());
+    const bytes = await SP.openFile(key, await res.arrayBuffer());
     // Render width; fall back if layout isn't measurable yet (e.g. background tab)
     let width = Math.min((body.clientWidth || 0) - 32, 1000);
     if (!(width >= 240)) width = Math.min(window.innerWidth - 32, 1000) >= 240 ? Math.min(window.innerWidth - 32, 1000) : 1000;
     const dpr = window.devicePixelRatio || 1;
     const pages = [];
-    if (/^image\//.test(f.mime)) {
-      const bmp = await createImageBitmap(new Blob([bytes], { type: f.mime }));
+    if (/^image\//.test(mime)) {
+      const bmp = await createImageBitmap(new Blob([bytes], { type: mime }));
       const c = document.createElement('canvas');
       c.width = bmp.width; c.height = bmp.height;
       c.getContext('2d').drawImage(bmp, 0, 0); bmp.close();
