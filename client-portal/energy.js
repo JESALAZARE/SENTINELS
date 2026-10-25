@@ -17,6 +17,16 @@ const Energy = (() => {
     if (p.supply_type) return p.supply_type === 'qualified';
     return QUALIFIED_KEYS.some(k => p[k] != null && p[k] !== '');
   }
+  // Unit costs exclude IVA: use the captured subtotal, else total − IVA, else estimate it at 16%
+  const IVA_RATE = 0.16;
+  const ivaKnown = b => b.subtotal_mxn != null || b.iva_mxn != null;
+  function subtotalOf(b) {
+    if (b.subtotal_mxn != null) return b.subtotal_mxn;
+    if (b.total_mxn == null) return null;
+    return b.iva_mxn != null ? b.total_mxn - b.iva_mxn : b.total_mxn / (1 + IVA_RATE);
+  }
+  const ivaOf = b => b.iva_mxn != null ? b.iva_mxn : (b.total_mxn != null && subtotalOf(b) != null ? b.total_mxn - subtotalOf(b) : null);
+  const costKwhOf = b => b && kwh(b) && subtotalOf(b) != null ? subtotalOf(b) / kwh(b) : null;
   // Savings versus CFE only make sense when the client is not supplied by CFE
   const savingsOf = b => (isQualified() && b.ref_cfe_mxn != null && b.total_mxn != null) ? b.ref_cfe_mxn - b.total_mxn : null;
 
@@ -29,13 +39,14 @@ const Energy = (() => {
   function monthly() {
     const by = {};
     for (const b of allBills()) {
-      const r = by[b.month] = by[b.month] || { month: b.month, label: label(b.month), kwh: 0, base: 0, int: 0, peak: 0, total: 0, ref: 0, refKnown: true, sites: 0 };
+      const r = by[b.month] = by[b.month] || { month: b.month, label: label(b.month), kwh: 0, base: 0, int: 0, peak: 0, total: 0, subtotal: 0, ivaEstimated: false, ref: 0, refKnown: true, sites: 0 };
       r.kwh += kwh(b); r.base += b.kwh_base || 0; r.int += b.kwh_int || 0; r.peak += b.kwh_peak || 0;
-      r.total += b.total_mxn || 0; r.sites++;
+      r.total += b.total_mxn || 0; r.subtotal += subtotalOf(b) || 0; r.sites++;
+      if (!ivaKnown(b)) r.ivaEstimated = true;
       if (!isQualified() || b.ref_cfe_mxn == null) r.refKnown = false; else r.ref += b.ref_cfe_mxn;
     }
     return Object.values(by).sort((a, b) => a.month.localeCompare(b.month)).map(r => ({
-      ...r, costKwh: r.kwh ? r.total / r.kwh : null, savings: r.refKnown ? r.ref - r.total : null,
+      ...r, costKwh: r.kwh ? r.subtotal / r.kwh : null, savings: r.refKnown ? r.ref - r.total : null,
       savingsPct: r.refKnown && r.ref ? (r.ref - r.total) / r.ref * 100 : null
     }));
   }
@@ -61,10 +72,9 @@ const Energy = (() => {
     return sites().map(s => {
       const bills = (s.bills || []).slice().sort((a, b) => a.month.localeCompare(b.month));
       const last = bills[bills.length - 1] || null, prev = bills[bills.length - 2] || null;
-      const cost = b => b && kwh(b) ? b.total_mxn / kwh(b) : null;
       return {
         id: s.id, name: s.name, city: s.city, tariff: s.tariff, rpu: s.rpu, contracted_kw: s.contracted_kw, bills, last,
-        costKwh: cost(last), costKwhPrev: cost(prev),
+        costKwh: costKwhOf(last), costKwhPrev: costKwhOf(prev),
         demandPct: last && last.demand_kw && s.contracted_kw ? last.demand_kw / s.contracted_kw * 100 : null
       };
     });
@@ -79,7 +89,7 @@ const Energy = (() => {
       if (!b) continue;
       if (b.pf != null && b.pf < 0.9) out.push({ level: 'warn', site: s.name, text: `${s.name}: power factor ${b.pf.toFixed(2)} in ${label(b.month)} is below 0.90 (CFE penalty threshold).` });
       if (s.demandPct != null && s.demandPct >= 95) out.push({ level: s.demandPct > 100 ? 'warn' : 'info', site: s.name, text: `${s.name}: peak demand reached ${s.demandPct.toFixed(0)}% of the contracted ${Math.round(s.contracted_kw).toLocaleString('en-US')} kW in ${label(b.month)}.` });
-      if (s.costKwh != null && s.costKwhPrev && s.costKwh > s.costKwhPrev * 1.1) out.push({ level: 'info', site: s.name, text: `${s.name}: cost per kWh rose ${((s.costKwh / s.costKwhPrev - 1) * 100).toFixed(0)}% versus the previous bill (${s.costKwh.toFixed(2)} MXN/kWh).` });
+      if (s.costKwh != null && s.costKwhPrev && s.costKwh > s.costKwhPrev * 1.1) out.push({ level: 'info', site: s.name, text: `${s.name}: cost per kWh rose ${((s.costKwh / s.costKwhPrev - 1) * 100).toFixed(0)}% versus the previous bill (${s.costKwh.toFixed(2)} MXN/kWh before IVA).` });
       if (latest && b.month < latest.month) out.push({ level: 'info', site: s.name, text: `${s.name}: the ${label(latest.month)} bill has not been loaded yet.` });
     }
     for (const c of contracts()) {
@@ -96,17 +106,19 @@ const Energy = (() => {
     const n = (v, d = 0) => v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: d });
     for (const s of siteSummary()) {
       L.push(`### Plant: ${s.name}${s.city ? ' (' + s.city + ')' : ''} — tariff ${s.tariff || '—'}, RPU ${s.rpu || '—'}, contracted demand ${n(s.contracted_kw)} kW`);
-      L.push('Month | kWh base | kWh intermediate | kWh peak | kWh total | Max demand kW | Power factor | Energy MXN | Demand MXN | Other MXN | Total paid MXN | CFE equivalent MXN | Real savings MXN | Cost MXN/kWh | Supplier');
+      L.push('Month | kWh base | kWh intermediate | kWh peak | kWh total | Max demand kW | Power factor | Energy MXN | Demand MXN | Other MXN | Subtotal before IVA MXN | IVA MXN | Total paid MXN | CFE equivalent MXN | Real savings MXN | Cost MXN/kWh before IVA | Supplier');
       for (const b of s.bills) L.push([b.month, n(b.kwh_base), n(b.kwh_int), n(b.kwh_peak), n(kwh(b)), n(b.demand_kw), b.pf != null ? String(b.pf) : '—',
-        n(b.energy_mxn), n(b.demand_mxn), n(b.other_mxn), n(b.total_mxn), n(b.ref_cfe_mxn), n(savingsOf(b)), kwh(b) ? (b.total_mxn / kwh(b)).toFixed(3) : '—', b.supplier || '—'].join(' | '));
+        n(b.energy_mxn), n(b.demand_mxn), n(b.other_mxn), (ivaKnown(b) ? '' : '~') + n(subtotalOf(b)), (ivaKnown(b) ? '' : '~') + n(ivaOf(b)), n(b.total_mxn), n(b.ref_cfe_mxn), n(savingsOf(b)),
+        costKwhOf(b) != null ? costKwhOf(b).toFixed(3) : '—', b.supplier || '—'].join(' | '));
       L.push('');
     }
     const m = monthly();
     if (m.length > 1 || sites().length > 1) {
-      L.push('### All plants combined (computed by the portal)', 'Month | kWh total | Total paid MXN | CFE equivalent MXN | Real savings MXN | Savings % | Cost MXN/kWh');
-      for (const r of m) L.push([r.month, n(r.kwh), n(r.total), r.refKnown ? n(r.ref) : '—', n(r.savings), r.savingsPct != null ? r.savingsPct.toFixed(1) + '%' : '—', r.costKwh != null ? r.costKwh.toFixed(3) : '—'].join(' | '));
+      L.push('### All plants combined (computed by the portal)', 'Month | kWh total | Subtotal before IVA MXN | Total paid MXN | CFE equivalent MXN | Real savings MXN | Savings % | Cost MXN/kWh before IVA');
+      for (const r of m) L.push([r.month, n(r.kwh), (r.ivaEstimated ? '~' : '') + n(r.subtotal), n(r.total), r.refKnown ? n(r.ref) : '—', n(r.savings), r.savingsPct != null ? r.savingsPct.toFixed(1) + '%' : '—', r.costKwh != null ? r.costKwh.toFixed(3) : '—'].join(' | '));
       L.push('');
     }
+    if (allBills().some(b => !ivaKnown(b))) L.push('Note: costs per kWh exclude IVA. Values marked ~ are estimated at 16% IVA because the bill breakdown was not captured.', '');
     const y = savingsYTD();
     if (y.months) L.push(`Real savings year to date ${y.year} (computed): ${n(y.saved)} MXN (${y.pct != null ? y.pct.toFixed(1) : '—'}% below CFE) over ${y.months} month(s).`, '');
     if (contracts().length) {
@@ -120,5 +132,5 @@ const Energy = (() => {
     return L.join('\n');
   }
 
-  return { sites, contracts, kwh, label, isQualified, savingsOf, allBills, hasBills, hasRef, hasPeriods, monthly, latestMonth, ytd, savingsYTD, siteSummary, alerts, toText };
+  return { sites, contracts, kwh, label, isQualified, subtotalOf, ivaOf, ivaKnown, costKwhOf, savingsOf, allBills, hasBills, hasRef, hasPeriods, monthly, latestMonth, ytd, savingsYTD, siteSummary, alerts, toText };
 })();

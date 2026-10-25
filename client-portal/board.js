@@ -175,12 +175,12 @@ const Board = (() => {
     kpi_real_savings_ytd: { cat: 'Plants & bills', title: 'Real savings YTD', icon: 'kpi', sizes: ['s', 'm'], desc: 'What your actual bills saved versus CFE this year.',
       ready: () => Energy.savingsYTD().months > 0, need: 'bills with their CFE equivalent',
       render: b => { const y = Energy.savingsYTD(); kpi(b, { value: money(y.saved), unit: 'MXN', note: `${y.pct != null ? fx(y.pct, 1) + '% below CFE · ' : ''}${y.months} month${y.months === 1 ? '' : 's'}`, tone: 'pos' }); } },
-    kpi_cost_kwh: { cat: 'Plants & bills', title: 'Average cost per kWh', icon: 'kpi', sizes: ['s', 'm'], desc: 'Total paid ÷ kWh in your latest month, all plants.',
+    kpi_cost_kwh: { cat: 'Plants & bills', title: 'Average cost per kWh', icon: 'kpi', sizes: ['s', 'm'], desc: 'Subtotal before IVA ÷ kWh in your latest month, all plants.',
       ready: () => !!(Energy.latestMonth() && Energy.latestMonth().costKwh != null), need: 'monthly bills',
       render: b => {
         const m = Energy.monthly(), last = m[m.length - 1], prev = m[m.length - 2];
         const d = prev && prev.costKwh ? (last.costKwh / prev.costKwh - 1) * 100 : null;
-        kpi(b, { value: fx(last.costKwh), unit: 'MXN/kWh', note: `${last.label}${d != null ? ` · ${d >= 0 ? '↑' : '↓'} ${fx(Math.abs(d), 1)}% vs ${prev.label}` : ''}`, tone: d != null && d > 0 ? 'notice' : 'neutral' });
+        kpi(b, { value: fx(last.costKwh), unit: 'MXN/kWh', note: `${last.label} · before IVA${last.ivaEstimated ? ' (est.)' : ''}${d != null ? ` · ${d >= 0 ? '↑' : '↓'} ${fx(Math.abs(d), 1)}% vs ${prev.label}` : ''}`, tone: d != null && d > 0 ? 'notice' : 'neutral' });
       } },
     kpi_peak_demand: { cat: 'Plants & bills', title: 'Peak demand vs contracted', icon: 'kpi', sizes: ['s', 'm'], desc: 'Highest demand against contracted kW, latest bill.',
       ready: () => Energy.siteSummary().some(s => s.demandPct != null), need: 'demand and contracted kW',
@@ -214,14 +214,14 @@ const Board = (() => {
     chart_real_savings: { cat: 'Plants & bills', title: 'Real savings by month', icon: 'bar', sizes: ['m', 'w', 'l'], desc: 'CFE equivalent minus what you paid, from your bills.',
       ready: () => Energy.monthly().filter(r => r.savings != null).length >= 1, need: 'bills with their CFE equivalent',
       render: b => { const m = Energy.monthly().filter(r => r.savings != null); barChart(b, { labels: m.map(r => r.label), values: m.map(r => r.savings), color: C.green, fmt: money, axis: money, total: true }); } },
-    chart_cost_kwh: { cat: 'Plants & bills', title: 'Cost per kWh by month', icon: 'line', sizes: ['m', 'w', 'l'], desc: 'Total paid ÷ kWh, all plants combined.',
+    chart_cost_kwh: { cat: 'Plants & bills', title: 'Cost per kWh by month', icon: 'line', sizes: ['m', 'w', 'l'], desc: 'Subtotal before IVA ÷ kWh, all plants combined.',
       ready: () => Energy.monthly().filter(r => r.costKwh != null).length >= 2, need: 'two or more monthly bills',
-      render: b => { const m = Energy.monthly().filter(r => r.costKwh != null); lineChart(b, { labels: m.map(r => r.label), series: [{ name: 'Cost per kWh', color: C.ink, values: m.map(r => r.costKwh), area: true }], fmt: v => fx(v, 3) + ' MXN/kWh', axis: v => fx(v) }); } },
+      render: b => { const m = Energy.monthly().filter(r => r.costKwh != null); lineChart(b, { labels: m.map(r => r.label), series: [{ name: 'Cost per kWh (before IVA)', color: C.ink, values: m.map(r => r.costKwh), area: true }], fmt: v => fx(v, 3) + ' MXN/kWh', axis: v => fx(v) }); } },
     sites_table: { cat: 'Plants & bills', title: 'Your plants', icon: 'person', sizes: ['m', 'w', 'l'], desc: 'Latest bill of each plant side by side.',
       ready: () => Energy.sites().length > 0, need: 'plants',
       render: b => {
         const rows = Energy.siteSummary();
-        b.innerHTML = `<div class="s1-table" style="margin:0"><table class="cp-mini-table"><thead><tr><th>Plant</th><th>Month</th><th>kWh</th><th>MXN/kWh</th><th>PF</th><th>Demand</th></tr></thead><tbody>
+        b.innerHTML = `<div class="s1-table" style="margin:0"><table class="cp-mini-table"><thead><tr><th>Plant</th><th>Month</th><th>kWh</th><th>MXN/kWh (excl. IVA)</th><th>PF</th><th>Demand</th></tr></thead><tbody>
           ${rows.map(s => `<tr><td>${esc(s.name)}</td><td>${s.last ? esc(Energy.label(s.last.month)) : '—'}</td><td>${s.last ? fx(Energy.kwh(s.last) / 1e6, 2) + ' GWh' : '—'}</td>
             <td>${s.costKwh != null ? fx(s.costKwh) : '—'}</td><td class="${s.last && s.last.pf != null && s.last.pf < 0.9 ? 'cp-bad' : ''}">${s.last && s.last.pf != null ? fx(s.last.pf) : '—'}</td>
             <td>${s.demandPct != null ? fx(s.demandPct, 0) + '%' : '—'}</td></tr>`).join('')}</tbody></table></div>

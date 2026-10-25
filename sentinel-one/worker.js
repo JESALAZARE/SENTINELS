@@ -166,7 +166,9 @@ const BILL_FIELDS = {
   pf: num('Power factor as a decimal between 0 and 1 (e.g. 0.95)'),
   energy_mxn: num('Energy charge (MXN)'),
   demand_mxn: num('Demand / capacity / distribution charges (MXN)'),
-  other_mxn: num('Other charges, adjustments and taxes (MXN)'),
+  other_mxn: num('Other charges and adjustments before IVA (MXN)'),
+  subtotal_mxn: num('Subtotal before IVA as printed on the bill (MXN)'),
+  iva_mxn: num('IVA (VAT) amount (MXN)'),
   total_mxn: num('Total amount to pay for the period (MXN)')
 };
 const RECORD_BILL_TOOL = {

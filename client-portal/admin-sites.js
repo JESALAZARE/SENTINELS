@@ -3,7 +3,9 @@
      sites:     [{ id, name, city, rpu, tariff, contracted_kw,
                    bills: [{ month: 'YYYY-MM', supplier, kwh_base, kwh_int, kwh_peak,
                              kwh_total, demand_kw, pf, energy_mxn, demand_mxn, other_mxn,
-                             total_mxn, ref_cfe_mxn, doc }] }]
+                             subtotal_mxn, iva_mxn, total_mxn, ref_cfe_mxn, doc }] }]
+     El costo por kWh del portal usa el subtotal sin IVA (o total − IVA; si
+     no hay desglose, lo estima con IVA del 16%).
      contracts: [{ id, type, name, counterparty, technology, start, end, volume_gwh,
                    price_mxn_kwh, escalation, fixed_pct, sites: [siteId], notes }]
    El PDF de cada recibo se guarda como documento tipo "bill" (cifrado con la
@@ -21,7 +23,8 @@ const Sites = (() => {
     ['kwh_total', 'kWh total (si el recibo no separa periodos)', 'number'],
     ['demand_kw', 'Demanda máxima (kW)', 'number'], ['pf', 'Factor de potencia (0–1, ej. 0.95)', 'number'],
     ['energy_mxn', 'Cargo por energía (MXN)', 'number'], ['demand_mxn', 'Cargo por demanda / capacidad (MXN)', 'number'],
-    ['other_mxn', 'Otros cargos e impuestos (MXN)', 'number'], ['total_mxn', 'Total pagado (MXN) *', 'number'],
+    ['other_mxn', 'Otros cargos (MXN)', 'number'],
+    ['subtotal_mxn', 'Subtotal sin IVA (MXN)', 'number'], ['iva_mxn', 'IVA (MXN)', 'number'], ['total_mxn', 'Total pagado (MXN) *', 'number'],
     ['ref_cfe_mxn', 'Costo equivalente con CFE (MXN) — para el ahorro real', 'number']
   ];
 
@@ -78,15 +81,17 @@ const Sites = (() => {
         <button class="btn btn-sm" onclick="Sites.editBill(null)">+ Captura manual</button>
         <span class="small muted" id="bill-status"></span>
       </div>
-      <table><thead><tr><th>Mes</th><th>kWh base</th><th>kWh inter.</th><th>kWh punta</th><th>kWh total</th><th>Dem. kW</th><th>FP</th><th>Total MXN</th>${isQualifiedClient() ? "<th>Ref. CFE</th>" : ""}<th></th></tr></thead><tbody>
+      <table><thead><tr><th>Mes</th><th>kWh base</th><th>kWh inter.</th><th>kWh punta</th><th>kWh total</th><th>Dem. kW</th><th>FP</th><th>Subtotal</th><th>IVA</th><th>Total MXN</th>${isQualifiedClient() ? "<th>Ref. CFE</th>" : ""}<th></th></tr></thead><tbody>
       ${bills.length ? bills.map(b => `<tr>
           <td class="mono small">${monthLabel(b.month)}</td><td class="mono small">${fmtN(b.kwh_base)}</td><td class="mono small">${fmtN(b.kwh_int)}</td>
           <td class="mono small">${fmtN(b.kwh_peak)}</td><td class="mono small">${fmtN(kwhOf(b))}</td><td class="mono small">${fmtN(b.demand_kw)}</td>
           <td class="mono small" style="${b.pf && b.pf < 0.9 ? 'color:var(--neg);font-weight:700' : ''}">${b.pf ? Number(b.pf).toFixed(2) : '—'}</td>
+          <td class="mono small">${fmtN(b.subtotal_mxn)}</td><td class="mono small">${fmtN(b.iva_mxn)}</td>
           <td class="mono small">${fmtN(b.total_mxn)}</td>${isQualifiedClient() ? `<td class="mono small">${fmtN(b.ref_cfe_mxn)}</td>` : ""}
-          <td style="text-align:right;white-space:nowrap">${b.doc ? `<button class="btn btn-sm" onclick="Sites.viewPdf('${b.month}')">PDF</button> ` : ''}<button class="btn btn-sm" onclick="Sites.editBill('${b.month}')">Editar</button> <button class="btn btn-sm btn-danger" onclick="Sites.deleteBill('${b.month}', this)">Quitar</button></td>
-        </tr>`).join('') : '<tr><td colspan="10" class="muted">Sin recibos todavía.</td></tr>'}
-      </tbody></table>`;
+          <td style="text-align:right;white-space:nowrap">${b.doc ? `<button class="btn btn-sm" onclick="Sites.viewPdf('${b.month}')">PDF</button> ` : ''}${b.doc && b.subtotal_mxn == null && b.iva_mxn == null ? `<button class="btn btn-sm" title="Lee otra vez el PDF guardado para obtener subtotal e IVA" onclick="Sites.rereadBill('${b.month}', this)">Releer con IA</button> ` : ''}<button class="btn btn-sm" onclick="Sites.editBill('${b.month}')">Editar</button> <button class="btn btn-sm btn-danger" onclick="Sites.deleteBill('${b.month}', this)">Quitar</button></td>
+        </tr>`).join('') : '<tr><td colspan="12" class="muted">Sin recibos todavía.</td></tr>'}
+      </tbody></table>
+      ${bills.some(b => b.subtotal_mxn == null && b.iva_mxn == null) ? '<p class="small muted" style="margin:6px 0 0">Los recibos sin subtotal o IVA usan un IVA estimado del 16% para el costo por kWh. Captúralos o usa “Releer con IA”.</p>' : ''}`;
   }
 
   /* ── Sites ───────────────────────────────────────── */
@@ -222,24 +227,46 @@ const Sites = (() => {
     status.textContent = 'Leyendo el recibo con IA…';
     try {
       const bytes = new Uint8Array(await f.arrayBuffer());
-      const r = await fetch(AI.url + '/admin/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + AI.secret },
-        body: JSON.stringify({ pdf: SP.b64(bytes) })
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.message || 'No pude leer el recibo.');
-      const x = j.bill || {};
-      // Fill the plant's data the first time we see it
-      const s = site();
-      if (x.rpu && !s.rpu) s.rpu = String(x.rpu);
-      if (x.tariff && !s.tariff) s.tariff = TARIFFS.includes(x.tariff) ? x.tariff : 'Otra';
-      if (x.contracted_kw && !s.contracted_kw) s.contracted_kw = x.contracted_kw;
-      if (x.pf != null && x.pf > 1) x.pf = +(x.pf / 100).toFixed(4);
+      const x = await extract(bytes);
       pendingPdf = { bytes, name: f.name, size: f.size };
       status.textContent = '';
       editBill(null, { supplier: 'CFE', ...x });
     } catch (e) { status.textContent = e.message; }
+  }
+  async function extract(bytes) {
+    const r = await fetch(AI.url + '/admin/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + AI.secret },
+      body: JSON.stringify({ pdf: SP.b64(bytes) })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.message || 'No pude leer el recibo.');
+    const x = j.bill || {};
+    // Fill the plant's data the first time we see it
+    const s = site();
+    if (x.rpu && !s.rpu) s.rpu = String(x.rpu);
+    if (x.tariff && !s.tariff) s.tariff = TARIFFS.includes(x.tariff) ? x.tariff : 'Otra';
+    if (x.contracted_kw && !s.contracted_kw) s.contracted_kw = x.contracted_kw;
+    if (x.pf != null && x.pf > 1) x.pf = +(x.pf / 100).toFixed(4);
+    return x;
+  }
+  // Read a saved bill PDF again (e.g. to get subtotal and IVA) and open it for review
+  async function rereadBill(month, btn) {
+    const b = site().bills.find(x => x.month === month), status = $('bill-status');
+    if (!AI.url || !AI.secret) { status.textContent = 'Primero configura Sentinel One (pestaña Sentinel One).'; return; }
+    await busy(btn, 'Leyendo…', async () => {
+      try {
+        const enc = await readFile('data/docs/' + b.doc, true);
+        if (!enc) throw new Error('No encontré el PDF cifrado.');
+        const x = await extract(new Uint8Array(await SP.openFile(CUR.docKey, enc)));
+        if (x.subtotal_mxn == null && x.iva_mxn == null) throw new Error('La IA no encontró subtotal ni IVA. Si acabas de actualizar el código, vuelve a pegar el Worker en Cloudflare; si no, captúralos con “Editar”.');
+        status.textContent = '';
+        // Keep what was already captured; only fill the gaps with what the AI read
+        const merged = { ...b };
+        for (const [k, v] of Object.entries(x)) if (v != null && merged[k] == null) merged[k] = v;
+        editBill(month, merged);
+      } catch (e) { status.textContent = e.message; }
+    });
   }
 
   /* ── CSV / Excel import ──────────────────────────── */
@@ -249,10 +276,11 @@ const Sites = (() => {
     kwh_total: ['kwh_total', 'consumo_kwh', 'total_kwh', 'kwh'], demand_kw: ['demanda_kw', 'demanda_maxima_kw', 'demanda', 'demand_kw'],
     pf: ['fp', 'factor_potencia', 'factor_de_potencia', 'power_factor', 'pf'], energy_mxn: ['cargo_energia', 'energia_mxn', 'energy_mxn'],
     demand_mxn: ['cargo_demanda', 'demanda_mxn', 'capacidad_mxn', 'demand_mxn'], other_mxn: ['otros_cargos', 'otros_mxn', 'other_mxn'],
+    subtotal_mxn: ['subtotal', 'subtotal_mxn', 'subtotal_sin_iva', 'importe_sin_iva'], iva_mxn: ['iva', 'iva_mxn'],
     total_mxn: ['total_mxn', 'total_pagado', 'total', 'importe_total'], ref_cfe_mxn: ['ref_cfe_mxn', 'costo_cfe', 'referencia_cfe', 'ref_cfe']
   };
-  const TEMPLATE = 'mes,suministrador,kwh_base,kwh_intermedia,kwh_punta,kwh_total,demanda_kw,fp,cargo_energia,cargo_demanda,otros_cargos,total_mxn,ref_cfe_mxn\n' +
-    '2026-09,CFE,3100000,5420000,1210000,,14820,0.96,15200000,1900000,800000,17900000,20600000\n';
+  const TEMPLATE = 'mes,suministrador,kwh_base,kwh_intermedia,kwh_punta,kwh_total,demanda_kw,fp,cargo_energia,cargo_demanda,otros_cargos,subtotal,iva,total_mxn,ref_cfe_mxn\n' +
+    '2026-09,CFE,3100000,5420000,1210000,,14820,0.96,13100000,1640000,690000,15430000,2468800,17900000,20600000\n';
   const norm = h => h.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
   const MONTH_NAMES = { ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7, ago: 8, aug: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12, dec: 12 };
   function parseMonth(v) {
@@ -421,7 +449,7 @@ const Sites = (() => {
 
   return {
     render, closeModal, select: id => { sel = id; renderSites(); },
-    editSite, saveSite, deleteSite, editBill, cancelBill, saveBill, deleteBill, viewPdf, readPdf,
+    editSite, saveSite, deleteSite, editBill, cancelBill, saveBill, deleteBill, viewPdf, readPdf, rereadBill,
     openImport, downloadTemplate, loadCsv, previewCsv, importCsv, editContract, saveContract, deleteContract,
     _parseCsv: parseCsv
   };
