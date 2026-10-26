@@ -17,7 +17,6 @@ const PricesPage = (() => {
   const long = f => day(f).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const iso = d => d.toISOString().slice(0, 10);
   const addDays = (f, n) => iso(new Date(Date.parse(f + 'T00:00:00Z') + n * 864e5));
-  const todayMX = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
   const mean = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
 
   const S = { index: null, fx: null, node: null, from: null, to: null, cache: {}, proc: { max: 'MDA', min: 'MDA', table: 'MDA' }, usd: false, error: null };
@@ -28,10 +27,14 @@ const PricesPage = (() => {
     return r.json();
   }
 
-  // Banxico rate to use today: the "para pagos" value for today (or the latest before it)
-  function rate() {
-    const t = todayMX(), row = ((S.fx && S.fx.serie) || []).find(r => r.fecha <= t && r.para_pagos);
-    return row ? { value: row.para_pagos, date: row.fecha } : null;
+  // Banxico rate for payments on an operating day: its "para pagos" value (the FIX published
+  // in the DOF the previous banking day). A day Banxico does not list yet (tomorrow's MDA)
+  // takes the latest DOF publication before it. The series is sorted newest first.
+  const hasFx = () => !!(S.fx && (S.fx.serie || []).length);
+  function rateFor(f) {
+    const r = ((S.fx && S.fx.serie) || []).find(x => x.fecha <= f);
+    if (!r) return null;
+    return (r.fecha === f ? r.para_pagos : r.dof ?? r.para_pagos) || null;
   }
 
   async function show() {
@@ -99,7 +102,7 @@ const PricesPage = (() => {
         ${['MDA', 'MTR'].map(p => widget('pr-hourly-' + p, p + ' · Hourly average PML', 'cp-w-m')).join('')}
         ${widget('pr-max', 'Maximum price', 'cp-w-m cp-pr-ext', seg('max'))}
         ${widget('pr-min', 'Minimum price', 'cp-w-m cp-pr-ext', seg('min'))}
-        ${widget('pr-table', 'Hourly prices', 'cp-w-l', seg('table') + `<button class="cp-pr-switch" id="pr-usd" role="switch" aria-checked="${S.usd}" ${rate() ? '' : 'disabled title="Exchange rate not available"'}><span>MXN</span><i></i><span>USD</span></button>`)}
+        ${widget('pr-table', 'Hourly prices', 'cp-w-l', seg('table') + `<button class="cp-pr-switch" id="pr-usd" role="switch" aria-checked="${S.usd}" ${hasFx() ? '' : 'disabled title="Exchange rate not available"'}><span>MXN</span><i></i><span>USD</span></button>`)}
       </div>`;
 
     // Query controls
@@ -155,13 +158,15 @@ const PricesPage = (() => {
     function table() {
       const body = host.querySelector('#pr-table .cp-widget-body'), p = S.proc.table, rows = rowsOf(d, p).slice().reverse();
       if (!rows.length) { body.innerHTML = empty(p); return; }
-      const fxr = rate(), usd = S.usd && fxr, k = usd ? 1 / fxr.value : 1, unit = usd ? 'USD/MWh' : 'MXN/MWh';
+      // Each hour is converted at the rate for payments on its own operating day
+      const usd = S.usd && hasFx(), unit = usd ? 'USD/MWh' : 'MXN/MWh';
+      const conv = (r, f) => { if (r[f] == null) return null; if (!usd) return r[f]; const t = rateFor(r.fecha); return t ? r[f] / t : null; };
       body.innerHTML = `<div class="cp-pr-fx">${usd
-          ? `Converted at <b>${fx(fxr.value, 4)} MXN/USD</b>, the Banco de México FIX for payments on ${esc(long(fxr.date))} (published in the DOF the previous banking day). <a href="https://www.banxico.org.mx/tipcamb/tipCamMIAction.do?idioma=sp" target="_blank" rel="noopener noreferrer">Banxico</a>`
-          : `Prices in ${unit}. ${fxr ? 'Switch to USD to convert at today’s Banxico FIX for payments.' : ''}`}</div>
+          ? `Each hour is converted at the Banco de México FIX for payments on its operating day (published in the DOF the previous banking day), shown in the FX column. <a href="https://www.banxico.org.mx/tipcamb/tipCamMIAction.do?idioma=sp" target="_blank" rel="noopener noreferrer">Banxico</a>`
+          : `Prices in ${unit}. ${hasFx() ? 'Switch to USD to convert each day at its Banxico FIX for payments.' : ''}`}</div>
         <div class="cp-pr-scroll"><table class="cp-mini-table cp-pr-table"><thead><tr><th>Date</th><th>Hour</th>
-          ${['PML', 'Energy comp.', 'Congestion comp.', 'Losses comp.'].map(t => `<th>${t}<small>${unit}</small></th>`).join('')}</tr></thead>
-          <tbody>${rows.map(r => `<tr><td>${r.fecha}</td><td>${r.hora}</td>${['pml', 'pml_ene', 'pml_cng', 'pml_per'].map(f => `<td>${fx(r[f] == null ? null : r[f] * k)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+          ${['PML', 'Energy comp.', 'Congestion comp.', 'Losses comp.'].map(t => `<th>${t}<small>${unit}</small></th>`).join('')}${usd ? '<th>FX<small>MXN/USD</small></th>' : ''}</tr></thead>
+          <tbody>${rows.map(r => `<tr><td>${r.fecha}</td><td>${r.hora}</td>${['pml', 'pml_ene', 'pml_cng', 'pml_per'].map(f => `<td>${fx(conv(r, f))}</td>`).join('')}${usd ? `<td>${fx(rateFor(r.fecha), 4)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
         <div class="cp-pr-count">${rows.length} hours · ${p} · ${esc(S.node.nodo)}</div>`;
     }
   }
