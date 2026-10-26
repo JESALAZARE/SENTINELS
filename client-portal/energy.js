@@ -5,7 +5,9 @@
    client sees comes from one place.  Uses the global ME (index.html). */
 const Energy = (() => {
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const allSites = () => ((typeof ME !== 'undefined' && ME && ME.sites) || []);
+  // Plants, bills and contracts only exist for supply clients (traders and guests never see them)
+  const supply = () => typeof Profiles === 'undefined' || Profiles.isSupply();
+  const allSites = () => (supply() && typeof ME !== 'undefined' && ME && ME.sites) || [];
   // The Dashboard can narrow every calculation to some plants (withScope); My Sites and Sentinel One see all
   let scope = null;
   const sites = () => scope ? allSites().filter(s => scope.includes(s.id)) : allSites();
@@ -13,13 +15,14 @@ const Energy = (() => {
     const prev = scope; scope = ids && ids.length ? ids : null;
     try { return fn(); } finally { scope = prev; }
   }
-  const contracts = () => ((typeof ME !== 'undefined' && ME && ME.contracts) || []);
+  const contracts = () => (supply() && typeof ME !== 'undefined' && ME && ME.contracts) || [];
   const kwh = b => b.kwh_total || ((b.kwh_base || 0) + (b.kwh_int || 0) + (b.kwh_peak || 0)) || 0;
   const label = m => { const [y, mo] = String(m).split('-'); return MONTHS[+mo - 1] + ' ' + String(y).slice(2); };
   // Supply type: CFE Basic Service Supplier (default) or Qualified Supply. Older
   // profiles without supply_type count as Qualified when they hold manual contract data.
   const QUALIFIED_KEYS = ['rate', 'cfe_rate', 'savings_monthly', 'ytd_gwh', 'contract_id', 'contract_start', 'contract_end', 'counterparty', 'volume_gwh', 'base_price'];
   function isQualified() {
+    if (!supply()) return false;
     const p = (typeof ME !== 'undefined' && ME && ME.profile) || {};
     if (p.supply_type) return p.supply_type === 'qualified';
     return QUALIFIED_KEYS.some(k => p[k] != null && p[k] !== '');

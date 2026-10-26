@@ -80,6 +80,15 @@ td{padding:8px;border-bottom:1px solid var(--border-subtle);vertical-align:middl
 #publish{position:sticky;top:0;z-index:50;margin-bottom:16px}
 .hidden{display:none!important}
 .badge-off{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--neg);background:var(--neg-soft);border-radius:3px;padding:1px 6px;margin-left:4px;vertical-align:middle}
+.badge-type{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--graphite-500);background:var(--paper-50);border:1px solid var(--border-subtle);border-radius:3px;padding:0 6px;margin-left:4px;vertical-align:1px}
+/* Client type selector */
+.seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.seg-btn{display:flex;flex-direction:column;gap:2px;text-align:left;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-family:var(--sans);color:var(--ink-900)}
+.seg-btn b{font-size:14px}
+.seg-btn span{font-size:12px;color:var(--steel-400);line-height:1.35}
+.seg-btn:hover{border-color:var(--ink-600)}
+.seg-btn.on{border-color:var(--ink-900);box-shadow:inset 0 0 0 1px var(--ink-900);background:var(--paper-50)}
+@media (max-width:600px){.seg{grid-template-columns:1fr}.seg-btn{min-height:44px}}
 @media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}}
 /* Grid items and fieldsets default to min-content width: let wide tables scroll instead */
 .layout > *,fieldset{min-width:0}
@@ -623,7 +632,7 @@ const FIELDS = [
 function renderClientList() {
   const list = INDEX.slice().sort((a, b) => (a.company || '').localeCompare(b.company || ''));
   $('client-list').innerHTML = list.length ? list.map(c =>
-    `<button class="li ${CUR && CUR.id === c.id ? 'active' : ''}" onclick="openClient('${c.id}')"><b>${esc(c.company)}${c.status === 'inactive' ? ' <span class="badge-off">Inactivo</span>' : ''}</b><span>${esc(c.email)}</span></button>`
+    `<button class="li ${CUR && CUR.id === c.id ? 'active' : ''}" onclick="openClient('${c.id}')"><b>${esc(c.company)}${c.status === 'inactive' ? ' <span class="badge-off">Inactivo</span>' : ''}${c.type && c.type !== 'supply' && CLIENT_TYPES[c.type] ? ` <span class="badge-type">${CLIENT_TYPES[c.type].label}</span>` : ''}</b><span>${esc(c.email)}</span></button>`
   ).join('') : '<p class="muted small">Aún no hay clientes.</p>';
 }
 
@@ -706,6 +715,7 @@ function renderEditor() {
   // Manual indicators and contract terms only apply to Qualified Supply clients;
   // for CFE (SSB) clients the portal computes everything from the bills
   CUR.qualified = isQualifiedProfile(p);
+  CUR.clientType = CLIENT_TYPES[p.client_type] ? p.client_type : 'supply';
   const fields = FIELDS.filter(([t]) => !QUALIFIED_GROUPS.includes(t)).map(group).join('');
   const qualifiedFields = FIELDS.filter(([t]) => QUALIFIED_GROUPS.includes(t)).map(group).join('');
   $('editor').innerHTML = `
@@ -723,8 +733,11 @@ function renderEditor() {
       <input id="f-email" type="email" value="${esc(d.email)}" placeholder="nombre@empresa.com">
       ${isNew ? '<p class="small muted" style="margin:6px 0 0">Al guardar se genera una contraseña segura para enviarle.</p>' : ''}
     </fieldset>
-    <fieldset><legend>Tipo de suministro</legend>
-      <div class="row" style="justify-content:space-between">
+    <fieldset><legend>Tipo de cliente</legend>
+      <div class="seg" role="radiogroup" aria-label="Tipo de cliente">
+        ${Object.entries(CLIENT_TYPES).map(([k, t]) => `<button type="button" role="radio" class="seg-btn" data-ct="${k}" onclick="setClientType('${k}')"><b>${t.label}</b><span>${t.desc}</span></button>`).join('')}
+      </div>
+      <div id="supply-box" class="row" style="justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle)">
         <div style="min-width:0"><b id="supply-label"></b><div class="small muted" id="supply-desc"></div></div>
         <button type="button" class="btn btn-sm" id="supply-btn" onclick="toggleSupply()"></button>
       </div>
@@ -755,11 +768,20 @@ function renderEditor() {
         : '<tr><td colspan="5" class="muted">Sin documentos.</td></tr>'}
       </tbody></table>`}
     </fieldset>
-    ${isNew ? '' : `<fieldset><legend>Plantas y recibos</legend><div id="sites-panel"></div></fieldset>
-    <fieldset><legend>Contratos</legend><div id="contracts-panel"></div></fieldset>`}`;
+    ${isNew ? '' : `<div id="supply-only" class="stack"><fieldset><legend>Plantas y recibos</legend><div id="sites-panel"></div></fieldset>
+    <fieldset><legend>Contratos</legend><div id="contracts-panel"></div></fieldset></div>`}`;
   applySupplyUI();
   if (!isNew) Sites.render();
 }
+
+/* ── Client type: each one gets its own portal (see client-portal/profiles.js) ── */
+const CLIENT_TYPES = {
+  supply: { label: 'Cliente de Suministro', desc: 'Portal completo: plantas, recibos, contrato y ahorro.' },
+  trader: { label: 'Comercializador', desc: 'Dashboard, Sentinel One, Market Intelligence y Documentos.' },
+  guest: { label: 'Invitado', desc: 'Igual que Comercializador, para pruebas con usuarios externos.' }
+};
+const isSupplyClient = () => !CUR || CUR.clientType === 'supply';
+function setClientType(t) { CUR.clientType = t; applySupplyUI(); if (CUR.id && isSupplyClient()) Sites.render(); }
 
 /* ── Supply type: CFE Basic Service (default) or Qualified Supply ── */
 const QUALIFIED_GROUPS = ['Indicadores del dashboard', 'Contrato'];
@@ -770,9 +792,12 @@ function isQualifiedProfile(p) {
   if (p.supply_type) return p.supply_type === 'qualified';
   return QUALIFIED_KEYS.some(k => p[k] != null && p[k] !== '');
 }
-const isQualifiedClient = () => !!(CUR && CUR.qualified);
+const isQualifiedClient = () => !!(CUR && CUR.qualified && isSupplyClient());
 function applySupplyUI() {
-  const q = CUR.qualified;
+  const supply = isSupplyClient(), q = CUR.qualified && supply;
+  document.querySelectorAll('.seg-btn').forEach(b => { const on = b.dataset.ct === CUR.clientType; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+  $('supply-box').classList.toggle('hidden', !supply);
+  if ($('supply-only')) $('supply-only').classList.toggle('hidden', !supply);
   $('supply-label').textContent = q ? 'Suministro Calificado' : 'CFE · Suministrador de Servicios Básicos';
   $('supply-desc').textContent = q
     ? 'Capturas a mano los indicadores, el contrato y la gráfica de tarifas (abajo), además de sus recibos.'
@@ -794,6 +819,7 @@ function collectForm() {
   if (!profile.company) throw new Error('Escribe el nombre de la empresa.');
   // The Qualified-only fields stay stored while hidden, so switching back keeps them
   profile.supply_type = CUR.qualified ? 'qualified' : 'ssb';
+  profile.client_type = CUR.clientType || 'supply';
   return { email, profile, chart: textToChart($('f-chart').value) };
 }
 
@@ -825,7 +851,7 @@ async function saveClient(btn) {
     await writeVault();
     if (oldId && oldId !== id) await removeFile(`data/clients/${oldId}.json`);
     INDEX = INDEX.filter(c => c.id !== oldId && c.id !== id);
-    INDEX.push({ id, email: form.email, company: form.profile.company, updated: today(), status: isInactive() ? 'inactive' : 'active' });
+    INDEX.push({ id, email: form.email, company: form.profile.company, type: form.profile.client_type, updated: today(), status: isInactive() ? 'inactive' : 'active' });
     await saveIndex();
     await publish('guardar cliente');
     renderClientList(); renderEditor();

@@ -6,7 +6,7 @@
    encrypted here with the client's data key before it is synced through
    the Worker, which cannot read it.
    Uses globals from index.html: ME, DEK, MY_ID, PORTAL_KEY, INTEL, SP, DATA,
-   _esc, _date, _fmtDate, goTo. */
+   _esc, _date, _fmtDate, goTo; Energy (energy.js) and Profiles (profiles.js). */
 const S1 = (() => {
   const esc = s => _esc(s);
   const MAX_ATTACH = 10 * 1024 * 1024;
@@ -30,7 +30,10 @@ const S1 = (() => {
     const field = k => p[k] != null && p[k] !== '' ? `${LABELS[k]}: ${p[k]}` : null;
     const group = (title, keys) => { const rows = keys.map(field).filter(Boolean); if (rows.length) L.push(`## ${title}`, ...rows, ''); };
     group('Client', ['company', 'account_id', 'contact_name', 'contact_role']);
-    L.push('## Supply type', Energy.isQualified() ? 'Qualified Supply (Suministro Calificado): the client buys energy from a qualified supplier under the contract below; savings are measured against the CFE tariff.' : 'CFE Basic Service Supplier (Suministrador de Servicios Básicos): the client buys energy from CFE at its regulated tariff, so there are no savings versus CFE to report; figures come from the monthly bills.', '');
+    if (!Profiles.isSupply()) L.push('## Client type', Profiles.type() === 'trader'
+      ? 'Trader (Comercializador): an energy trading company. Its portal shares market intelligence and documents from the advisory team; it has no plants, electricity bills or supply contract in the platform.'
+      : 'Guest account: an external user exploring the platform. Its portal shares market intelligence and documents; it has no plants, electricity bills or supply contract in the platform.', '');
+    else L.push('## Supply type', Energy.isQualified() ? 'Qualified Supply (Suministro Calificado): the client buys energy from a qualified supplier under the contract below; savings are measured against the CFE tariff.' : 'CFE Basic Service Supplier (Suministrador de Servicios Básicos): the client buys energy from CFE at its regulated tariff, so there are no savings versus CFE to report; figures come from the monthly bills.', '');
     group('Advisor', ['advisor_name', 'advisor_email']);
     // Manual indicators, contract terms and the rate history only apply to Qualified Supply clients
     if (Energy.isQualified()) {
@@ -127,6 +130,12 @@ const S1 = (() => {
     if (Energy.isQualified() && p.contract_end) s.push('When does my contract end and how far along am I?');
     if (!Energy.isQualified() && Energy.hasBills()) s.push('How much have I spent and consumed this year?', 'How is my consumption split between base, intermediate and peak?');
     if (Energy.isQualified() && (ME.chart || []).length >= 3) s.push('Summarize how my rate has moved in recent months.');
+    if (!Profiles.isSupply()) {
+      if ((INTEL || []).length) s.push('What did the latest market update say?', 'Summarize the market updates from the last month.');
+      if ((ME.docs || []).length) s.push('Which documents have been shared with me?');
+      s.push('What can I do in this portal?');
+      return s.slice(0, 4);
+    }
     if ((INTEL || []).length) s.push('What did the latest market update say?');
     s.push('Give me an executive summary of my account.');
     return s.slice(0, 4);
@@ -137,7 +146,7 @@ const S1 = (() => {
     if (!c || !c.messages.length) {
       log.innerHTML = `<div class="s1-welcome"><div class="s1-avatar s1-avatar--lg">${SPARK}</div>
         <h2>Hi${ME.profile && ME.profile.contact_name ? ', ' + esc(ME.profile.contact_name.split(' ')[0]) : ''}. I'm Sentinel One.</h2>
-        <p>Ask me anything about your contract, rates, savings, documents and market updates. I answer only with the information in your portal.</p>
+        <p>${Profiles.isSupply() ? 'Ask me anything about your contract, rates, savings, documents and market updates.' : 'Ask me anything about the market updates and documents shared with you.'} I answer only with the information in your portal.</p>
         <div class="s1-sugs">${suggestions().map(q => `<button class="s1-sug">${esc(q)}</button>`).join('')}</div></div>`;
       log.querySelectorAll('.s1-sug').forEach(b => b.onclick = () => send(b.textContent));
       return;
@@ -367,43 +376,53 @@ const S1 = (() => {
     const nav = document.querySelector('.cp-nav-item[data-section="assistant"]');
     if (nav) nav.style.display = cfg() ? '' : 'none';
   }
+  // Set up once; concurrent callers (tab click + ask()) wait for the same setup
   async function onShow() {
     if (!cfg()) return;
-    if (!ready) {
-      ready = true;
-      $('s1-log').innerHTML = '<div class="s1-welcome"><span class="s1-typing"><i></i><i></i><i></i></span></div>';
-      await loadState();
-      const last = state.chats.slice().sort((a, b) => b.updated - a.updated)[0];
-      current = last ? last.id : null;
-      // Wire the UI once
-      $('s1-form').onsubmit = ev => { ev.preventDefault(); send($('s1-input').value); };
-      $('s1-input').addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); send($('s1-input').value); } });
-      $('s1-input').addEventListener('input', autoGrow);
-      $('s1-stop').onclick = () => abort && abort.abort();
-      $('s1-attach-btn').onclick = ev => { ev.stopPropagation(); toggleAttachMenu(); };
-      document.addEventListener('click', ev => { if (!ev.target.closest('#s1-attach-menu')) toggleAttachMenu(false); });
-      document.querySelectorAll('.s1-tab').forEach(t => t.onclick = () => showPane(t.dataset.p));
-      $('s1-instructions').addEventListener('input', () => { $('s1-instr-count').textContent = $('s1-instructions').value.length + ' / 4000'; });
-      $('s1-instr-save').onclick = () => { state.instructions = $('s1-instructions').value.slice(0, 4000); save(); $('s1-instr-status').textContent = 'Saved ✓'; setTimeout(() => $('s1-instr-status').textContent = '', 2500); };
-      document.querySelectorAll('.s1-preset').forEach(b => b.onclick = () => {
-        const t = $('s1-instructions'); t.value = (t.value.trim() ? t.value.trim() + '\n' : '') + b.dataset.t;
-        t.dispatchEvent(new Event('input'));
-      });
-      $('s1-mem-form').onsubmit = ev => {
-        ev.preventDefault();
-        const v = $('s1-mem-input').value.trim().slice(0, 500);
-        if (!v) return;
-        state.memories.push({ id: uid(), text: v, date: Date.now(), by: 'user' });
-        $('s1-mem-input').value = ''; save(); renderSide();
-      };
-      showPane('chats');
-    }
+    if (!ready) ready = setup();
+    await ready;
     const c = chat(); if (c) tidy(c);
     renderSide(); renderLog();
+  }
+  async function setup() {
+    $('s1-log').innerHTML = '<div class="s1-welcome"><span class="s1-typing"><i></i><i></i><i></i></span></div>';
+    await loadState();
+    const last = state.chats.slice().sort((a, b) => b.updated - a.updated)[0];
+    current = last ? last.id : null;
+    // Wire the UI once
+    $('s1-form').onsubmit = ev => { ev.preventDefault(); send($('s1-input').value); };
+    $('s1-input').addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); send($('s1-input').value); } });
+    $('s1-input').addEventListener('input', autoGrow);
+    $('s1-stop').onclick = () => abort && abort.abort();
+    $('s1-attach-btn').onclick = ev => { ev.stopPropagation(); toggleAttachMenu(); };
+    document.addEventListener('click', ev => { if (!ev.target.closest('#s1-attach-menu')) toggleAttachMenu(false); });
+    document.querySelectorAll('.s1-tab').forEach(t => t.onclick = () => showPane(t.dataset.p));
+    $('s1-instructions').addEventListener('input', () => { $('s1-instr-count').textContent = $('s1-instructions').value.length + ' / 4000'; });
+    $('s1-instr-save').onclick = () => { state.instructions = $('s1-instructions').value.slice(0, 4000); save(); $('s1-instr-status').textContent = 'Saved ✓'; setTimeout(() => $('s1-instr-status').textContent = '', 2500); };
+    document.querySelectorAll('.s1-preset').forEach(b => b.onclick = () => {
+      const t = $('s1-instructions'); t.value = (t.value.trim() ? t.value.trim() + '\n' : '') + b.dataset.t;
+      t.dispatchEvent(new Event('input'));
+    });
+    $('s1-mem-form').onsubmit = ev => {
+      ev.preventDefault();
+      const v = $('s1-mem-input').value.trim().slice(0, 500);
+      if (!v) return;
+      state.memories.push({ id: uid(), text: v, date: Date.now(), by: 'user' });
+      $('s1-mem-input').value = ''; save(); renderSide();
+    };
+    showPane('chats');
   }
   function copy(btn) {
     const text = btn.closest('.s1-bubble').innerText.replace(/\s*Copy\s*$/, '');
     navigator.clipboard.writeText(text).then(() => { btn.textContent = 'Copied ✓'; setTimeout(() => btn.textContent = 'Copy', 1500); }).catch(() => {});
   }
-  return { init, onShow, newChat, toggleSide, copy };
+  // Open Sentinel One and ask a question in a new conversation (e.g. from a dashboard widget)
+  async function ask(text) {
+    if (!cfg() || !(text || '').trim()) return;
+    goTo('assistant');
+    await onShow();
+    newChat();
+    send(text);
+  }
+  return { init, onShow, newChat, toggleSide, copy, ask, suggestions: () => suggestions(), enabled: () => !!cfg() };
 })();

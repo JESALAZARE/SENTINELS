@@ -77,6 +77,39 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-sb-client-id{font-family:var(--font-mono);font-size:10px;color:var(--steel-400);margin-top:3px}
 .cp-sb-client-badge{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:11px;font-weight:600;color:var(--signal-positive);font-family:var(--font-sans)}
 .cp-sb-client-badge::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--signal-positive);display:inline-block}
+.cp-sb-client-type{display:inline-block;margin:6px 0 0 8px;padding:1px 8px;border:1px solid rgba(200,157,42,.55);border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#D4A832}
+.cp-sb-client-type[hidden]{display:none}
+
+/* ── Trader / guest theme (profiles.js) ──────────────── */
+.cp-theme-trader #cp-sidebar{background:linear-gradient(180deg,#121519 0%,var(--ink-900) 100%)}
+.cp-theme-trader .cp-sb-brand-tag{color:#C89D2A;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.cp-theme-trader .cp-nav-item.active{background:rgba(200,157,42,.12);color:#F3E3A2;box-shadow:inset 3px 0 0 #C89D2A}
+.cp-theme-trader .cp-nav-item.active svg{color:#D4A832}
+.cp-theme-trader #cp-topbar{box-shadow:inset 0 -2px 0 #C89D2A}
+.cp-theme-trader #cp-content{background:#F5F3EE}
+.cp-theme-guest .cp-sb-brand-tag{color:var(--silver-200)}
+.cp-theme-guest .cp-nav-item.active{background:rgba(255,255,255,.08);color:#fff;box-shadow:inset 3px 0 0 var(--silver-200)}
+.cp-theme-guest .cp-nav-item.active svg{color:#fff}
+.cp-theme-guest #cp-topbar{box-shadow:inset 0 -2px 0 var(--silver-200)}
+.cp-theme-guest .cp-sb-client-type{border-color:rgba(255,255,255,.3);color:var(--silver-200)}
+.cp-guest-banner{display:flex;align-items:flex-start;gap:10px;margin:0 0 20px;padding:12px 16px;border:1px solid var(--border-default);border-left:3px solid var(--steel-400);border-radius:var(--radius-md);background:var(--white);font-size:13px;color:var(--graphite-500)}
+.cp-guest-banner[hidden]{display:none}
+.cp-guest-banner svg{width:18px;height:18px;flex:none;margin-top:1px;color:var(--steel-400)}
+/* Workspace widgets (trader / guest dashboard) */
+.cp-ws-hero{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px}
+.cp-ws-hero-t{font-family:var(--font-serif);font-size:24px;font-weight:600;line-height:1.15;color:var(--ink-900)}
+.cp-ws-hero-s{font-size:13px;color:var(--steel-400);margin-top:4px}
+.cp-ws-links{display:flex;flex-wrap:wrap;gap:8px}
+.cp-ws-link{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--white);font-family:var(--font-sans);font-size:13px;font-weight:600;color:var(--ink-900);cursor:pointer}
+.cp-ws-link:hover{border-color:var(--ink-900)}
+.cp-ws-link svg{width:15px;height:15px}
+.cp-ws-link--gold{background:var(--metal-gold);border-color:transparent;color:#1C1200}
+.cp-ws-ask{display:flex;gap:8px}
+.cp-ws-ask input{flex:1;min-width:0;height:40px;padding:0 12px;border:1px solid var(--border-default);border-radius:var(--radius-md);font-family:var(--font-sans);font-size:14px;color:var(--ink-900);background:var(--white);outline:none}
+.cp-ws-ask input:focus{border-color:var(--ink-900)}
+.cp-ws-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.cp-ws-chip{border:1px solid var(--border-subtle);background:var(--paper-50);border-radius:999px;padding:4px 10px;font-family:var(--font-sans);font-size:12px;color:var(--graphite-500);cursor:pointer;text-align:left}
+.cp-ws-chip:hover{border-color:var(--border-strong,#9AA0A7);color:var(--ink-900)}
 .cp-nav{flex:1;padding:12px 12px 0;display:flex;flex-direction:column;gap:2px}
 .cp-nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-md);background:none;border:0;color:var(--silver-300);font-family:var(--font-sans);font-size:13px;font-weight:500;cursor:pointer;text-align:left;transition:background 150ms,color 150ms;width:100%}
 .cp-nav-item:hover{background:rgba(255,255,255,0.05);color:var(--mist-100)}
@@ -472,6 +505,11 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
   .cp-plant-dd svg{margin-left:auto}
   .cp-plant-menu{right:0;min-width:0;max-height:min(340px,60dvh)}
   .cp-plant-opt{min-height:44px}
+  .cp-ws-hero-t{font-size:21px}
+  .cp-ws-links{width:100%}
+  .cp-ws-link{flex:1 1 100%;justify-content:center;height:44px}
+  .cp-ws-ask input{height:44px;font-size:16px}
+  .cp-guest-banner{margin-bottom:14px}
   .cp-doc-thead{display:none}
   .cp-doc-row{grid-template-columns:1fr 48px}
   .cp-doc-row .cp-doc-cell:nth-child(1){grid-column:1;grid-row:1;padding-bottom:2px}
@@ -722,13 +760,14 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
       <img src="https://sentinels.com.mx/logo-shield-knockout.png" alt="Sentinel" onerror="this.onerror=null;this.src='https://sentinels.com.mx/crest.png'">
       <div class="cp-sb-brand-text">
         <div class="cp-sb-brand-name">Sentinels</div>
-        <div class="cp-sb-brand-tag">Client Portal</div>
+        <div class="cp-sb-brand-tag" id="cp-brand-tag">Client Portal</div>
       </div>
     </div>
     <div class="cp-sb-client">
       <div class="cp-sb-client-name" id="cp-client-company">—</div>
       <div class="cp-sb-client-id" id="cp-client-account">Account #—</div>
       <div class="cp-sb-client-badge">Active</div>
+      <div class="cp-sb-client-type" id="cp-client-type" hidden></div>
     </div>
     <nav class="cp-nav">
       <button class="cp-nav-item active" data-section="dashboard">
@@ -800,10 +839,14 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
            ║  DASHBOARD                               ║
            ╚══════════════════════════════════════════╝ -->
       <section id="sec-dashboard" class="cp-section active">
+        <div class="cp-guest-banner" id="cp-guest-banner" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <span id="cp-guest-banner-txt"></span>
+        </div>
         <div class="cp-page-head cp-board-head">
           <div>
-            <h1 class="cp-page-title">Your dashboard</h1>
-            <p class="cp-page-sub">Add, arrange and resize the widgets you care about</p>
+            <h1 class="cp-page-title" id="cp-dash-title">Your dashboard</h1>
+            <p class="cp-page-sub" id="cp-dash-sub">Add, arrange and resize the widgets you care about</p>
           </div>
           <div class="cp-board-tools">
             <button class="cp-btn-ghost cp-btn-sm" onclick="Board.reset('dashboard')">Reset layout</button>
@@ -1088,7 +1131,25 @@ async function _openVault(vault, raw, id) {
   SitesPage.init();
   // CFE (basic service) clients without contracts have nothing to show under My Contract
   document.querySelector('.cp-nav-item[data-section="contract"]').style.display = Energy.isQualified() || Energy.contracts().length ? '' : 'none';
+  _applyProfile();
   _showPortal();
+}
+
+// Each client type (profiles.js) gets its own navigation, look and dashboard texts
+function _applyProfile() {
+  const t = Profiles.current();
+  const app = document.getElementById('cp-app');
+  Object.values(Profiles.TYPES).forEach(x => x.theme && app.classList.remove(...x.theme.split(' ')));
+  if (t.theme) app.classList.add(...t.theme.split(' '));
+  _set('cp-brand-tag', t.tag);
+  const badge = document.getElementById('cp-client-type');
+  badge.textContent = t.label; badge.hidden = Profiles.isSupply();
+  document.querySelectorAll('.cp-nav-item[data-section]').forEach(b => { if (!Profiles.allows(b.dataset.section)) b.style.display = 'none'; });
+  _set('cp-dash-title', t.title);
+  _set('cp-dash-sub', t.sub);
+  const banner = document.getElementById('cp-guest-banner');
+  banner.hidden = !t.banner; _set('cp-guest-banner-txt', t.banner || '');
+  document.getElementById('qa-renewal').style.display = Profiles.isSupply() ? '' : 'none';
 }
 
 function _showPortal() {
@@ -1329,6 +1390,7 @@ function toggleSidebar(open) {
 }
 
 function goTo(id) {
+  if (ME && !Profiles.allows(id)) id = 'dashboard';  // sections outside this client type
   toggleSidebar(false);
   // Deactivate all
   document.querySelectorAll('.cp-nav-item').forEach(b => b.classList.remove('active'));
@@ -1492,6 +1554,7 @@ function filterDocs(btn, type) {
   });
 }
 </script>
+<script src="profiles.js"></script>
 <script src="energy.js"></script>
 <script src="board.js"></script>
 <script src="sites.js"></script>

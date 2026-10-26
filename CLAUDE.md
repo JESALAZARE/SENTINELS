@@ -5,6 +5,7 @@ Static site on GitHub Pages (sentinels.com.mx, repo JESALAZARE/SENTINELS, public
 - `index.html` — marketing homepage (Formspree contact form).
 - `client-portal/index.html` — client portal (English UI).
 - `client-portal/admin.html` — admin panel (Spanish UI); publishes to GitHub via the API.
+- `client-portal/profiles.js` — client types (`profile.client_type`: `supply`, `trader` = Comercializador, `guest` = Invitado). Each type sets the portal's navigation, widget categories, default dashboard, theme and texts; add later-stage trader features there. Plants, bills and contracts only exist for `supply` (gated in `energy.js`).
 - `client-portal/board.js` — customizable Dashboard / My Contract widget boards.
 - `client-portal/energy.js` — single source for plant/bill/contract calculations (real savings, cost per kWh, alerts, Sentinel One context). `sites.js` renders the My Sites page; `admin-sites.js` is the admin editor for plants, monthly bills (manual, CSV, PDF read by AI via the Worker's `/admin/extract`) and contracts. Data lives in the client vault as `sites[].bills[]` and `contracts[]`; bill PDFs are documents of type `bill`.
 - `client-portal/sentinel-one.js` + `sentinel-one/worker.js` — "Sentinel One" AI assistant (Claude Haiku 5.5 via a Cloudflare Worker that holds the API key, checks an HMAC pass, caps spend per client/month and stores the client's encrypted chat state). Setup steps: `sentinel-one/LEEME.md`. The Worker is pasted into the Cloudflare dashboard, so it uses plain `fetch` (no build step).

@@ -5,7 +5,7 @@
    the site has no server to store them, so a new device shows the default.
    Uses globals from index.html: ME, INTEL, MY_ID, _esc, _date, _fmtDate,
    _safeUrl, _initials, _tagClass, _dlDoc, viewIntelFile, goTo,
-   DOC_TYPES, FILE_ICON. */
+   DOC_TYPES, FILE_ICON; Energy, Profiles and S1 for their own data. */
 const Board = (() => {
   const esc = s => _esc(s);
   const SIZES = { s: 1, m: 2, w: 3, l: 4 };
@@ -165,6 +165,52 @@ const Board = (() => {
           `<button class="cp-card-link cp-widget-more" onclick="goTo('documents')">View all →</button>`;
       } },
 
+    /* Workspace — trader and guest dashboards (profiles.js) */
+    ws_welcome: { cat: 'Workspace', title: 'Overview', icon: 'person', sizes: ['w', 'l'], desc: 'Your account at a glance with quick links.',
+      ready: () => true, need: '',
+      render: b => {
+        const p = P(), h = new Date().getHours(), first = (p.contact_name || '').split(' ')[0];
+        const ai = typeof S1 !== 'undefined' && S1.enabled();
+        b.innerHTML = `<div class="cp-ws-hero">
+            <div style="min-width:0"><div class="cp-ws-hero-t">${h < 12 ? 'Good morning' : h < 19 ? 'Good afternoon' : 'Good evening'}${first ? ', ' + esc(first) : ''}.</div>
+              <div class="cp-ws-hero-s">${esc(p.company || '')}${p.company ? ' · ' : ''}${esc(Profiles.current().label)} account</div></div>
+            <div class="cp-ws-links">
+              ${ai ? `<button class="cp-ws-link cp-ws-link--gold" onclick="goTo('assistant')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/></svg>Ask Sentinel One</button>` : ''}
+              <button class="cp-ws-link" onclick="goTo('intelligence')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Market Intelligence</button>
+              <button class="cp-ws-link" onclick="goTo('documents')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Documents</button>
+            </div></div>`;
+      } },
+    kpi_intel_count: { cat: 'Workspace', title: 'Market updates', icon: 'kpi', sizes: ['s', 'm'], desc: 'Updates published in the last 30 days.',
+      ready: () => true, need: '',
+      render: b => {
+        const all = INTEL || [], since = Date.now() - 30 * 864e5;
+        const recent = all.filter(i => { const d = _date(i.date); return d && d.getTime() >= since; }).length;
+        kpi(b, { value: String(recent), unit: 'last 30 days', note: `${all.length} update${all.length === 1 ? '' : 's'} in total` });
+      } },
+    kpi_latest_update: { cat: 'Workspace', title: 'Latest update', icon: 'news', sizes: ['s', 'm', 'w'], desc: 'The most recent Market Intelligence update.',
+      ready: () => (INTEL || []).length > 0, need: 'market updates',
+      render: b => {
+        const i = INTEL[0];
+        kpi(b, { value: i.title, text: true, note: `${_fmtDate(i.date)} · ${i.tag || 'Update'}` });
+        b.insertAdjacentHTML('beforeend', `<button class="cp-card-link cp-widget-more" onclick="goTo('intelligence')">Read →</button>`);
+      } },
+    kpi_docs_count: { cat: 'Workspace', title: 'Documents', icon: 'doc', sizes: ['s', 'm'], desc: 'Files your advisory team has shared with you.',
+      ready: () => true, need: '',
+      render: b => {
+        const docs = (ME && ME.docs) || [];
+        kpi(b, { value: String(docs.length), unit: docs.length === 1 ? 'file' : 'files', note: docs.length ? 'Latest: ' + _fmtDate(docs[0].date) : 'None shared yet' });
+      } },
+    ws_ask: { cat: 'Workspace', title: 'Ask Sentinel One', icon: 'news', sizes: ['m', 'w', 'l'], desc: 'Ask the AI assistant about your updates and documents.',
+      ready: () => typeof S1 !== 'undefined' && S1.enabled(), need: 'Sentinel One access',
+      render: b => {
+        b.innerHTML = `<form class="cp-ws-ask"><input type="text" maxlength="500" placeholder="Ask about the market updates or your documents…" aria-label="Question for Sentinel One">
+            <button class="cp-btn-dark cp-btn-sm" type="submit">Ask</button></form>
+          <div class="cp-ws-chips">${S1.suggestions().map(s => `<button type="button" class="cp-ws-chip">${esc(s)}</button>`).join('')}</div>`;
+        const input = b.querySelector('input');
+        b.querySelector('form').onsubmit = ev => { ev.preventDefault(); S1.ask(input.value); };
+        b.querySelectorAll('.cp-ws-chip').forEach(c => c.onclick = () => S1.ask(c.textContent));
+      } },
+
     /* Plants & bills — real data from the monthly bills (energy.js) */
     kpi_last_bill: { cat: 'Plants & bills', title: 'Latest bill', icon: 'kpi', sizes: ['s', 'm'], desc: 'Total paid in your latest month, all plants.',
       ready: () => !!Energy.latestMonth(), need: 'monthly bills',
@@ -255,7 +301,7 @@ const Board = (() => {
         }).join('')}</div>`;
       } }
   };
-  const CATS = ['Plants & bills', 'Key figures', 'Charts', 'Contract', 'Updates'];
+  const CATS = ['Workspace', 'Plants & bills', 'Key figures', 'Charts', 'Contract', 'Updates'];
   const titleOf = t => typeof CATALOG[t].title === 'function' ? CATALOG[t].title() : CATALOG[t].title;
 
   // Widgets fed by the advisor's manual contract data or by savings versus CFE only
@@ -265,13 +311,15 @@ const Board = (() => {
     'chart_savings_pct', 'chart_consumption', 'chart_savings_mxn', 'chart_mix', 'contract_progress', 'contract_summary',
     'kpi_real_savings_ytd', 'chart_real_savings'];
   for (const k of QUALIFIED_ONLY) { const ready = CATALOG[k].ready; CATALOG[k].qualifiedOnly = true; CATALOG[k].ready = () => Energy.isQualified() && ready(); }
-  const offered = t => !CATALOG[t].qualifiedOnly || Energy.isQualified();
+  // ...and each client type only sees its own widget categories (profiles.js)
+  const offered = t => (!CATALOG[t].qualifiedOnly || Energy.isQualified()) && Profiles.offers(t, CATALOG[t].cat);
 
   // Default layouts: CFE clients get indicators computed from their bills;
   // Qualified Supply clients get savings versus CFE and their contract terms
   const BOARDS = ['dashboard', 'contract'];
   function defaults(b) {
     if (b === 'dashboard') {
+      if (Profiles.current().layout) return Profiles.current().layout;
       if (!Energy.isQualified()) return [['kpi_last_bill', 's'], ['kpi_ytd_cost', 's'], ['kpi_ytd_kwh', 's'], ['kpi_cost_kwh', 's'],
         ['chart_periods', 'w'], ['alerts', 's'], ['kpi_pf', 's'], ['kpi_peak_demand', 's'], ['chart_cost_kwh', 'm'], ['sites_table', 'l'], ['docs_recent', 'l']];
       return Energy.hasBills()
@@ -582,7 +630,8 @@ const Board = (() => {
   /* ── Boards ───────────────────────────────────── */
   const layouts = {};
   const uid = () => Math.random().toString(36).slice(2, 10);
-  const key = b => 'sp_board_v2_' + (MY_ID || 'anon') + '_' + b;
+  // Layouts are kept per client type, so switching an account's type starts from that type's default
+  const key = b => 'sp_board_v2_' + (MY_ID || 'anon') + (Profiles.isSupply() ? '' : '_' + Profiles.type()) + '_' + b;
   function load(b) {
     try {
       const v = JSON.parse(localStorage.getItem(key(b)));
@@ -755,7 +804,7 @@ const Board = (() => {
     const g = document.getElementById('cp-gallery');
     const used = new Set(layouts[b].map(w => w.type));
     document.getElementById('cp-gallery-list').innerHTML = inScope(b, () => CATS.map(cat => {
-      const items = Object.entries(CATALOG).filter(([t, d]) => d.cat === cat && offered(t));
+      const items = Object.entries(CATALOG).filter(([t, d]) => Profiles.catOf(t, d.cat) === cat && offered(t));
       if (!items.length) return '';
       return `<div class="cp-gal-cat">${cat}</div><div class="cp-gal-grid">${items.map(([t, d]) => {
         const ready = d.ready(), added = used.has(t);
