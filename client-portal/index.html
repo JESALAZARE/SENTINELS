@@ -732,6 +732,49 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-pr-table td:nth-child(-n+2){text-align:left}
 .cp-pr-table td:first-child{font-family:var(--font-mono);font-weight:400}
 .cp-pr-count{margin-top:8px;font-size:11px;color:var(--silver-300);font-family:var(--font-mono)}
+.cp-pr-cat{display:inline-flex;align-items:center;gap:8px;height:36px;margin-left:auto}
+.cp-pr-cat svg{width:15px;height:15px}
+/* NodoP catalog dialog (nodos.js) */
+.cp-nd-modal{position:fixed;inset:0;z-index:300;background:rgba(11,13,15,.55);display:flex;align-items:center;justify-content:center;padding:24px;animation:cp-fade 200ms}
+.cp-nd-modal[hidden]{display:none}
+.cp-nd-panel{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);width:min(1240px,100%);height:min(860px,calc(100vh - 48px));display:flex;flex-direction:column;padding:20px 22px;min-height:0}
+@supports (height:100dvh){.cp-nd-panel{height:min(860px,calc(100dvh - 48px))}}
+.cp-nd-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}
+.cp-nd-title{font-family:var(--font-serif);font-weight:600;font-size:24px;margin:0;color:var(--ink-900)}
+.cp-nd-meta{font-size:12px;color:var(--steel-400);margin-top:4px;line-height:1.5}
+.cp-nd-meta b{color:var(--ink-900);font-family:var(--font-mono);font-weight:500}
+.cp-nd-meta a,.cp-nd-src{color:var(--ink-900)}
+.cp-nd-close{width:40px;height:40px;flex:none;border:0;background:none;border-radius:var(--radius-md);font-size:26px;line-height:1;color:var(--steel-400);cursor:pointer}
+.cp-nd-close:hover{background:var(--paper-50);color:var(--ink-900)}
+.cp-nd-filters{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px 12px;margin-bottom:12px}
+.cp-nd-filters select{width:100%}
+.cp-nd-search{grid-column:span 2}
+.cp-nd-search input{width:100%}
+.cp-nd-ftoggle{display:none}
+.cp-nd-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;padding:10px 0;border-top:1px solid var(--border-subtle)}
+.cp-nd-count{font-size:13px;color:var(--steel-400)}
+.cp-nd-count b{font-family:var(--font-mono);color:var(--ink-900);font-weight:500}
+.cp-nd-chk{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--graphite-500);cursor:pointer}
+.cp-nd-chk input{width:16px;height:16px;accent-color:var(--ink-900)}
+.cp-nd-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap}
+.cp-nd-actions .cp-btn-sm{height:30px}
+.cp-nd-src{font-size:12px}
+.cp-nd-scroll{flex:1;min-height:0;overflow:auto;border:1px solid var(--border-subtle);border-radius:var(--radius-md)}
+.cp-nd-table th{position:sticky;top:0;background:var(--white);z-index:1;padding:0}
+.cp-nd-table th button{display:block;width:100%;text-align:left;border:0;background:none;padding:9px 8px 7px;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;cursor:pointer;white-space:nowrap}
+.cp-nd-table th button.on,.cp-nd-table th button:hover{color:var(--ink-900)}
+.cp-nd-table td{font-family:var(--font-sans);font-size:12px}
+.cp-nd-table td:first-child{font-family:var(--font-mono);font-weight:500}
+.cp-nd-table tbody tr[data-k]{cursor:pointer}
+.cp-nd-table tbody tr[data-k]:hover,.cp-nd-table tbody tr.open{background:var(--paper-50)}
+.cp-nd-tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:var(--ink-900);color:#fff;font-family:var(--font-sans);font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;vertical-align:1px}
+.cp-nd-detail td{white-space:normal;background:var(--paper-50);padding:12px 14px 16px}
+.cp-nd-dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px 18px;margin-bottom:12px}
+.cp-nd-dgrid span{display:block;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--steel-400)}
+.cp-nd-dgrid b{font-weight:500;font-size:13px;color:var(--ink-900)}
+.cp-nd-nop{font-size:12px;color:var(--steel-400)}
+.cp-nd-none{text-align:center;color:var(--steel-400);padding:28px 8px !important}
+.cp-nd-more{align-self:center;margin-top:10px}
 @media (max-width:1180px) and (min-width:601px){
   .cp-pr-board .cp-pr-ext{grid-column:span 1}
 }
@@ -747,6 +790,19 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
   .cp-pr-seg button{height:40px;padding:0 14px}
   .cp-pr-switch,.cp-pr-dl{height:40px}
   .cp-pr-dl{margin-left:auto}
+  .cp-pr-cat{grid-column:1 / -1;height:44px;width:100%;justify-content:center;margin-left:0}
+  /* Catalog as a bottom sheet; the filters fold behind a button */
+  .cp-nd-modal{padding:12px 0 0;align-items:flex-end}
+  .cp-nd-panel{height:calc(100vh - 12px);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:16px}
+  @supports (height:100dvh){.cp-nd-panel{height:calc(100dvh - 12px)}}
+  .cp-nd-title{font-size:21px}
+  .cp-nd-filters{grid-template-columns:1fr 1fr}
+  .cp-nd-search{grid-column:1 / -1;order:-1}
+  .cp-nd-ftoggle{display:inline-flex;grid-column:1 / -1;height:40px}
+  .cp-nd-filters:not(.open) > label:not(.cp-nd-search){display:none}
+  .cp-nd-actions{margin-left:0;width:100%}
+  .cp-nd-actions .cp-btn-sm,.cp-nd-actions .cp-pr-dl{height:40px}
+  .cp-nd-src{margin-left:auto}
 }
 
 /* ── Boards: tablet & phone ───────────────────────────── */
@@ -1638,6 +1694,7 @@ function filterDocs(btn, type) {
 <script src="board.js"></script>
 <script src="sites.js"></script>
 <script src="xlsx.js"></script>
+<script src="nodos.js"></script>
 <script src="prices.js"></script>
 <script src="sentinel-one.js"></script>
 <!-- ═══════════════════════════════════════════════════

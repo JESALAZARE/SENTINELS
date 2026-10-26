@@ -95,6 +95,7 @@ const PricesPage = (() => {
         <label class="cp-pr-f"><span>To</span><input type="date" id="pr-to" value="${S.to}" min="${b.min}" max="${b.max}"></label>
         <div class="cp-pr-presets" role="group" aria-label="Quick ranges">${[[7, '7D'], [14, '14D'], [30, '30D'], [0, 'All']].map(([n, t]) =>
           `<button class="cp-doc-filter ${S.to === b.max && (n ? span === n && S.from === addDays(b.max, 1 - n) : S.from === b.min) ? 'active' : ''}" data-n="${n}">${t}</button>`).join('')}</div>
+        <button class="cp-btn-ghost cp-btn-sm cp-pr-cat" id="pr-cat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>View NodoP catalog</button>
         <div class="cp-pr-note">${esc(avail('MDA'))} · ${esc(avail('MTR'))}. MTR prices are published 7 days after the operating day. Source: CENACE.</div>
       </div>
       <div class="cp-board cp-pr-board">
@@ -115,6 +116,10 @@ const PricesPage = (() => {
       if (f > t) [f, t] = [t, f];
       S.from = f < b.min ? b.min : f; S.to = t > b.max ? b.max : t; render();
     };
+    host.querySelector('#pr-cat').onclick = () => NodosCatalog.open({
+      priced: new Set(nodes.map(n => n.sistema + '/' + n.nodo)),
+      onPick: (sistema, clave) => { const n = nodes.find(x => x.sistema === sistema && x.nodo === clave); if (n) { pickNode(n); render(); } }
+    });
     host.querySelector('#pr-from').onchange = setDates;
     host.querySelector('#pr-to').onchange = setDates;
     host.querySelectorAll('.cp-pr-presets button').forEach(bt => bt.onclick = () => {
