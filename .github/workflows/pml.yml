@@ -1,7 +1,8 @@
 name: PML CENACE
 
-# Descarga diaria de Precios Marginales Locales (scripts/fetch-pml.mjs) y del
-# tipo de cambio FIX para pagos de Banxico (scripts/fetch-fx.mjs).
+# Descarga diaria de Precios Marginales Locales (scripts/fetch-pml.mjs), del
+# tipo de cambio FIX para pagos de Banxico (scripts/fetch-fx.mjs) y de la versión
+# más reciente del Catálogo de NodosP del CENACE (scripts/fetch-nodos.mjs).
 on:
   schedule:
     - cron: '0 13 * * *'   # 07:00 hora centro de México (tipo de cambio del día)
@@ -33,10 +34,14 @@ jobs:
         if: always()
         run: node scripts/fetch-fx.mjs
 
+      - name: Revisar Catálogo de NodosP (CENACE)
+        if: always()
+        run: node scripts/fetch-nodos.mjs
+
       - name: Publicar cambios
         if: always()
         run: |
-          git add data/pml data/fx
+          git add data/pml data/fx data/nodos
           if git diff --cached --quiet; then
             echo "Sin cambios"
             exit 0
