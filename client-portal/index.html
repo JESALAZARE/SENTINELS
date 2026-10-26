@@ -718,6 +718,9 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-pr-switch[aria-checked="true"] i::after{transform:translateX(16px)}
 .cp-pr-switch[aria-checked="false"] span:first-child,.cp-pr-switch[aria-checked="true"] span:last-child{color:var(--ink-900);font-weight:600}
 .cp-pr-switch:disabled{opacity:.45;cursor:default}
+.cp-pr-dl{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--white);font-family:var(--font-sans);font-size:12px;font-weight:600;color:var(--ink-900);cursor:pointer}
+.cp-pr-dl:hover{border-color:var(--ink-900)}
+.cp-pr-dl svg{width:14px;height:14px}
 .cp-pr-fx{font-size:12px;color:var(--steel-400);margin-bottom:8px;line-height:1.5}
 .cp-pr-fx b{color:var(--ink-900);font-family:var(--font-mono);font-weight:500}
 .cp-pr-fx a{color:var(--ink-900)}
@@ -738,6 +741,12 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
   .cp-pr-f select,.cp-pr-f input{height:44px;font-size:16px;width:100%}
   .cp-pr-presets .cp-doc-filter{flex:1;height:40px}
   .cp-pr-scroll{max-height:60dvh}
+  .cp-pr-board .cp-widget-head:has(.cp-pr-seg){row-gap:10px}
+  .cp-pr-board .cp-widget-head:has(.cp-pr-seg) .cp-widget-title{flex-basis:100%}
+  .cp-pr-seg{margin-left:0}
+  .cp-pr-seg button{height:40px;padding:0 14px}
+  .cp-pr-switch,.cp-pr-dl{height:40px}
+  .cp-pr-dl{margin-left:auto}
 }
 
 /* ── Boards: tablet & phone ───────────────────────────── */
@@ -1628,6 +1637,7 @@ function filterDocs(btn, type) {
 <script src="energy.js"></script>
 <script src="board.js"></script>
 <script src="sites.js"></script>
+<script src="xlsx.js"></script>
 <script src="prices.js"></script>
 <script src="sentinel-one.js"></script>
 <!-- ═══════════════════════════════════════════════════
