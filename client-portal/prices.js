@@ -1,13 +1,21 @@
 /* ── Sentinels Client Portal · Market Prices page ────────────────────
    Local marginal prices (PML) published by CENACE for the day-ahead (MDA)
-   and real-time (MTR) markets. The data is public and is downloaded daily by
-   the GitHub Action .github/workflows/pml.yml into /data/pml (one JSON per
-   NodoP, plus index.json listing them) and /data/fx/usd-mxn.json (Banxico FIX
-   for payments, used for the USD switch). The client picks a NodoP and a date
-   range; every widget is computed from the hourly rows in that range.
-   Uses Board.charts (board.js) and _esc from index.html. */
+   and real-time (MTR) markets. Two sources:
+   - /data/pml: the GitHub Action .github/workflows/pml.yml downloads a 60-day
+     history of the NodosP in index.json every day (fast, no Worker needed);
+   - PML_API: the sentinels-pml Cloudflare Worker (pml-worker/worker.js) queries
+     CENACE on demand, so any NodoP of the catalog (/data/nodos) can be shown,
+     up to 31 days at a time. Leave PML_API empty to use only /data/pml.
+   /data/fx/usd-mxn.json holds the Banxico FIX for payments for the USD switch.
+   The client picks a NodoP and a date range; every widget is computed from
+   the hourly rows in that range.
+   Uses Board.charts (board.js), NodosCatalog (nodos.js), Xlsx (xlsx.js) and _esc. */
 const PricesPage = (() => {
+  const PML_API = 'https://sentinels-pml.shy-wood-119b.workers.dev';  // sentinels-pml Worker (pml-worker/LEEME.md); '' = stored NodosP only
   const DATA = '../data/';
+  const MAX_DAYS = 31;
+  // First operating day with MDA prices per system (SW-PML technical manual)
+  const FIRST = { SIN: '2016-01-29', BCA: '2016-01-27', BCS: '2016-03-23' };
   const PROCS = { MDA: 'Day-ahead market (MDA)', MTR: 'Real-time market (MTR)' };
   const PARTS = [['pml', 'PML', '#0B0D0F'], ['pml_ene', 'Energy', '#C89D2A'], ['pml_cng', 'Congestion', '#8C3A36'], ['pml_per', 'Losses', '#5B7FA6']];
   const esc = s => _esc(s);
@@ -17,9 +25,12 @@ const PricesPage = (() => {
   const long = f => day(f).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const iso = d => d.toISOString().slice(0, 10);
   const addDays = (f, n) => iso(new Date(Date.parse(f + 'T00:00:00Z') + n * 864e5));
+  const todayMX = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
   const mean = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+  const live = () => !!PML_API;
 
-  const S = { index: null, fx: null, node: null, from: null, to: null, cache: {}, proc: { max: 'MDA', min: 'MDA', table: 'MDA' }, usd: false, error: null };
+  // catalog: NodosP of the CENACE catalog (only loaded when the Worker is configured)
+  const S = { index: null, catalog: null, fx: null, node: null, from: null, to: null, cache: {}, proc: { max: 'MDA', min: 'MDA', table: 'MDA' }, usd: false, error: null };
 
   async function getJSON(path) {
     const r = await fetch(DATA + path, { cache: 'no-cache' });
@@ -43,8 +54,9 @@ const PricesPage = (() => {
     if (!S.index && !S.error) {
       host.innerHTML = '<div class="cp-card cp-pr-msg">Loading market prices…</div>';
       try {
-        const [index, fxData] = await Promise.all([getJSON('pml/index.json'), getJSON('fx/usd-mxn.json').catch(() => null)]);
-        S.index = index; S.fx = fxData;
+        const [index, fxData, catalog] = await Promise.all([getJSON('pml/index.json'), getJSON('fx/usd-mxn.json').catch(() => null),
+          live() ? NodosCatalog.list().catch(() => null) : null]);
+        S.index = index; S.fx = fxData; S.catalog = catalog;
         if (!(index.nodos || []).length) throw new Error('no nodes');
         pickNode(index.nodos[0]);
       } catch { S.error = true; }
@@ -53,21 +65,48 @@ const PricesPage = (() => {
     await render();
   }
 
-  // Bounds of the data for a NodoP; default view is the last 14 days, so both MDA and MTR show data
+  // Stored NodosP (60-day history in /data/pml) and, with the Worker, every NodoP of the catalog
+  const stored = (sistema, nodo) => S.index.nodos.find(n => n.sistema === sistema && n.nodo === nodo);
+  const anyNode = () => live() && S.catalog;
+  const nameOf = n => (S.catalog && (S.catalog.find(r => r.sistema === n.sistema && r.clave === n.nodo) || {}).nombre) || '';
+
+  // Dates the client can query. Stored only: the stored history. With the Worker: from the
+  // first published day to tomorrow (MDA), at most 31 days per query.
   const bounds = n => {
+    if (anyNode()) return { min: FIRST[n.sistema] || FIRST.SIN, max: addDays(todayMX(), 1) };
     const r = [n.MDA, n.MTR].filter(Boolean);
     return { min: r.map(x => x.desde).sort()[0], max: r.map(x => x.hasta).sort().at(-1) };
   };
+  // Default view is the last 14 days, so both MDA and MTR show data
   function pickNode(n) {
-    S.node = n;
-    const b = bounds(n);
+    S.node = stored(n.sistema, n.nodo) || { sistema: n.sistema, nodo: n.nodo };
+    const b = bounds(S.node);
     S.to = b.max; S.from = [addDays(b.max, -13), b.min].sort().at(-1);
   }
 
+  // Rows for the selected NodoP and dates: from the stored file when it covers the range,
+  // otherwise from the Worker (both markets, only the requested dates)
   async function nodeData() {
-    const k = S.node.sistema + '/' + S.node.nodo;
-    if (!S.cache[k]) S.cache[k] = await getJSON(`pml/${encodeURIComponent(S.node.sistema)}/${encodeURIComponent(S.node.nodo)}.json`);
-    return S.cache[k];
+    const n = S.node, k = n.sistema + '/' + n.nodo;
+    const covered = n.MDA && n.MTR && S.from >= [n.MDA.desde, n.MTR.desde].sort().at(-1);
+    if (covered || !live()) {
+      if (!S.cache[k]) S.cache[k] = getJSON(`pml/${encodeURIComponent(n.sistema)}/${encodeURIComponent(n.nodo)}.json`);
+      return S.cache[k];
+    }
+    const kq = `${k}|${S.from}|${S.to}`;
+    if (!S.cache[kq]) {
+      const one = async p => {
+        const qs = new URLSearchParams({ sistema: n.sistema, proceso: p, nodos: n.nodo, desde: S.from, hasta: S.to });
+        const r = await fetch(`${PML_API}/pml?${qs}`);
+        if (r.status === 422) return [];  // nothing published yet for those dates (e.g. recent MTR)
+        const b = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(b.message || 'HTTP ' + r.status);
+        return (b.nodos && b.nodos[n.nodo]) || [];
+      };
+      S.cache[kq] = Promise.all([one('MDA'), one('MTR')]).then(([MDA, MTR]) => ({ MDA, MTR }));
+      S.cache[kq].catch(() => delete S.cache[kq]);
+    }
+    return S.cache[kq];
   }
   const rowsOf = (d, p) => (d[p] || []).filter(r => r.fecha >= S.from && r.fecha <= S.to && r.pml != null);
 
@@ -79,52 +118,80 @@ const PricesPage = (() => {
   }
 
   /* ── Page ─────────────────────────────────────── */
+  let seq = 0;
   async function render() {
-    const host = document.getElementById('prices-root');
-    let d;
-    try { d = await nodeData(); } catch { host.innerHTML = '<div class="cp-card cp-pr-msg">The prices for this NodoP could not be loaded.</div>'; return; }
-    const b = bounds(S.node), nodes = S.index.nodos;
-    const systems = [...new Set(nodes.map(n => n.sistema))];
-    const avail = p => S.node[p] ? `${p} ${short(S.node[p].desde)} – ${long(S.node[p].hasta)}` : `${p} not available`;
+    const host = document.getElementById('prices-root'), my = ++seq;
+    host.dataset.loading = `Loading ${S.node.nodo} prices from CENACE…`;
+    host.classList.add('cp-pr-loading');
+    let d, err = null;
+    try { d = await nodeData(); } catch (e) { err = e; }
+    if (my !== seq) return;  // a newer query started while this one loaded
+    host.classList.remove('cp-pr-loading');
+    const b = bounds(S.node), nodes = S.index.nodos, n = S.node;
+    const systems = anyNode() ? ['SIN', 'BCA', 'BCS'] : [...new Set(nodes.map(x => x.sistema))];
     const span = (Date.parse(S.to) - Date.parse(S.from)) / 864e5 + 1;
+    const presets = anyNode() ? [[7, '7D'], [14, '14D'], [30, '30D']] : [[7, '7D'], [14, '14D'], [30, '30D'], [0, 'All']];
+    const avail = p => n[p] ? `${p} ${short(n[p].desde)} – ${long(n[p].hasta)}` : `${p} not available`;
+    const note = anyNode()
+      ? `Any NodoP of the CENACE catalog, up to ${MAX_DAYS} days per query. MDA prices are published the day before the operating day; MTR prices 7 days after it. Source: CENACE.`
+      : `${avail('MDA')} · ${avail('MTR')}. MTR prices are published 7 days after the operating day. Source: CENACE.`;
+    const nodeField = anyNode()
+      ? `<input id="pr-node" list="pr-nodes" value="${esc(n.nodo)}" autocomplete="off" spellcheck="false" aria-describedby="pr-node-name">
+         <datalist id="pr-nodes">${S.catalog.filter(r => r.sistema === n.sistema).map(r => `<option value="${esc(r.clave)}">${esc(r.nombre)}</option>`).join('')}</datalist>`
+      : `<select id="pr-node">${nodes.filter(x => x.sistema === n.sistema).map(x => `<option ${x.nodo === n.nodo ? 'selected' : ''}>${esc(x.nodo)}</option>`).join('')}</select>`;
     host.innerHTML = `
       <div class="cp-card cp-pr-bar">
-        <label class="cp-pr-f"><span>System</span><select id="pr-sys">${systems.map(s => `<option ${s === S.node.sistema ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
-        <label class="cp-pr-f cp-pr-f--node"><span>NodoP</span><select id="pr-node">${nodes.filter(n => n.sistema === S.node.sistema).map(n => `<option ${n.nodo === S.node.nodo ? 'selected' : ''}>${esc(n.nodo)}</option>`).join('')}</select></label>
+        <label class="cp-pr-f"><span>System</span><select id="pr-sys">${systems.map(s => `<option ${s === n.sistema ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
+        <label class="cp-pr-f cp-pr-f--node"><span>NodoP</span>${nodeField}</label>
         <label class="cp-pr-f"><span>From</span><input type="date" id="pr-from" value="${S.from}" min="${b.min}" max="${b.max}"></label>
         <label class="cp-pr-f"><span>To</span><input type="date" id="pr-to" value="${S.to}" min="${b.min}" max="${b.max}"></label>
-        <div class="cp-pr-presets" role="group" aria-label="Quick ranges">${[[7, '7D'], [14, '14D'], [30, '30D'], [0, 'All']].map(([n, t]) =>
-          `<button class="cp-doc-filter ${S.to === b.max && (n ? span === n && S.from === addDays(b.max, 1 - n) : S.from === b.min) ? 'active' : ''}" data-n="${n}">${t}</button>`).join('')}</div>
+        <div class="cp-pr-presets" role="group" aria-label="Quick ranges">${presets.map(([k, t]) =>
+          `<button class="cp-doc-filter ${S.to === b.max && (k ? span === k && S.from === addDays(b.max, 1 - k) : S.from === b.min) ? 'active' : ''}" data-n="${k}">${t}</button>`).join('')}</div>
         <button class="cp-btn-ghost cp-btn-sm cp-pr-cat" id="pr-cat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>View NodoP catalog</button>
-        <div class="cp-pr-note">${esc(avail('MDA'))} · ${esc(avail('MTR'))}. MTR prices are published 7 days after the operating day. Source: CENACE.</div>
+        <div class="cp-pr-note">${nameOf(n) ? `<b id="pr-node-name">${esc(n.nodo)} · ${esc(nameOf(n))}</b> · ` : ''}${esc(note)}</div>
       </div>
-      <div class="cp-board cp-pr-board">
+      ${err ? `<div class="cp-card cp-pr-msg">The prices for ${esc(n.nodo)} could not be loaded${err.message ? ': ' + esc(err.message) : ''}. Please try again later.</div>` : `<div class="cp-board cp-pr-board">
         ${['MDA', 'MTR'].map(p => widget('pr-daily-' + p, p + ' · Daily average PML', 'cp-w-m')).join('')}
         ${['MDA', 'MTR'].map(p => widget('pr-hourly-' + p, p + ' · Hourly average PML', 'cp-w-m')).join('')}
         ${widget('pr-max', 'Maximum price', 'cp-w-m cp-pr-ext', seg('max'))}
         ${widget('pr-min', 'Minimum price', 'cp-w-m cp-pr-ext', seg('min'))}
         ${widget('pr-table', 'Hourly prices', 'cp-w-l', seg('table') + `<button class="cp-pr-switch" id="pr-usd" role="switch" aria-checked="${S.usd}" ${hasFx() ? '' : 'disabled title="Exchange rate not available"'}><span>MXN</span><i></i><span>USD</span></button>` +
           `<button class="cp-pr-dl" id="pr-dl" title="Download Excel with MXN and USD sheets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>`)}
-      </div>`;
+      </div>`}`;
 
     // Query controls
-    host.querySelector('#pr-sys').onchange = e => { pickNode(nodes.find(n => n.sistema === e.target.value)); render(); };
-    host.querySelector('#pr-node').onchange = e => { pickNode(nodes.find(n => n.sistema === S.node.sistema && n.nodo === e.target.value)); render(); };
-    const setDates = () => {
-      let f = host.querySelector('#pr-from').value, t = host.querySelector('#pr-to').value;
-      if (!f || !t) return;
-      if (f > t) [f, t] = [t, f];
-      S.from = f < b.min ? b.min : f; S.to = t > b.max ? b.max : t; render();
+    const choose = (sistema, nodo) => { pickNode({ sistema, nodo }); render(); };
+    host.querySelector('#pr-sys').onchange = e => {
+      const s = e.target.value, st = nodes.find(x => x.sistema === s);
+      const first = st ? st.nodo : anyNode() ? (S.catalog.filter(r => r.sistema === s).map(r => r.clave).sort()[0]) : null;
+      if (first) choose(s, first);
     };
-    host.querySelector('#pr-cat').onclick = () => NodosCatalog.open({
-      priced: new Set(nodes.map(n => n.sistema + '/' + n.nodo)),
-      onPick: (sistema, clave) => { const n = nodes.find(x => x.sistema === sistema && x.nodo === clave); if (n) { pickNode(n); render(); } }
-    });
+    const nodeInput = host.querySelector('#pr-node');
+    nodeInput.onchange = () => {
+      const v = nodeInput.value.trim().toUpperCase();
+      if (!anyNode()) return choose(n.sistema, v);
+      const hit = S.catalog.find(r => r.sistema === n.sistema && r.clave === v);
+      if (hit) return choose(hit.sistema, hit.clave);
+      nodeInput.setCustomValidity(`${v} is not a ${n.sistema} NodoP of the catalog.`); nodeInput.reportValidity();
+    };
+    nodeInput.oninput = () => nodeInput.setCustomValidity('');
+    // Keep the range inside the bounds and, with the Worker, at most 31 days (moving the start)
+    const setRange = (f, t) => {
+      if (f > t) [f, t] = [t, f];
+      f = f < b.min ? b.min : f; t = t > b.max ? b.max : t;
+      if (anyNode() && (Date.parse(t) - Date.parse(f)) / 864e5 + 1 > MAX_DAYS) f = addDays(t, 1 - MAX_DAYS);
+      S.from = f; S.to = t; render();
+    };
+    const setDates = () => { const f = host.querySelector('#pr-from').value, t = host.querySelector('#pr-to').value; if (f && t) setRange(f, t); };
+    host.querySelector('#pr-cat').onclick = () => NodosCatalog.open(anyNode()
+      ? { all: true, onPick: choose }
+      : { priced: new Set(nodes.map(x => x.sistema + '/' + x.nodo)), onPick: (sistema, clave) => { if (stored(sistema, clave)) choose(sistema, clave); } });
     host.querySelector('#pr-from').onchange = setDates;
     host.querySelector('#pr-to').onchange = setDates;
     host.querySelectorAll('.cp-pr-presets button').forEach(bt => bt.onclick = () => {
-      const n = +bt.dataset.n; S.to = b.max; S.from = n ? [addDays(b.max, 1 - n), b.min].sort().at(-1) : b.min; render();
+      const k = +bt.dataset.n; setRange(k ? addDays(b.max, 1 - k) : b.min, b.max);
     });
+    if (err) return;
 
     // Charts
     const days = []; for (let f = S.from; f <= S.to; f = addDays(f, 1)) days.push(f);

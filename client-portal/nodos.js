@@ -6,7 +6,8 @@
    (each list shows only the values left by the other filters, with counts),
    sortable columns, a detail row per NodoP and an Excel export of the
    filtered rows. Uses _esc (index.html) and Xlsx (xlsx.js).
-     NodosCatalog.open({ priced: Set of 'SIN/06CDU-400', onPick: (sistema, clave) => {} }) */
+     NodosCatalog.open({ priced: Set of 'SIN/06CDU-400', onPick: (sistema, clave) => {} })
+     NodosCatalog.open({ all: true, onPick })   // every NodoP can show prices (PML Worker) */
 const NodosCatalog = (() => {
   const esc = s => _esc(s);
   const PAGE = 100;
@@ -75,7 +76,8 @@ const NodosCatalog = (() => {
   function wire(panel) { panel.querySelector('.cp-nd-close').onclick = close; }
 
   const pricedKey = r => r.sistema + '/' + r.clave;
-  const hasPrice = r => !!(opts.priced && opts.priced.has(pricedKey(r)));
+  // opts.all: Market Prices can query any NodoP (Worker configured); otherwise only those in opts.priced
+  const hasPrice = r => !!(opts.all || (opts.priced && opts.priced.has(pricedKey(r))));
   function matches(r, skip) {
     if (state.q && !state.q.split(/\s+/).every(w => r._q.includes(w))) return false;
     if (state.priced && !hasPrice(r)) return false;
@@ -99,7 +101,7 @@ const NodosCatalog = (() => {
       if (state.f[k] && !m.has(state.f[k])) m.set(state.f[k], 0);
       return [...m].sort((a, b) => k === 'kv' ? Number(a[0]) - Number(b[0]) : a[0].localeCompare(b[0], 'es'));
     };
-    const pricedCount = opts.priced ? rows.filter(hasPrice).length : 0;
+    const pricedCount = opts.priced && !opts.all ? rows.filter(hasPrice).length : 0;
     panel.innerHTML = `${head()}
       <div class="cp-nd-filters ${state.fopen ? 'open' : ''}">
         <button class="cp-btn-ghost cp-btn-sm cp-nd-ftoggle" id="nd-ftoggle" aria-expanded="${!!state.fopen}">${state.fopen ? 'Hide filters' : 'Filters'}${active - (state.q ? 1 : 0) > 0 ? ` (${active - (state.q ? 1 : 0)})` : ''}</button>
@@ -147,7 +149,7 @@ const NodosCatalog = (() => {
 
   function row(r) {
     const k = pricedKey(r), open = state.openKey === k;
-    return `<tr data-k="${esc(k)}" class="${open ? 'open' : ''}" tabindex="0">${COLS.map(([c]) => `<td>${esc(r[c])}${c === 'clave' && hasPrice(r) ? ' <span class="cp-nd-tag">prices</span>' : ''}</td>`).join('')}</tr>` +
+    return `<tr data-k="${esc(k)}" class="${open ? 'open' : ''}" tabindex="0">${COLS.map(([c]) => `<td>${esc(r[c])}${c === 'clave' && !opts.all && hasPrice(r) ? ' <span class="cp-nd-tag">prices</span>' : ''}</td>`).join('')}</tr>` +
       (open ? `<tr class="cp-nd-detail"><td colspan="${COLS.length}"><div class="cp-nd-dgrid">
         ${[['Load (directly / indirectly modeled)', `${r.carga_directa} / ${r.carga_indirecta}`], ['Generation (directly / indirectly modeled)', `${r.gen_directa} / ${r.gen_indirecta}`],
           ['Transmission operating zone', r.zona_transmision], ['Regional transmission office', r.gerencia_transmision], ['Distribution zone', r.zona_distribucion],
@@ -163,5 +165,8 @@ const NodosCatalog = (() => {
       rows: list.map(r => cols.map(([k]) => r[k])) }]);  // general format keeps 34.5 kV and 115 kV as typed
   }
 
-  return { open, close };
+  // Every NodoP of the catalog ({ sistema, clave, nombre, … }), for the Market Prices selector
+  async function list() { await load(); return rows; }
+
+  return { open, close, list };
 })();
