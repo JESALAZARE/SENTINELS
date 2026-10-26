@@ -732,6 +732,10 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-pr-table td:nth-child(-n+2){text-align:left}
 .cp-pr-table td:first-child{font-family:var(--font-mono);font-weight:400}
 .cp-pr-count{margin-top:8px;font-size:11px;color:var(--silver-300);font-family:var(--font-mono)}
+.cp-pr-loading > *{opacity:.5;pointer-events:none;transition:opacity 150ms}
+.cp-pr-loading::before{content:attr(data-loading);position:sticky;top:8px;z-index:5;display:block;width:max-content;max-width:100%;margin:0 auto 10px;padding:8px 16px;border-radius:999px;background:var(--ink-900);color:#fff;font-size:12px;font-weight:600;box-shadow:var(--shadow-md)}
+.cp-pr-note b{color:var(--ink-900);font-weight:600}
+.cp-pr-f--node input{min-width:150px;text-transform:uppercase}
 .cp-pr-cat{display:inline-flex;align-items:center;gap:8px;height:36px;margin-left:auto}
 .cp-pr-cat svg{width:15px;height:15px}
 /* NodoP catalog dialog (nodos.js) */
