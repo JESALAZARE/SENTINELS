@@ -1,0 +1,17 @@
+{
+ "v": 1,
+ "client": {
+  "salt": "nIBuIeVqCshkci73m0pC4Q==",
+  "iter": 600000,
+  "iv": "xOtlAZpx0dPBO2Xl",
+  "ct": "8qdgznVOuRp788lKhewc6xyUG6k6LeufIddc1ZcuYRnOjf25oPODA12AhT3dklDE"
+ },
+ "admin": {
+  "iv": "v3iPxsKqzerxlbsR",
+  "ct": "L3fY3oZzlC1uGnC2TOVUnxbQrX5ikKCiqLX1A8ob4vnnJWc0VwAmwrPXhWAZh1+U"
+ },
+ "data": {
+  "iv": "o7KFRDwuqTGAVacB",
+  "ct": "nXmHU4KqT7PGMc1pSbrsqFB1rBwpLGWXEB2gL1DEb2G3IasSmupCJgrL9jPXVJm4YquDbx2ppRXc4dUXMoa5Bm8G6VRRMajBXarSIREDw2JHC9z2t0aF+n81OMU7299bZDCpdBMQ4mz8vGrdp6lgdyALc80AdkzR89uF3syF3CsmPjS/066QgRtfSyw53EUW0kKJjq0D4m1CZPH+V0457m7TGbAB8V43kp7bsbiBChyYvvyMJE/kSZlSVYtBMf/PtnnZ+u+nwoU8vJ/Qr2YcfOUirbhveCaDRW1Oiywtpv2H0dKL7xZ4Zq+EJvrBvGSeK3NH59Hw0SW+hz588u7xOoICYw2RJ0bozfMxqkuKn8GTjVVV+OkQQzKD/kx4TiDmG7rB+IOFwoB2BCg/ezlS3QYsRfMu9/ShwX5WME09kkht3AvYrxX0Ew7WqgwfrDR/bXoGWotdgqZQ6hNmnpzEvUDYjyfsss1nSFC51bRGLwFr6G6tz+Tr1mZu1Q40iKvHGoeiUItCse3LS7JzMuQOf/hrRMjW/H4ZBsoxtgf0EDgOi+9XWzY53aQWUBTXcXxQcIGcWlkcEauIJAvHlvPGNPlbH9VtyzU5HrcxlWalPCXqABE+UxNbL2Y3GRKhesRJJz6vfdmBVF56WcYtaqDCC3X0jHhrj6M4fBz85uE6pWjA9PwXkA+6"
+ }
+}
