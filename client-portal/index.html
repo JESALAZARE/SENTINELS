@@ -689,6 +689,57 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
   .s1-copy{opacity:1}
 }
 
+/* ── Market Prices ────────────────────────────────────── */
+.cp-pr-msg{padding:24px;font-size:13px;color:var(--steel-400)}
+.cp-pr-bar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 14px;padding:16px 18px;margin-bottom:16px}
+.cp-pr-f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.cp-pr-f span{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--steel-400)}
+.cp-pr-f select,.cp-pr-f input{height:36px;padding:0 10px;border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--white);font-family:var(--font-sans);font-size:13px;color:var(--ink-900);outline:none;min-width:0}
+.cp-pr-f select:focus,.cp-pr-f input:focus{border-color:var(--ink-900)}
+.cp-pr-f--node select{min-width:150px}
+.cp-pr-presets{display:flex;gap:6px}
+.cp-pr-presets .cp-doc-filter{height:36px;padding:0 12px}
+.cp-pr-note{flex-basis:100%;font-size:11px;color:var(--steel-400);font-family:var(--font-mono);line-height:1.5}
+.cp-pr-board .cp-widget-head{flex-wrap:wrap;margin-right:0}
+.cp-pr-seg{margin-left:auto}
+.cp-pr-seg button{padding:4px 10px}
+.cp-pr-sum{margin-top:8px;font-size:12px;color:var(--steel-400)}
+.cp-pr-sum b{font-family:var(--font-mono);color:var(--ink-900);font-weight:500}
+.cp-pr-when{font-size:12px;color:var(--steel-400);margin:8px 0 12px;font-family:var(--font-mono)}
+.cp-pr-parts{display:flex;flex-direction:column;border-top:1px solid var(--border-subtle)}
+.cp-pr-parts div{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--border-subtle);font-size:12px;color:var(--graphite-500)}
+.cp-pr-parts span{display:inline-flex;align-items:center;gap:8px}
+.cp-pr-parts i{width:10px;height:10px;border-radius:2px}
+.cp-pr-parts b{font-family:var(--font-mono);font-weight:500;color:var(--ink-900)}
+.cp-pr-switch{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 4px;border:0;background:none;font-family:var(--font-mono);font-size:11px;color:var(--steel-400);cursor:pointer}
+.cp-pr-switch i{position:relative;width:34px;height:18px;border-radius:9px;background:var(--border-default);transition:background 150ms}
+.cp-pr-switch i::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform 150ms}
+.cp-pr-switch[aria-checked="true"] i{background:var(--ink-900)}
+.cp-pr-switch[aria-checked="true"] i::after{transform:translateX(16px)}
+.cp-pr-switch[aria-checked="false"] span:first-child,.cp-pr-switch[aria-checked="true"] span:last-child{color:var(--ink-900);font-weight:600}
+.cp-pr-switch:disabled{opacity:.45;cursor:default}
+.cp-pr-fx{font-size:12px;color:var(--steel-400);margin-bottom:8px;line-height:1.5}
+.cp-pr-fx b{color:var(--ink-900);font-family:var(--font-mono);font-weight:500}
+.cp-pr-fx a{color:var(--ink-900)}
+.cp-pr-scroll{max-height:420px;overflow:auto;border:1px solid var(--border-subtle);border-radius:var(--radius-md)}
+.cp-pr-table th{position:sticky;top:0;background:var(--white);z-index:1;text-align:right}
+.cp-pr-table th small{display:block;font-size:9px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--silver-300)}
+.cp-pr-table th:nth-child(-n+2){text-align:left;vertical-align:top}
+.cp-pr-table td{text-align:right}
+.cp-pr-table td:nth-child(-n+2){text-align:left}
+.cp-pr-table td:first-child{font-family:var(--font-mono);font-weight:400}
+.cp-pr-count{margin-top:8px;font-size:11px;color:var(--silver-300);font-family:var(--font-mono)}
+@media (max-width:1180px) and (min-width:601px){
+  .cp-pr-board .cp-pr-ext{grid-column:span 1}
+}
+@media (max-width:600px){
+  .cp-pr-bar{display:grid;grid-template-columns:1fr 1fr;padding:14px;gap:12px}
+  .cp-pr-f--node,.cp-pr-presets,.cp-pr-note{grid-column:1 / -1}
+  .cp-pr-f select,.cp-pr-f input{height:44px;font-size:16px;width:100%}
+  .cp-pr-presets .cp-doc-filter{flex:1;height:40px}
+  .cp-pr-scroll{max-height:60dvh}
+}
+
 /* ── Boards: tablet & phone ───────────────────────────── */
 @media (max-width:1180px){
   .cp-board{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -785,6 +836,10 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
       <button class="cp-nav-item" data-section="intelligence">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
         Market Intelligence
+      </button>
+      <button class="cp-nav-item" data-section="prices">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/><circle cx="19" cy="6" r="1.2"/></svg>
+        Market Prices
       </button>
       <button class="cp-nav-item" data-section="contract">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
@@ -942,6 +997,19 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
         <div class="cp-card" style="padding:0">
           <div class="cp-intel-page-list" id="cp-intel-full"></div>
         </div>
+      </section>
+
+      <!-- ╔══════════════════════════════════════════╗
+           ║  MARKET PRICES                           ║
+           ╚══════════════════════════════════════════╝ -->
+      <section id="sec-prices" class="cp-section">
+        <div class="cp-page-head">
+          <div>
+            <h1 class="cp-page-title">Market Prices</h1>
+            <p class="cp-page-sub">Local marginal prices (PML) by NodoP in the day-ahead (MDA) and real-time (MTR) markets</p>
+          </div>
+        </div>
+        <div id="prices-root"></div>
       </section>
 
       <!-- ╔══════════════════════════════════════════╗
@@ -1377,6 +1445,7 @@ document.addEventListener('keydown', e => {
 const SECTION_TITLES = {
   dashboard: 'Dashboard',
   intelligence: 'Market Intelligence',
+  prices: 'Market Prices',
   assistant: 'Sentinel One',
   sites: 'My Sites',
   contract: 'My Contract',
@@ -1405,6 +1474,7 @@ function goTo(id) {
   document.getElementById('cp-content').classList.toggle('cp-content--chat', id === 'assistant');
   if (id === 'assistant') S1.onShow();
   if (id === 'sites') SitesPage.render();
+  if (id === 'prices') PricesPage.show();
 }
 
 // Nav button clicks
@@ -1558,6 +1628,7 @@ function filterDocs(btn, type) {
 <script src="energy.js"></script>
 <script src="board.js"></script>
 <script src="sites.js"></script>
+<script src="prices.js"></script>
 <script src="sentinel-one.js"></script>
 <!-- ═══════════════════════════════════════════════════
      BECOME A CLIENT MODAL
