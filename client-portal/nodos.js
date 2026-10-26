@@ -7,7 +7,7 @@
    sortable columns, a detail row per NodoP and an Excel export of the
    filtered rows. Uses _esc (index.html) and Xlsx (xlsx.js).
      NodosCatalog.open({ priced: Set of 'SIN/06CDU-400', onPick: (sistema, clave) => {} })
-     NodosCatalog.open({ all: true, onPick })   // every NodoP can show prices (PML Worker) */
+     NodosCatalog.open({ all: true, onPick, onPickZone })   // every NodoP and load zone can show prices (PML Worker) */
 const NodosCatalog = (() => {
   const esc = s => _esc(s);
   const PAGE = 100;
@@ -113,6 +113,7 @@ const NodosCatalog = (() => {
         <div class="cp-nd-count"><b>${list.length.toLocaleString('en-US')}</b> of ${rows.length.toLocaleString('en-US')} NodosP</div>
         ${pricedCount ? `<label class="cp-nd-chk"><input type="checkbox" id="nd-priced" ${state.priced ? 'checked' : ''}> With price data (${pricedCount})</label>` : ''}
         <div class="cp-nd-actions">
+          ${zoneBtn(state.f.zona_carga, rows.find(r => r.zona_carga === state.f.zona_carga), 'cp-btn-dark cp-btn-sm')}
           ${active ? '<button class="cp-btn-ghost cp-btn-sm" id="nd-clear">Clear filters</button>' : ''}
           <button class="cp-pr-dl" id="nd-xlsx" ${list.length ? '' : 'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
           <a class="cp-nd-src" href="${esc(CAT.archivo)}" target="_blank" rel="noopener noreferrer">Original file (CENACE)</a>
@@ -142,6 +143,7 @@ const NodosCatalog = (() => {
       state.openKey = state.openKey === tr.dataset.k ? null : tr.dataset.k; render();
     });
     panel.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { const [s, c] = b.dataset.pick.split('/'); close(); opts.onPick && opts.onPick(s, c); });
+    panel.querySelectorAll('[data-zone]').forEach(b => b.onclick = () => { const i = b.dataset.zone.indexOf('/'); close(); opts.onPickZone(b.dataset.zone.slice(0, i), b.dataset.zone.slice(i + 1)); });
     panel.querySelector('#nd-xlsx').onclick = () => exportXlsx(list);
   }
   // Keep typing in the search box after a re-render
@@ -155,8 +157,13 @@ const NodosCatalog = (() => {
           ['Transmission operating zone', r.zona_transmision], ['Regional transmission office', r.gerencia_transmision], ['Distribution zone', r.zona_distribucion],
           ['Divisional distribution office', r.gerencia_distribucion], ['State (INEGI key)', `${r.entidad} (${r.clave_entidad})`], ['Municipality (INEGI key)', `${r.municipio} (${r.clave_municipio})`]]
           .map(([l, v]) => `<div><span>${l}</span><b>${esc(v)}</b></div>`).join('')}</div>
-        ${hasPrice(r) ? `<button class="cp-btn-dark cp-btn-sm" data-pick="${esc(k)}">View prices for ${esc(r.clave)}</button>` : '<div class="cp-nd-nop">Market Prices does not have data for this NodoP yet.</div>'}</td></tr>` : '');
+        <div class="cp-nd-btns">${hasPrice(r) ? `<button class="cp-btn-dark cp-btn-sm" data-pick="${esc(k)}">View prices for ${esc(r.clave)}</button>` : '<div class="cp-nd-nop">Market Prices does not have data for this NodoP yet.</div>'}
+        ${zoneBtn(r.zona_carga, r, 'cp-btn-ghost cp-btn-sm')}</div></td></tr>` : '');
   }
+
+  // Prices of a load zone (distributed node, SW-PEND); only when Market Prices can query them
+  const zoneBtn = (zona, r, cls) => opts.onPickZone && zona && zona !== 'No Aplica' && r
+    ? `<button class="${cls}" data-zone="${esc(r.sistema + '/' + zona)}">View load zone ${esc(zona)} prices</button>` : '';
 
   function exportXlsx(list) {
     const cols = [...COLS, ['zona_transmision', 'Transmission zone'], ['gerencia_transmision', 'Transmission office'], ['zona_distribucion', 'Distribution zone'],

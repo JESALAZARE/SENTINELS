@@ -1,13 +1,14 @@
 # Worker de precios (PML) · guía de instalación
 
 Este Worker permite que la pestaña **Market Prices** del portal consulte los precios de
-**cualquier NodoP del catálogo del CENACE**, no solo los que se guardan cada día en el
-repositorio. Recibe la consulta del portal, la hace al servicio público SW-PML del CENACE y
-guarda las respuestas en la caché de Cloudflare para no repetir llamadas.
+**cualquier NodoP del catálogo del CENACE** (servicio SW-PML) y de **cualquier Zona de Carga o
+Nodo Distribuido** (servicio SW-PEND), no solo los que se guardan cada día en el repositorio.
+Recibe la consulta del portal, la hace al servicio público del CENACE y guarda las respuestas
+en la caché de Cloudflare para no repetir llamadas.
 
 - No necesita llaves ni almacenamiento: los precios del CENACE son públicos.
 - Solo acepta consultas que vengan de `https://sentinels.com.mx`.
-- Cada consulta abarca máximo **31 días** y **20 NodosP**.
+- Cada consulta abarca máximo **31 días** y **20 NodosP** o **10 Zonas de Carga**.
 - Es gratis dentro del plan gratuito de Cloudflare (100,000 consultas al día).
 
 Se hace una sola vez. Tiempo aproximado: 10 minutos.
