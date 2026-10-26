@@ -332,9 +332,10 @@ const Board = (() => {
 
   /* ── Interactive charts (SVG, redrawn on resize) ── */
   const NS = 'http://www.w3.org/2000/svg';
+  // ranges: true = 3M/6M/12M, false = none, or a list of [points, label]
   function chartShell(body, { labels, legend, ranges = true }) {
     const n = labels.length;
-    const opts = [[3, '3M'], [6, '6M'], [12, '12M']].filter(([k]) => k < n);
+    const opts = (Array.isArray(ranges) ? ranges : [[3, '3M'], [6, '6M'], [12, '12M']]).filter(([k]) => k < n);
     body.innerHTML = `<div class="cp-ch-bar">
         <div class="cp-ch-legend">${(legend || []).map((s, i) => `<button class="cp-ch-key" data-i="${i}"><span style="background:${s.color}"></span>${esc(s.name)}</button>`).join('')}</div>
         ${ranges && opts.length ? `<div class="cp-ch-ranges">${opts.map(([k, t]) => `<button data-r="${k}">${t}</button>`).join('')}<button data-r="0" class="on">All</button></div>` : ''}
@@ -361,9 +362,11 @@ const Board = (() => {
   }
 
   // band: shade the gap between exactly two series (rate vs CFE); null values leave a gap in the line
-  function lineChart(body, { labels, series, fmt, axis, band = true }) {
-    const { plot, tip } = chartShell(body, { labels, legend: series.length > 1 ? series : null });
-    const hidden = new Set();
+  // off: indexes of series that start hidden (toggled from the legend)
+  function lineChart(body, { labels, series, fmt, axis, band = true, ranges, off = [] }) {
+    const { plot, tip } = chartShell(body, { labels, legend: series.length > 1 ? series : null, ranges });
+    const hidden = new Set(off);
+    body.querySelectorAll('.cp-ch-key').forEach(k => k.classList.toggle('off', hidden.has(+k.dataset.i)));
     let range = 0;
     const H = 210, pL = 46, pR = 12, pT = 12, pB = 26;
     function draw() {
