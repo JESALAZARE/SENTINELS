@@ -5,7 +5,14 @@
    client sees comes from one place.  Uses the global ME (index.html). */
 const Energy = (() => {
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const sites = () => ((typeof ME !== 'undefined' && ME && ME.sites) || []);
+  const allSites = () => ((typeof ME !== 'undefined' && ME && ME.sites) || []);
+  // The Dashboard can narrow every calculation to some plants (withScope); My Sites and Sentinel One see all
+  let scope = null;
+  const sites = () => scope ? allSites().filter(s => scope.includes(s.id)) : allSites();
+  function withScope(ids, fn) {
+    const prev = scope; scope = ids && ids.length ? ids : null;
+    try { return fn(); } finally { scope = prev; }
+  }
   const contracts = () => ((typeof ME !== 'undefined' && ME && ME.contracts) || []);
   const kwh = b => b.kwh_total || ((b.kwh_base || 0) + (b.kwh_int || 0) + (b.kwh_peak || 0)) || 0;
   const label = m => { const [y, mo] = String(m).split('-'); return MONTHS[+mo - 1] + ' ' + String(y).slice(2); };
@@ -19,7 +26,7 @@ const Energy = (() => {
   }
   // Unit costs exclude IVA: use the captured subtotal, else total − IVA, else estimate it with
   // the plant's IVA rate (16% general, 8% in the northern/southern border region)
-  const siteOf = b => sites().find(s => b.site ? s.id === b.site : (s.bills || []).includes(b));
+  const siteOf = b => allSites().find(s => b.site ? s.id === b.site : (s.bills || []).includes(b));
   const ivaRateOf = b => { const s = siteOf(b); return s && s.iva_rate != null ? s.iva_rate : 16; };
   const ivaKnown = b => b.subtotal_mxn != null || b.iva_mxn != null;
   function subtotalOf(b) {
@@ -53,6 +60,19 @@ const Energy = (() => {
     }));
   }
   const latestMonth = () => { const m = monthly(); return m.length ? m[m.length - 1] : null; };
+
+  // Per-plant monthly rows over a shared month axis, for comparison charts (null where a plant has no bill)
+  function bySite() {
+    const months = [...new Set(allBills().map(b => b.month))].sort();
+    return {
+      months, labels: months.map(label),
+      sites: sites().map(s => {
+        const by = Object.fromEntries((s.bills || []).map(b => [b.month, b]));
+        const pick = f => months.map(m => by[m] ? f(by[m]) : null);
+        return { id: s.id, name: s.name, kwh: pick(kwh), base: pick(b => b.kwh_base || 0), int: pick(b => b.kwh_int || 0), peak: pick(b => b.kwh_peak || 0), costKwh: pick(costKwhOf) };
+      })
+    };
+  }
 
   // Year-to-date consumption and spend from the bills (all plants); defaults to the latest bill's year
   function ytd(year) {
@@ -134,5 +154,5 @@ const Energy = (() => {
     return L.join('\n');
   }
 
-  return { sites, contracts, kwh, label, isQualified, subtotalOf, ivaOf, ivaKnown, ivaRateOf, costKwhOf, savingsOf, allBills, hasBills, hasRef, hasPeriods, monthly, latestMonth, ytd, savingsYTD, siteSummary, alerts, toText };
+  return { sites, allSites, withScope, bySite, contracts, kwh, label, isQualified, subtotalOf, ivaOf, ivaKnown, ivaRateOf, costKwhOf, savingsOf, allBills, hasBills, hasRef, hasPeriods, monthly, latestMonth, ytd, savingsYTD, siteSummary, alerts, toText };
 })();

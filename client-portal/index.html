@@ -354,6 +354,24 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-ch-ranges button{border:0;background:#fff;padding:4px 9px;font-family:var(--font-mono);font-size:11px;color:var(--steel-400);cursor:pointer}
 .cp-ch-ranges button+button{border-left:1px solid var(--border-subtle)}
 .cp-ch-ranges button.on{background:var(--ink-900);color:#fff}
+.cp-ch-parts{margin-left:0}
+/* Dashboard plant selector */
+.cp-plant-pick{display:flex;gap:8px;flex-wrap:wrap;margin:-8px 0 18px}
+.cp-plant-chip{display:inline-flex;align-items:center;gap:8px}
+.cp-plant-chip.active{background:var(--white);color:var(--ink-900);border-color:var(--ink-900);box-shadow:inset 0 0 0 1px var(--ink-900)}
+.cp-plant-chip:not(.active){color:var(--steel-400)}
+.cp-plant-chip:not(.active) i{opacity:.35}
+.cp-plant-chip i,.cp-plant-opt i{width:10px;height:10px;border-radius:2px;flex:none}
+.cp-plant-filter{position:relative;display:inline-block;margin:-8px 0 18px}
+.cp-plant-dd{height:36px;padding:0 12px;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--white);font-family:var(--font-sans);font-size:13px;color:var(--graphite-500);cursor:pointer}
+.cp-plant-dd b{color:var(--ink-900);font-weight:600}
+.cp-plant-dd svg{width:14px;height:14px;margin-left:4px}
+.cp-plant-menu{position:absolute;z-index:60;top:calc(100% + 6px);left:0;min-width:260px;max-height:340px;overflow-y:auto;background:var(--white);border:1px solid var(--border-default);border-radius:var(--radius-md);box-shadow:0 12px 32px rgba(11,13,15,.14);padding:6px}
+.cp-plant-menu[hidden]{display:none}
+.cp-plant-opt{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;font-family:var(--font-sans);font-size:14px;color:var(--ink-900);cursor:pointer}
+.cp-plant-opt:hover{background:#F4F5F6}
+.cp-plant-opt input{width:16px;height:16px;margin:0;accent-color:var(--ink-900);flex:none}
+.cp-plant-opt--all{font-weight:600;border-bottom:1px solid var(--border-subtle);border-radius:0;margin-bottom:4px}
 .cp-ch-total{font-size:12px;color:var(--steel-400)}
 .cp-ch-total b{font-family:var(--font-mono);color:var(--ink-900);font-size:14px}
 .cp-ch-plot{position:relative;height:210px;touch-action:pan-y}
@@ -447,6 +465,13 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
   /* Documents: name + date, download button on the right */
   .cp-doc-filters{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin-bottom:14px}
   .cp-doc-filter{flex:none}
+  .cp-plant-pick{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin:-4px 0 14px}
+  .cp-plant-pick .cp-doc-filter{height:40px}
+  .cp-plant-filter{display:block;margin:-4px 0 14px}
+  .cp-plant-dd{width:100%;height:44px;font-size:14px}
+  .cp-plant-dd svg{margin-left:auto}
+  .cp-plant-menu{right:0;min-width:0;max-height:min(340px,60dvh)}
+  .cp-plant-opt{min-height:44px}
   .cp-doc-thead{display:none}
   .cp-doc-row{grid-template-columns:1fr 48px}
   .cp-doc-row .cp-doc-cell:nth-child(1){grid-column:1;grid-row:1;padding-bottom:2px}
@@ -785,6 +810,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
             <button class="cp-btn-dark cp-btn-sm" onclick="Board.openGallery('dashboard')">+ Add widget</button>
           </div>
         </div>
+        <div id="board-plants"></div>
         <div class="cp-board" id="board-dashboard"></div>
       </section><!-- /dashboard -->
 

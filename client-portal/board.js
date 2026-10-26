@@ -23,6 +23,9 @@ const Board = (() => {
     const a = Math.abs(v), s = v < 0 ? '−$' : '$';
     return a >= 1e6 ? s + (a / 1e6).toFixed(2) + 'M' : a >= 1e4 ? s + Math.round(a / 1e3) + 'k' : s + Math.round(a).toLocaleString('en-US');
   };
+  // Energy amounts: MWh / GWh in tooltips, k / M kWh on the axis (so small plants get distinct ticks)
+  const kwhFmt = v => v >= 1e6 ? fx(v / 1e6, 2) + ' GWh' : fx(v / 1e3, 0) + ' MWh';
+  const kwhAxis = v => v >= 1e6 ? fx(v / 1e6, v % 1e6 ? 1 : 0) + 'M' : v >= 1e3 ? fx(v / 1e3, 0) + 'k' : fx(v, 0);
   const monthsLeft = () => {
     const end = _date(P().contract_end);
     return end ? Math.max(0, Math.round((end - new Date()) / (1000 * 60 * 60 * 24 * 30.44))) : null;
@@ -201,22 +204,34 @@ const Board = (() => {
         b.innerHTML = a.length ? `<div class="cp-alerts">${a.map(x => `<div class="cp-alert cp-alert--${x.level}">${esc(x.text)}</div>`).join('')}</div>`
           : '<div class="cp-widget-empty">No alerts right now.</div>';
       } },
-    chart_periods: { cat: 'Plants & bills', title: 'Monthly consumption by period (B · I · P)', icon: 'bar', sizes: ['m', 'w', 'l'], desc: 'Base (B), intermediate (I) and peak (P) kWh each month.',
+    chart_periods: { cat: 'Plants & bills', title: () => comparing() ? 'Monthly consumption by plant (B · I · P)' : 'Monthly consumption by period (B · I · P)', icon: 'bar', sizes: ['m', 'w', 'l'], desc: 'Base (B), intermediate (I) and peak (P) kWh each month.',
       ready: () => Energy.hasPeriods() && Energy.monthly().length >= 1, need: 'bills with kWh by period',
       render: b => {
+        // Two or more plants selected: one bar per plant each month, filterable by period
+        if (comparing()) {
+          const d = Energy.bySite();
+          return groupedChart(b, { labels: d.labels, groups: d.sites.map(s => ({ name: s.name, color: plantColor(s.id), parts: [s.base, s.int, s.peak, s.kwh.map((v, i) => v == null ? null : Math.max(0, v - s.base[i] - s.int[i] - s.peak[i]))] })),
+            parts: ['Base (B)', 'Intermediate (I)', 'Peak (P)', 'Not split by period'], short: ['B', 'I', 'P', 'Not split'], fmt: kwhFmt, axis: kwhAxis });
+        }
         const m = Energy.monthly();
         const series = [{ name: 'Base (B)', color: '#B4BBC2', values: m.map(r => r.base) }, { name: 'Intermediate (I)', color: '#646C75', values: m.map(r => r.int) }, { name: 'Peak (P)', color: C.ink, values: m.map(r => r.peak) }];
         // Bills that only report a total (e.g. GDMTO) still count toward the month
         const rest = m.map(r => Math.max(0, r.kwh - r.base - r.int - r.peak));
         if (rest.some(v => v > 0)) series.push({ name: 'Not split by period', color: '#E3DCC8', values: rest });
-        stackedChart(b, { labels: m.map(r => r.label), series, fmt: v => fx(v / 1e6, 2) + ' GWh', axis: v => fx(v / 1e6, 1) });
+        stackedChart(b, { labels: m.map(r => r.label), series, fmt: kwhFmt, axis: kwhAxis });
       } },
     chart_real_savings: { cat: 'Plants & bills', title: 'Real savings by month', icon: 'bar', sizes: ['m', 'w', 'l'], desc: 'CFE equivalent minus what you paid, from your bills.',
       ready: () => Energy.monthly().filter(r => r.savings != null).length >= 1, need: 'bills with their CFE equivalent',
       render: b => { const m = Energy.monthly().filter(r => r.savings != null); barChart(b, { labels: m.map(r => r.label), values: m.map(r => r.savings), color: C.green, fmt: money, axis: money, total: true }); } },
-    chart_cost_kwh: { cat: 'Plants & bills', title: 'Cost per kWh by month', icon: 'line', sizes: ['m', 'w', 'l'], desc: 'Subtotal before IVA ÷ kWh, all plants combined.',
+    chart_cost_kwh: { cat: 'Plants & bills', title: () => comparing() ? 'Cost per kWh by plant' : 'Cost per kWh by month', icon: 'line', sizes: ['m', 'w', 'l'], desc: 'Subtotal before IVA ÷ kWh, all plants combined.',
       ready: () => Energy.monthly().filter(r => r.costKwh != null).length >= 2, need: 'two or more monthly bills',
-      render: b => { const m = Energy.monthly().filter(r => r.costKwh != null); lineChart(b, { labels: m.map(r => r.label), series: [{ name: 'Cost per kWh (before IVA)', color: C.ink, values: m.map(r => r.costKwh), area: true }], fmt: v => fx(v, 3) + ' MXN/kWh', axis: v => fx(v) }); } },
+      render: b => {
+        if (comparing()) {
+          const d = Energy.bySite();
+          return lineChart(b, { labels: d.labels, series: d.sites.map(s => ({ name: s.name, color: plantColor(s.id), values: s.costKwh })), fmt: v => fx(v, 3) + ' MXN/kWh', axis: v => fx(v), band: false });
+        }
+        const m = Energy.monthly().filter(r => r.costKwh != null); lineChart(b, { labels: m.map(r => r.label), series: [{ name: 'Cost per kWh (before IVA)', color: C.ink, values: m.map(r => r.costKwh), area: true }], fmt: v => fx(v, 3) + ' MXN/kWh', axis: v => fx(v) });
+      } },
     sites_table: { cat: 'Plants & bills', title: 'Your plants', icon: 'person', sizes: ['m', 'w', 'l'], desc: 'Latest bill of each plant side by side.',
       ready: () => Energy.sites().length > 0, need: 'plants',
       render: b => {
@@ -297,7 +312,8 @@ const Board = (() => {
     tip.style.left = (x + 14 + w <= W ? x + 14 : Math.max(4, x - 14 - w)) + 'px';
   }
 
-  function lineChart(body, { labels, series, fmt, axis }) {
+  // band: shade the gap between exactly two series (rate vs CFE); null values leave a gap in the line
+  function lineChart(body, { labels, series, fmt, axis, band = true }) {
     const { plot, tip } = chartShell(body, { labels, legend: series.length > 1 ? series : null });
     const hidden = new Set();
     let range = 0;
@@ -310,7 +326,8 @@ const Board = (() => {
       plot.querySelector('svg')?.remove();
       const svg = document.createElementNS(NS, 'svg');
       svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
-      const vals = vis.flatMap(s => s.values.slice(from)).filter(isFinite);
+      const ok = v => v != null && isFinite(v);
+      const vals = vis.flatMap(s => s.values.slice(from)).filter(ok);
       if (!vals.length) { plot.prepend(svg); return; }
       const sc = niceScale(Math.min(...vals), Math.max(...vals));
       const x = i => pL + (n === 1 ? (W - pL - pR) / 2 : i / (n - 1) * (W - pL - pR));
@@ -321,14 +338,21 @@ const Board = (() => {
       const every = Math.ceil(n / Math.max(2, Math.floor((W - pL - pR) / 62)));
       L.forEach((l, i) => { if (i % every === 0 || i === n - 1 && n <= 4) g += `<text x="${x(i)}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}" class="cp-ch-ax">${esc(l)}</text>`; });
       // Shaded gap between the two series (savings band)
-      if (vis.length === 2 && series.length === 2) {
+      if (band && vis.length === 2 && series.length === 2) {
         const a = vis[0].values.slice(from), b = vis[1].values.slice(from);
         g += `<polygon points="${b.map((v, i) => `${x(i)},${y(v)}`).concat(a.map((v, i) => `${x(i)},${y(v)}`).reverse()).join(' ')}" fill="${C.green}" opacity="0.08"/>`;
       }
       vis.forEach(s => {
-        const v = s.values.slice(from), pts = v.map((d, i) => `${x(i)},${y(d)}`).join(' ');
-        if (s.area) g += `<polygon points="${x(0)},${y(sc.lo)} ${pts} ${x(n - 1)},${y(sc.lo)}" fill="${s.color}" opacity="0.1"/>`;
-        g += `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+        const v = s.values.slice(from);
+        // Split into runs of consecutive values so a missing month breaks the line
+        const runs = [[]];
+        v.forEach((d, i) => { if (ok(d)) runs[runs.length - 1].push([i, d]); else if (runs[runs.length - 1].length) runs.push([]); });
+        runs.filter(r => r.length).forEach(r => {
+          const pts = r.map(([i, d]) => `${x(i)},${y(d)}`).join(' ');
+          if (s.area) g += `<polygon points="${x(r[0][0])},${y(sc.lo)} ${pts} ${x(r[r.length - 1][0])},${y(sc.lo)}" fill="${s.color}" opacity="0.1"/>`;
+          g += r.length > 1 ? `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
+            : `<circle cx="${x(r[0][0])}" cy="${y(r[0][1])}" r="3" fill="${s.color}"/>`;
+        });
       });
       g += `<line class="cp-ch-cross" y1="${pT}" y2="${H - pB}" stroke="${C.steel}" stroke-dasharray="3 3" visibility="hidden"/>`;
       vis.forEach((s, k) => g += `<circle class="cp-ch-dot" data-k="${k}" r="4.5" fill="#fff" stroke="${s.color}" stroke-width="2.5" visibility="hidden"/>`);
@@ -339,9 +363,9 @@ const Board = (() => {
         const i = Math.max(0, Math.min(n - 1, Math.round((px - pL) / ((W - pL - pR) / Math.max(1, n - 1)))));
         const cross = svg.querySelector('.cp-ch-cross');
         cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
-        svg.querySelectorAll('.cp-ch-dot').forEach(d => { const s = vis[d.dataset.k]; d.setAttribute('cx', x(i)); d.setAttribute('cy', y(s.values[from + i])); d.setAttribute('visibility', 'visible'); });
-        let rows = vis.map(s => `<div><span style="background:${s.color}"></span>${esc(s.name)} <b>${esc(fmt(s.values[from + i]))}</b></div>`).join('');
-        if (vis.length === 2 && series.length === 2) rows += `<div class="cp-ch-tip-note">Spread ${esc(fx(vis[1].values[from + i] - vis[0].values[from + i]))} MXN/kWh</div>`;
+        svg.querySelectorAll('.cp-ch-dot').forEach(d => { const s = vis[d.dataset.k], v = s.values[from + i]; d.setAttribute('cx', x(i)); d.setAttribute('cy', ok(v) ? y(v) : 0); d.setAttribute('visibility', ok(v) ? 'visible' : 'hidden'); });
+        let rows = vis.map(s => `<div><span style="background:${s.color}"></span>${esc(s.name)} <b>${ok(s.values[from + i]) ? esc(fmt(s.values[from + i])) : '—'}</b></div>`).join('');
+        if (band && vis.length === 2 && series.length === 2) rows += `<div class="cp-ch-tip-note">Spread ${esc(fx(vis[1].values[from + i] - vis[0].values[from + i]))} MXN/kWh</div>`;
         tipAt(plot, tip, x(i), `<div class="cp-ch-tip-t">${esc(L[i])}</div>${rows}`);
       };
       const leave = () => { tip.hidden = true; svg.querySelectorAll('.cp-ch-cross,.cp-ch-dot').forEach(e => e.setAttribute('visibility', 'hidden')); };
@@ -454,6 +478,69 @@ const Board = (() => {
     });
   }
 
+  // Side-by-side bars, one per group (plant) each month. Each group's value is the sum of the
+  // chosen parts (base / intermediate / peak / not split); legend toggles groups.
+  function groupedChart(body, { labels, groups, parts, short, fmt, axis }) {
+    const { plot, tip } = chartShell(body, { labels, legend: groups });
+    const hidden = new Set();
+    let range = 0, part = -1;  // -1 = all parts
+    const usedParts = parts.map((p, k) => groups.some(g => g.parts[k].some(v => v > 0)));
+    body.querySelector('.cp-ch-bar').insertAdjacentHTML('beforeend', `<div class="cp-ch-ranges cp-ch-parts"><button data-p="-1" class="on">All</button>${parts.map((p, k) => usedParts[k] ? `<button data-p="${k}" title="${esc(p)}">${esc(short[k])}</button>` : '').join('')}</div>`);
+    const H = 210, pL = 46, pR = 12, pT = 12, pB = 26;
+    const val = (g, i) => g.parts[0][i] == null ? null : (part < 0 ? g.parts.reduce((t, p) => t + (p[i] || 0), 0) : g.parts[part][i] || 0);
+    function draw() {
+      const W = plot.clientWidth; if (!W) return;
+      const from = range ? Math.max(0, labels.length - range) : 0;
+      const L = labels.slice(from), n = L.length, vis = groups.filter((g, k) => !hidden.has(k));
+      plot.querySelector('svg')?.remove();
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
+      const sc = niceScale(0, Math.max(1, ...vis.flatMap(g => L.map((_, i) => val(g, from + i) || 0))));
+      const y = v => pT + (1 - (v - sc.lo) / (sc.hi - sc.lo)) * (H - pT - pB);
+      const slot = (W - pL - pR) / n, gw = Math.min(slot * 0.78, vis.length * 26), bw = Math.max(2, gw / vis.length - 2);
+      const cx = i => pL + slot * i + slot / 2;
+      let g = '';
+      for (let v = sc.lo; v <= sc.hi + sc.step / 2; v += sc.step)
+        g += `<line x1="${pL}" x2="${W - pR}" y1="${y(v)}" y2="${y(v)}" stroke="${C.grid}"/><text x="${pL - 6}" y="${y(v) + 3.5}" text-anchor="end" class="cp-ch-ax">${esc(axis(v))}</text>`;
+      const every = Math.ceil(n / Math.max(2, Math.floor((W - pL - pR) / 52)));
+      L.forEach((l, i) => {
+        vis.forEach((gr, k) => {
+          const v = val(gr, from + i);
+          if (v > 0) g += `<rect class="cp-ch-b" data-i="${i}" x="${cx(i) - gw / 2 + k * (bw + 2) + 1}" y="${y(v)}" width="${bw}" height="${Math.max(0.5, y(0) - y(v))}" rx="1.5" fill="${gr.color}"/>`;
+        });
+        if (i % every === 0) g += `<text x="${cx(i)}" y="${H - 6}" text-anchor="middle" class="cp-ch-ax">${esc(l)}</text>`;
+      });
+      svg.innerHTML = g;
+      plot.prepend(svg);
+      const move = ev => {
+        const r = svg.getBoundingClientRect(), px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+        const i = Math.max(0, Math.min(n - 1, Math.floor((px - pL) / slot)));
+        svg.querySelectorAll('.cp-ch-b').forEach(b => b.setAttribute('opacity', +b.dataset.i === i ? 1 : 0.45));
+        const rows = vis.map(gr => {
+          const v = val(gr, from + i);
+          const split = part < 0 && v != null && gr.parts.slice(0, 3).some(p => p[from + i] > 0)
+            ? `<div class="cp-ch-tip-note">B ${esc(fmt(gr.parts[0][from + i]))} · I ${esc(fmt(gr.parts[1][from + i]))} · P ${esc(fmt(gr.parts[2][from + i]))}</div>` : '';
+          return `<div><span style="background:${gr.color}"></span>${esc(gr.name)} <b>${v == null ? 'no bill' : esc(fmt(v))}</b></div>${split}`;
+        }).join('');
+        tipAt(plot, tip, cx(i), `<div class="cp-ch-tip-t">${esc(L[i])}${part >= 0 ? ' · ' + esc(parts[part]) : ''}</div>${rows}`);
+      };
+      svg.addEventListener('pointermove', move); svg.addEventListener('pointerdown', move);
+      svg.addEventListener('pointerleave', () => { tip.hidden = true; svg.querySelectorAll('.cp-ch-b').forEach(b => b.setAttribute('opacity', 1)); });
+    }
+    const redraw = observe(plot, draw);
+    body.querySelectorAll('.cp-ch-key').forEach(k => k.onclick = () => {
+      const i = +k.dataset.i;
+      if (hidden.has(i)) hidden.delete(i); else if (hidden.size < groups.length - 1) hidden.add(i);
+      k.classList.toggle('off', hidden.has(i)); redraw();
+    });
+    body.querySelectorAll('.cp-ch-ranges:not(.cp-ch-parts) button').forEach(bt => bt.onclick = () => {
+      range = +bt.dataset.r; body.querySelectorAll('.cp-ch-ranges:not(.cp-ch-parts) button').forEach(o => o.classList.toggle('on', o === bt)); redraw();
+    });
+    body.querySelectorAll('.cp-ch-parts button').forEach(bt => bt.onclick = () => {
+      part = +bt.dataset.p; body.querySelectorAll('.cp-ch-parts button').forEach(o => o.classList.toggle('on', o === bt)); redraw();
+    });
+  }
+
   function donut(body, parts) {
     const R = 54, r = 36, cx = 70, cy = 70;
     let a0 = -Math.PI / 2, arcs = '';
@@ -552,10 +639,80 @@ const Board = (() => {
   function render(b) {
     const host = document.getElementById('board-' + b);
     if (!host || !ME) return;
-    if (!layouts[b]) layouts[b] = load(b);
-    host.innerHTML = '';
-    layouts[b].forEach(w => host.appendChild(widgetEl(b, w)));
-    host.appendChild(addTile(b));
+    if (b === 'dashboard') renderPlants();
+    inScope(b, () => {
+      if (!layouts[b]) layouts[b] = load(b);
+      host.innerHTML = '';
+      layouts[b].forEach(w => host.appendChild(widgetEl(b, w)));
+      host.appendChild(addTile(b));
+    });
+  }
+
+  /* ── Plant selector (Dashboard only) ──────────────
+     2–3 plants: toggle chips; more than 3: a filter list with checkboxes.
+     Every Dashboard widget is computed for the selected plants, and the
+     charts compare them when two or more are selected. */
+  const PLANT_COLORS = [C.ink, C.gold, C.green, '#5B7FA6', '#8C3A36', C.steel, '#9A6FB0', C.silver];
+  const plantColor = id => PLANT_COLORS[Math.max(0, Energy.allSites().findIndex(s => s.id === id)) % PLANT_COLORS.length];
+  const pkey = () => 'sp_plants_' + (MY_ID || 'anon');
+  let picked = null;  // ids; null = all plants
+  function scopeIds() {
+    if (picked === null) { try { picked = JSON.parse(localStorage.getItem(pkey())) || []; } catch { picked = []; } }
+    const all = Energy.allSites().map(s => s.id), v = picked.filter(id => all.includes(id));
+    return v.length && v.length < all.length ? v : null;
+  }
+  const inScope = (b, fn) => b === 'dashboard' ? Energy.withScope(scopeIds(), fn) : fn();
+  const comparing = () => Energy.sites().length >= 2;
+  function setPlants(ids) {
+    const all = Energy.allSites().map(s => s.id);
+    picked = ids.length && ids.length < all.length ? ids : [];
+    try { localStorage.setItem(pkey(), JSON.stringify(picked)); } catch {}
+    render('dashboard');
+  }
+  function renderPlants() {
+    const host = document.getElementById('board-plants');
+    if (!host) return;
+    const all = Energy.allSites();
+    if (all.length < 2) { host.innerHTML = ''; return; }
+    const sel = new Set(scopeIds() || all.map(s => s.id)), isAll = sel.size === all.length;
+    const sw = s => `<i style="background:${plantColor(s.id)}"></i>`;
+    if (all.length <= 3) {
+      host.innerHTML = `<div class="cp-plant-pick" role="group" aria-label="Plants shown">
+          <button class="cp-doc-filter ${isAll ? 'active' : ''}" data-all aria-pressed="${isAll}">All plants</button>
+          ${all.map(s => `<button class="cp-doc-filter cp-plant-chip ${sel.has(s.id) ? 'active' : ''}" data-p="${s.id}" aria-pressed="${sel.has(s.id)}">${sw(s)}${esc(s.name)}</button>`).join('')}</div>`;
+      host.querySelector('[data-all]').onclick = () => setPlants([]);
+      host.querySelectorAll('[data-p]').forEach(bt => bt.onclick = () => {
+        const id = bt.dataset.p;
+        if (sel.has(id)) { if (sel.size === 1) return; sel.delete(id); } else sel.add(id);  // at least one stays selected
+        setPlants([...sel]);
+      });
+      return;
+    }
+    const summary = isAll ? `All plants (${all.length})` : sel.size === 1 ? all.find(s => sel.has(s.id)).name : `${sel.size} of ${all.length} plants`;
+    host.innerHTML = `<div class="cp-plant-filter">
+        <button class="cp-plant-dd" aria-haspopup="true" aria-expanded="false"><span>Plants:</span> <b>${esc(summary)}</b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+        <div class="cp-plant-menu" hidden>
+          <label class="cp-plant-opt cp-plant-opt--all"><input type="checkbox" data-all ${isAll ? 'checked' : ''}> All plants</label>
+          ${all.map(s => `<label class="cp-plant-opt"><input type="checkbox" data-p="${s.id}" ${sel.has(s.id) ? 'checked' : ''}>${sw(s)}<span>${esc(s.name)}</span></label>`).join('')}
+        </div></div>`;
+    const btn = host.querySelector('.cp-plant-dd'), menu = host.querySelector('.cp-plant-menu');
+    const open = on => { menu.hidden = !on; btn.setAttribute('aria-expanded', on); };
+    btn.onclick = ev => { ev.stopPropagation(); open(menu.hidden); };
+    menu.addEventListener('click', ev => ev.stopPropagation());
+    document.addEventListener('click', () => open(false), { once: true });
+    menu.querySelector('[data-all]').onchange = () => setPlantsKeepOpen([]);
+    menu.querySelectorAll('[data-p]').forEach(cb => cb.onchange = () => {
+      const ids = [...menu.querySelectorAll('[data-p]:checked')].map(c => c.dataset.p);
+      if (!ids.length) { cb.checked = true; return; }  // at least one stays selected
+      setPlantsKeepOpen(ids);
+    });
+  }
+  // Re-render after a change in the filter list without closing it
+  function setPlantsKeepOpen(ids) {
+    setPlants(ids);
+    const host = document.getElementById('board-plants');
+    host.querySelector('.cp-plant-menu').hidden = false;
+    host.querySelector('.cp-plant-dd').setAttribute('aria-expanded', true);
   }
   const renderAll = () => BOARDS.forEach(render);
 
@@ -597,7 +754,7 @@ const Board = (() => {
     galleryBoard = b;
     const g = document.getElementById('cp-gallery');
     const used = new Set(layouts[b].map(w => w.type));
-    document.getElementById('cp-gallery-list').innerHTML = CATS.map(cat => {
+    document.getElementById('cp-gallery-list').innerHTML = inScope(b, () => CATS.map(cat => {
       const items = Object.entries(CATALOG).filter(([t, d]) => d.cat === cat && offered(t));
       if (!items.length) return '';
       return `<div class="cp-gal-cat">${cat}</div><div class="cp-gal-grid">${items.map(([t, d]) => {
@@ -607,7 +764,7 @@ const Board = (() => {
           <span class="cp-gal-txt"><b>${esc(titleOf(t))}</b><span>${esc(d.desc)}</span>
           ${added ? '<em class="ok">Added</em>' : !ready ? `<em>Needs ${esc(d.need)}</em>` : ''}</span></button>`;
       }).join('')}</div>`;
-    }).join('');
+    }).join(''));
     document.querySelectorAll('#cp-gallery-list .cp-gal-item').forEach(it => it.onclick = () => add(galleryBoard, it.dataset.t));
     g.removeAttribute('hidden');
   }
