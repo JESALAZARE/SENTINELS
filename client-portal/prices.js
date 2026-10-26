@@ -102,7 +102,8 @@ const PricesPage = (() => {
         ${['MDA', 'MTR'].map(p => widget('pr-hourly-' + p, p + ' · Hourly average PML', 'cp-w-m')).join('')}
         ${widget('pr-max', 'Maximum price', 'cp-w-m cp-pr-ext', seg('max'))}
         ${widget('pr-min', 'Minimum price', 'cp-w-m cp-pr-ext', seg('min'))}
-        ${widget('pr-table', 'Hourly prices', 'cp-w-l', seg('table') + `<button class="cp-pr-switch" id="pr-usd" role="switch" aria-checked="${S.usd}" ${hasFx() ? '' : 'disabled title="Exchange rate not available"'}><span>MXN</span><i></i><span>USD</span></button>`)}
+        ${widget('pr-table', 'Hourly prices', 'cp-w-l', seg('table') + `<button class="cp-pr-switch" id="pr-usd" role="switch" aria-checked="${S.usd}" ${hasFx() ? '' : 'disabled title="Exchange rate not available"'}><span>MXN</span><i></i><span>USD</span></button>` +
+          `<button class="cp-pr-dl" id="pr-dl" title="Download Excel with MXN and USD sheets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>`)}
       </div>`;
 
     // Query controls
@@ -145,6 +146,23 @@ const PricesPage = (() => {
     });
     const sw = host.querySelector('#pr-usd');
     sw.onclick = () => { S.usd = !S.usd; sw.setAttribute('aria-checked', S.usd); table(); };
+    host.querySelector('#pr-dl').onclick = exportXlsx;
+
+    // Excel with the table's rows (selected market and dates), oldest first: one sheet in
+    // MXN/MWh and one in USD/MWh, each hour converted at the FX for payments of its day
+    function exportXlsx() {
+      const p = S.proc.table, rows = rowsOf(d, p);
+      if (!rows.length) return;
+      const F = ['pml', 'pml_ene', 'pml_cng', 'pml_per'];
+      const cols = unit => [{ title: 'Date', width: 12 }, { title: 'Hour', width: 7, fmt: '0' },
+        ...['PML', 'Energy comp.', 'Congestion comp.', 'Losses comp.'].map(t => ({ title: `${t} (${unit})`, width: 26, fmt: '0.00' }))];
+      const round = v => Math.round(v * 1e6) / 1e6;
+      Xlsx.download(`PML_${S.node.sistema}_${S.node.nodo}_${p}_${S.from}_${S.to}.xlsx`, [
+        { name: 'MXN', columns: cols('MXN/MWh'), rows: rows.map(r => [r.fecha, r.hora, ...F.map(f => r[f])]) },
+        { name: 'USD', columns: [...cols('USD/MWh'), { title: 'FX (MXN/USD)', width: 14, fmt: '0.0000' }],
+          rows: rows.map(r => { const t = rateFor(r.fecha); return [r.fecha, r.hora, ...F.map(f => r[f] == null || !t ? null : round(r[f] / t)), t]; }) }
+      ]);
+    }
 
     function extreme(w) {
       const body = host.querySelector(`#pr-${w} .cp-widget-body`), p = S.proc[w], rows = rowsOf(d, p);
