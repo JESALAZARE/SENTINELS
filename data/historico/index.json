@@ -1,0 +1,103 @@
+{
+ "actualizado": "2026-10-27T01:38:54.960Z",
+ "entidades": [
+  {
+   "tipo": "nodo",
+   "sistema": "SIN",
+   "clave": "06CDU-400",
+   "MDA": {
+    "desde": "2023-01-11",
+    "hasta": "2026-10-27",
+    "completo": false,
+    "vacios": 0,
+    "avance": 35,
+    "archivos": [
+     "nodo/SIN/06CDU-400/MDA/2023.json",
+     "nodo/SIN/06CDU-400/MDA/2024.json",
+     "nodo/SIN/06CDU-400/MDA/2025.json",
+     "nodo/SIN/06CDU-400/MDA/2026-01.json",
+     "nodo/SIN/06CDU-400/MDA/2026-02.json",
+     "nodo/SIN/06CDU-400/MDA/2026-03.json",
+     "nodo/SIN/06CDU-400/MDA/2026-04.json",
+     "nodo/SIN/06CDU-400/MDA/2026-05.json",
+     "nodo/SIN/06CDU-400/MDA/2026-06.json",
+     "nodo/SIN/06CDU-400/MDA/2026-07.json",
+     "nodo/SIN/06CDU-400/MDA/2026-08.json",
+     "nodo/SIN/06CDU-400/MDA/2026-09.json",
+     "nodo/SIN/06CDU-400/MDA/2026-10.json"
+    ]
+   },
+   "MTR": {
+    "desde": "2023-01-03",
+    "hasta": "2026-10-19",
+    "completo": false,
+    "vacios": 0,
+    "avance": 39,
+    "archivos": [
+     "nodo/SIN/06CDU-400/MTR/2023.json",
+     "nodo/SIN/06CDU-400/MTR/2024.json",
+     "nodo/SIN/06CDU-400/MTR/2025.json",
+     "nodo/SIN/06CDU-400/MTR/2026-01.json",
+     "nodo/SIN/06CDU-400/MTR/2026-02.json",
+     "nodo/SIN/06CDU-400/MTR/2026-03.json",
+     "nodo/SIN/06CDU-400/MTR/2026-04.json",
+     "nodo/SIN/06CDU-400/MTR/2026-05.json",
+     "nodo/SIN/06CDU-400/MTR/2026-06.json",
+     "nodo/SIN/06CDU-400/MTR/2026-07.json",
+     "nodo/SIN/06CDU-400/MTR/2026-08.json",
+     "nodo/SIN/06CDU-400/MTR/2026-09.json",
+     "nodo/SIN/06CDU-400/MTR/2026-10.json"
+    ]
+   }
+  },
+  {
+   "tipo": "zona",
+   "sistema": "SIN",
+   "clave": "MONTERREY",
+   "MDA": {
+    "desde": "2023-01-18",
+    "hasta": "2026-10-27",
+    "completo": false,
+    "vacios": 0,
+    "avance": 35,
+    "archivos": [
+     "zona/SIN/MONTERREY/MDA/2023.json",
+     "zona/SIN/MONTERREY/MDA/2024.json",
+     "zona/SIN/MONTERREY/MDA/2025.json",
+     "zona/SIN/MONTERREY/MDA/2026-01.json",
+     "zona/SIN/MONTERREY/MDA/2026-02.json",
+     "zona/SIN/MONTERREY/MDA/2026-03.json",
+     "zona/SIN/MONTERREY/MDA/2026-04.json",
+     "zona/SIN/MONTERREY/MDA/2026-05.json",
+     "zona/SIN/MONTERREY/MDA/2026-06.json",
+     "zona/SIN/MONTERREY/MDA/2026-07.json",
+     "zona/SIN/MONTERREY/MDA/2026-08.json",
+     "zona/SIN/MONTERREY/MDA/2026-09.json",
+     "zona/SIN/MONTERREY/MDA/2026-10.json"
+    ]
+   },
+   "MTR": {
+    "desde": "2023-01-10",
+    "hasta": "2026-10-19",
+    "completo": false,
+    "vacios": 0,
+    "avance": 38,
+    "archivos": [
+     "zona/SIN/MONTERREY/MTR/2023.json",
+     "zona/SIN/MONTERREY/MTR/2024.json",
+     "zona/SIN/MONTERREY/MTR/2025.json",
+     "zona/SIN/MONTERREY/MTR/2026-01.json",
+     "zona/SIN/MONTERREY/MTR/2026-02.json",
+     "zona/SIN/MONTERREY/MTR/2026-03.json",
+     "zona/SIN/MONTERREY/MTR/2026-04.json",
+     "zona/SIN/MONTERREY/MTR/2026-05.json",
+     "zona/SIN/MONTERREY/MTR/2026-06.json",
+     "zona/SIN/MONTERREY/MTR/2026-07.json",
+     "zona/SIN/MONTERREY/MTR/2026-08.json",
+     "zona/SIN/MONTERREY/MTR/2026-09.json",
+     "zona/SIN/MONTERREY/MTR/2026-10.json"
+    ]
+   }
+  }
+ ]
+}

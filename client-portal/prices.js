@@ -12,7 +12,9 @@
    /data/fx/usd-mxn.json holds the Banxico FIX for payments for the USD switch.
    The client picks a NodoP and a date range; every widget is computed from
    the hourly rows in that range.
-   Uses Board.charts (board.js), NodosCatalog (nodos.js), Xlsx (xlsx.js) and _esc. */
+   Below the widgets, PriceHistory (history.js) shows the long-term history when the
+   NodoP / load zone is kept by the history robot.
+   Uses Board.charts (board.js), NodosCatalog (nodos.js), PriceHistory, Xlsx (xlsx.js) and _esc. */
 const PricesPage = (() => {
   const PML_API = 'https://sentinels-pml.shy-wood-119b.workers.dev';  // sentinels-pml Worker (pml-worker/LEEME.md); '' = stored NodosP only
   const DATA = '../data/';
@@ -177,7 +179,8 @@ const PricesPage = (() => {
         ${widget('pr-min', 'Minimum price', 'cp-w-m cp-pr-ext', seg('min'))}
         ${widget('pr-table', 'Hourly prices', 'cp-w-l', seg('table') + `<button class="cp-pr-switch" id="pr-usd" role="switch" aria-checked="${S.usd}" ${hasFx() ? '' : 'disabled title="Exchange rate not available"'}><span>MXN</span><i></i><span>USD</span></button>` +
           `<button class="cp-pr-dl" id="pr-dl" title="Download Excel with MXN and USD sheets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>`)}
-      </div>`}`;
+      </div>`}
+      <div id="pr-history"></div>`;
 
     // Query controls
     const choose = (sistema, nodo, kind) => { pickNode({ sistema, nodo, kind }); render(); };
@@ -226,6 +229,8 @@ const PricesPage = (() => {
     host.querySelectorAll('.cp-pr-presets button').forEach(bt => bt.onclick = () => {
       const k = +bt.dataset.n; setRange(k ? addDays(b.max, 1 - k) : b.min, b.max);
     });
+    // Long-term history (history.js) for this NodoP / load zone, below the query widgets
+    PriceHistory.mount(host.querySelector('#pr-history'), { node: n, priceName: P, onPick: (s, c, kind) => choose(s, c, kind) });
     if (err) return;
 
     // Charts
