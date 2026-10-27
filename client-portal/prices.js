@@ -230,7 +230,7 @@ const PricesPage = (() => {
       const k = +bt.dataset.n; setRange(k ? addDays(b.max, 1 - k) : b.min, b.max);
     });
     // Long-term history (history.js) for this NodoP / load zone, below the query widgets
-    PriceHistory.mount(host.querySelector('#pr-history'), { node: n, priceName: P });
+    PriceHistory.mount(host.querySelector('#pr-history'), { node: n, priceName: P, api: PML_API });
     if (err) return;
 
     // Charts
