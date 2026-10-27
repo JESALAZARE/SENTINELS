@@ -673,10 +673,12 @@ const Board = (() => {
         tile('Peak so far today', peak ? mw(peak.demanda) : '—', peak ? `Hour ${peak.hora}` : '') +
         tile('Forecast peak', fpeak ? mw(fpeak.pronostico) : '—', fpeak ? `Hour ${fpeak.hora}` : '');
       if (!hrs.length) { chart.innerHTML = '<div class="cp-widget-empty">CENACE has not published today\'s data yet. Trying again in 5 minutes.</div>'; return; }
-      lineChart(chart, { labels: hrs.map(h => 'H' + h.hora), band: false, ranges: false,
-        series: [{ name: 'Net demand', color: C.ink, values: hrs.map(h => h.demanda) },
-          { name: 'Net generation', color: C.gold, values: hrs.map(h => h.generacion) },
-          { name: 'Net forecast', color: C.silver, values: hrs.map(h => h.pronostico) }],
+      // Each point is the hour that ends at that time; CENACE's hour 24 of yesterday is today's 0:00
+      const pts = (d.previa ? [d.previa] : []).concat(hrs);
+      lineChart(chart, { labels: pts.map((h, i) => (d.previa && i === 0 ? 0 : h.hora) + ':00'), band: false, ranges: false,
+        series: [{ name: 'Net demand', color: C.ink, values: pts.map(h => h.demanda) },
+          { name: 'Net generation', color: C.gold, values: pts.map(h => h.generacion) },
+          { name: 'Net forecast', color: C.silver, values: pts.map(h => h.pronostico) }],
         fmt: mw, axis: v => v >= 1e4 ? fx(v / 1e3, 0) + 'k' : fx(v, 0) });
     }
 
