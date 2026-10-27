@@ -1,15 +1,22 @@
 # Azure SQL · histórico de precios · guía de instalación
 
-Esta guía conecta el histórico horario de precios (PML por NodoP y PEND por Zona de Carga)
-con una base de datos **Azure SQL gratuita**. Ahí quedan **Views SQL** listas para analizar con
-Excel, Power BI o cualquier herramienta SQL.
+Esta guía conecta el histórico horario de precios **desde 2020** de **todos los NodosP (PML) y
+Zonas de Carga (PEND)** del catálogo del CENACE con una base de datos **Azure SQL gratuita**. Ahí
+quedan **Views SQL** listas para analizar con Excel, Power BI o cualquier herramienta SQL.
 
-**Cómo funciona:**
-- El Robot de GitHub (`historico.yml`) sigue descargando los precios del CENACE al repositorio.
-- Una vez al día, el workflow `azure-sync.yml` copia a Azure **solo las horas nuevas**. No vuelve
-  a consultar al CENACE.
-- El portal sigue leyendo los archivos del repositorio, así que no despierta la base y responde
-  al instante.
+**Cómo funciona** (workflow `historico-masivo.yml`, una vez al día):
+1. El Robot descarga del CENACE hasta ~4 horas, **sin tocar Azure**, pidiendo 20 NodosP o
+   10 zonas por llamada. Primero baja los días nuevos y después el histórico, de lo más
+   reciente hacia 2020.
+2. Abre la base **una sola vez**: carga todo en bloque y recalcula los resúmenes solo de los
+   meses que tocó. La base gratuita gasta cómputo mientras está despierta, por eso se abre una
+   vez al día y no en cada consulta.
+3. Publica en el repositorio un resumen mensual pequeño por NodoP o zona (`data/resumen`), que
+   es lo que muestra el portal en **Market Prices → Long-term history**. El portal nunca
+   consulta Azure en vivo.
+
+La carga inicial de todo el catálogo desde 2020 tarda **unos 10 días**. Si en algún mes se acaba
+el cómputo gratis, la base se pausa (sin cobro) y la carga sigue el mes siguiente.
 
 Se hace una sola vez. Tiempo aproximado: 30 minutos.
 
@@ -89,25 +96,38 @@ secret** y crea estos cuatro:
 GitHub guarda los Secrets cifrados. Nadie puede volver a verlos, ni siquiera tú: solo se usan
 dentro de los workflows.
 
-## 6. Primera sincronización
+## 6. Ajustar el cómputo de la base (recomendado)
 
-1. En GitHub abre **Actions → "Azure SQL · histórico" → Run workflow**.
-2. La primera vez puede tardar unos minutos, porque crea las tablas y las Views, sube todo el
-   histórico que ya hay y despierta la base si estaba pausada.
-3. Abre la corrida → paso **"Sincronizar con Azure SQL"**. Debe terminar con
-   `Listo: N horas sincronizadas.` y una línea `Azure · …` por cada NodoP o zona.
+En la base `sentinels-historico` → **Settings → Compute + storage**:
 
-Desde ahí corre sola todos los días a las 06:20 (hora centro de México).
+- **Max vCores: 1.** Con más vCores la carga va más rápido, pero gasta el cómputo gratis más
+  rápido.
+- **Auto-pause delay:** el mínimo que permita (por ejemplo 15 minutos o 1 hora). Es el tiempo
+  que la base sigue despierta, gastando, después de la carga diaria.
+- Confirma otra vez que *Behavior when free limit is reached* sea **Auto-pause … until next
+  month**.
 
-## 7. Consultar las Views
+## 7. Primera corrida del Robot
+
+1. En GitHub abre **Actions → "Histórico masivo (Azure SQL)" → Run workflow**.
+2. Tarda hasta ~5 horas: unas 4 horas de descarga del CENACE y luego la carga en Azure.
+3. Abre la corrida → paso **"Descargar, cargar en Azure y resumir"**. Al final debe decir
+   `Azure: … horas nuevas`, `Portal: … resúmenes actualizados` y `Avance: …%`.
+
+Desde ahí corre sola todos los días a las 02:10 (hora centro de México). En unos 10 días termina
+la carga desde 2020; después cada corrida solo agrega los días nuevos.
+
+## 8. Consultar las Views
 
 **En el portal de Azure:** base → **Query editor**:
 
 ```sql
-SELECT * FROM dbo.v_anual         WHERE clave = '06CDU-400' ORDER BY proceso, anio;
-SELECT * FROM dbo.v_mensual       WHERE clave = 'MONTERREY' AND proceso = 'MDA' ORDER BY mes;
-SELECT * FROM dbo.v_mda_vs_mtr    WHERE clave = '06CDU-400' ORDER BY fecha DESC;
-SELECT * FROM dbo.v_cobertura;    -- qué tan completo está el histórico
+-- Rápidas (sobre los resúmenes), para todo el catálogo:
+SELECT * FROM dbo.v_resumen_anual   WHERE clave = '06CDU-400' ORDER BY proceso, anio;
+SELECT * FROM dbo.v_resumen_mensual WHERE clave = 'MONTERREY' AND proceso = 'MDA' ORDER BY mes;
+SELECT * FROM dbo.v_cobertura;      -- qué tan completo está el histórico
+-- Detalle horario o diario (filtra siempre por clave y fechas: son cientos de millones de horas):
+SELECT * FROM dbo.v_mda_vs_mtr WHERE clave = '06CDU-400' AND fecha >= '2025-01-01' ORDER BY fecha;
 ```
 
 **En Excel:** *Datos → Obtener datos → Desde Azure → Desde Azure SQL Database*. Servidor
@@ -125,6 +145,9 @@ Elige una View y **Cargar** (o **Transformar** para filtrar).
 
 | View | Qué contiene |
 |---|---|
+| `v_resumen_mensual` | **Rápida.** Promedio, componentes, máximo y mínimo (con fecha y hora) por mes |
+| `v_resumen_anual` | **Rápida.** Promedio, máximo y mínimo por año |
+| `v_resumen_perfil` | **Rápida.** Precio promedio de cada hora del día, por año |
 | `v_precios` | Cada hora con su NodoP o zona (base de las demás) |
 | `v_diario` | Promedio, máximo y mínimo por día |
 | `v_mensual` | Promedio, máximo y mínimo por mes |
@@ -132,14 +155,20 @@ Elige una View y **Cargar** (o **Transformar** para filtrar).
 | `v_perfil_horario` | Precio promedio de cada hora del día, por año |
 | `v_extremos_anual` | La hora del precio máximo y mínimo de cada año, con sus componentes |
 | `v_mda_vs_mtr` | Diferencia diaria entre MTR y MDA |
-| `v_cobertura` | Desde y hasta dónde llega el histórico de cada NodoP o zona |
+| `v_cobertura` | **Rápida.** Desde y hasta qué mes llega el histórico de cada NodoP o zona |
+
+Las Views sin "rápida" leen la tabla horaria completa: filtra siempre por `clave` y por fechas.
 
 ### Notas
-- **Costo:** con la oferta gratuita y *Auto-pause* no hay cargos. La sincronización diaria usa
-  unos minutos de cómputo al mes, muy por debajo del límite gratis.
+- **Costo:** con la oferta gratuita y *Auto-pause* no hay cargos. Si en un mes se acaba el
+  cómputo gratis, la base se pausa hasta el mes siguiente y el Robot continúa entonces.
 - **Arranque en frío:** si la base estaba pausada, la primera consulta tarda de 30 a 60 segundos
   en responder; después responde rápido. Por eso el portal no consulta Azure en vivo.
-- **Qué NodosP y zonas se guardan:** los de `scripts/historico-lista.json`. Al agregar uno, el
-  Robot descarga su histórico y la siguiente sincronización lo sube a Azure.
+- **Qué se guarda:** todos los NodosP y Zonas de Carga del catálogo vigente (`data/nodos`),
+  desde el 1 de enero de 2020. Si el CENACE agrega un NodoP, el Robot carga su histórico en las
+  siguientes corridas.
+- **Resúmenes del portal:** solo meses cerrados (el MTR de un mes está completo 7 días después
+  de que termina). Se reescriben al cerrar cada mes o al llegar historia nueva, para que el
+  repositorio crezca poco.
 - **Para cambiar la contraseña del Robot:** en el Query editor,
   `ALTER USER robot_sentinels WITH PASSWORD = '…';` y actualiza el secret `AZURE_SQL_PASSWORD`.

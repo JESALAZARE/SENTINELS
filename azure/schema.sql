@@ -101,9 +101,69 @@ JOIN dbo.v_diario b ON b.tipo = a.tipo AND b.sistema = a.sistema AND b.clave = a
 WHERE a.proceso = 'MDA';
 GO
 
--- Avance del histórico por entidad y mercado
+
+/* ── Resúmenes (vistas materializadas) ──────────────────────────────────
+   Con todo el catálogo desde 2020 (~325 millones de horas), recalcular las Views
+   de arriba cada día gastaría el cómputo gratis. El Robot masivo
+   (scripts/historico-masivo.mjs) mantiene estas dos tablas: después de cada carga
+   recalcula solo los meses que tocó. De aquí salen los resúmenes del portal. */
+
+-- Un renglón por entidad, mercado y mes: sumas para promedios y la hora del máximo / mínimo
+IF OBJECT_ID('dbo.agg_mensual') IS NULL
+CREATE TABLE dbo.agg_mensual (
+  entidad_id      smallint      NOT NULL,
+  proceso         char(3)       NOT NULL,
+  mes             date          NOT NULL,   -- primer día del mes
+  horas           int           NOT NULL,
+  suma_precio     decimal(18,2) NOT NULL,
+  suma_energia    decimal(18,2) NULL,
+  suma_perdidas   decimal(18,2) NULL,
+  suma_congestion decimal(18,2) NULL,
+  max_precio      decimal(12,2) NOT NULL, max_fecha date NOT NULL, max_hora tinyint NOT NULL,
+  min_precio      decimal(12,2) NOT NULL, min_fecha date NOT NULL, min_hora tinyint NOT NULL,
+  CONSTRAINT pk_agg_mensual PRIMARY KEY (entidad_id, proceso, mes) WITH (DATA_COMPRESSION = PAGE)
+);
+GO
+
+-- Un renglón por entidad, mercado, mes y hora del día (base del perfil horario)
+IF OBJECT_ID('dbo.agg_hora_mes') IS NULL
+CREATE TABLE dbo.agg_hora_mes (
+  entidad_id  smallint      NOT NULL,
+  proceso     char(3)       NOT NULL,
+  mes         date          NOT NULL,
+  hora        tinyint       NOT NULL,
+  dias        smallint      NOT NULL,
+  suma_precio decimal(18,2) NOT NULL,
+  CONSTRAINT pk_agg_hora_mes PRIMARY KEY (entidad_id, proceso, mes, hora) WITH (DATA_COMPRESSION = PAGE)
+);
+GO
+
+-- Views rápidas sobre los resúmenes (para Excel / Power BI con todo el catálogo)
+CREATE OR ALTER VIEW dbo.v_resumen_mensual AS
+SELECT e.tipo, e.sistema, e.clave, a.proceso, a.mes, a.horas,
+       a.suma_precio / a.horas AS precio_prom, a.suma_energia / a.horas AS energia_prom,
+       a.suma_perdidas / a.horas AS perdidas_prom, a.suma_congestion / a.horas AS congestion_prom,
+       a.max_precio, a.max_fecha, a.max_hora, a.min_precio, a.min_fecha, a.min_hora
+FROM dbo.agg_mensual a JOIN dbo.entidades e ON e.id = a.entidad_id;
+GO
+
+CREATE OR ALTER VIEW dbo.v_resumen_anual AS
+SELECT e.tipo, e.sistema, e.clave, a.proceso, YEAR(a.mes) AS anio, SUM(a.horas) AS horas,
+       SUM(a.suma_precio) / SUM(a.horas) AS precio_prom, MAX(a.max_precio) AS precio_max, MIN(a.min_precio) AS precio_min
+FROM dbo.agg_mensual a JOIN dbo.entidades e ON e.id = a.entidad_id
+GROUP BY e.tipo, e.sistema, e.clave, a.proceso, YEAR(a.mes);
+GO
+
+CREATE OR ALTER VIEW dbo.v_resumen_perfil AS
+SELECT e.tipo, e.sistema, e.clave, a.proceso, YEAR(a.mes) AS anio, a.hora,
+       SUM(a.suma_precio) / SUM(a.dias) AS precio_prom, SUM(a.dias) AS dias
+FROM dbo.agg_hora_mes a JOIN dbo.entidades e ON e.id = a.entidad_id
+GROUP BY e.tipo, e.sistema, e.clave, a.proceso, YEAR(a.mes), a.hora;
+GO
+
+-- Avance del histórico por entidad y mercado (sobre el resumen mensual: barata aun con todo el catálogo)
 CREATE OR ALTER VIEW dbo.v_cobertura AS
-SELECT tipo, sistema, clave, proceso, MIN(fecha) AS desde, MAX(fecha) AS hasta, COUNT(*) AS horas
-FROM dbo.v_precios
-GROUP BY tipo, sistema, clave, proceso;
+SELECT e.tipo, e.sistema, e.clave, a.proceso, MIN(a.mes) AS desde_mes, MAX(a.mes) AS hasta_mes, SUM(a.horas) AS horas
+FROM dbo.agg_mensual a JOIN dbo.entidades e ON e.id = a.entidad_id
+GROUP BY e.tipo, e.sistema, e.clave, a.proceso;
 GO

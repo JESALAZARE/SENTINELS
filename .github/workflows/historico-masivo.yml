@@ -1,0 +1,66 @@
+name: Histórico masivo (Azure SQL)
+
+# Robot del histórico desde 2020 de todos los NodosP y Zonas de Carga del catálogo
+# (scripts/historico-masivo.mjs): baja del CENACE hasta ~4 horas, lo carga en Azure SQL
+# en una sola sesión (para gastar poco cómputo gratis) y publica los resúmenes del
+# portal en data/resumen. Una vez completo, cada día solo agrega los días nuevos.
+# Guía: azure/LEEME.md
+on:
+  schedule:
+    - cron: '10 8 * * *'   # 02:10 hora centro de México
+  workflow_dispatch:
+    inputs:
+      minutos:
+        description: 'Minutos máximos de descarga del CENACE'
+        default: '240'
+      llamadas:
+        description: 'Llamadas máximas al CENACE'
+        default: '20000'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: historico-masivo
+  cancel-in-progress: false
+
+jobs:
+  historico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Instalar cliente de SQL Server
+        run: npm install --no-save --no-package-lock --ignore-scripts mssql@12.7.4
+
+      - name: Descargar, cargar en Azure y resumir
+        env:
+          AZURE_SQL_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
+          AZURE_SQL_DATABASE: ${{ secrets.AZURE_SQL_DATABASE }}
+          AZURE_SQL_USER: ${{ secrets.AZURE_SQL_USER }}
+          AZURE_SQL_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD }}
+        run: >
+          node scripts/historico-masivo.mjs
+          --minutos-cenace "${{ github.event.inputs.minutos || '240' }}"
+          --llamadas "${{ github.event.inputs.llamadas || '20000' }}"
+
+      - name: Publicar resúmenes
+        run: |
+          git add data/resumen
+          if git diff --cached --quiet; then
+            echo "Sin cambios"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "Datos: histórico masivo $(TZ=America/Mexico_City date '+%F')"
+          for intento in 1 2 3; do
+            git pull -q --rebase origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep 20
+          done
+          exit 1

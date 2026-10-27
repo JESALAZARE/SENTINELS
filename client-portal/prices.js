@@ -12,8 +12,8 @@
    /data/fx/usd-mxn.json holds the Banxico FIX for payments for the USD switch.
    The client picks a NodoP and a date range; every widget is computed from
    the hourly rows in that range.
-   Below the widgets, PriceHistory (history.js) shows the long-term history when the
-   NodoP / load zone is kept by the history robot.
+   Below the widgets, PriceHistory (history.js) shows the monthly history since 2020
+   of the NodoP / load zone (Azure SQL data warehouse summaries).
    Uses Board.charts (board.js), NodosCatalog (nodos.js), PriceHistory, Xlsx (xlsx.js) and _esc. */
 const PricesPage = (() => {
   const PML_API = 'https://sentinels-pml.shy-wood-119b.workers.dev';  // sentinels-pml Worker (pml-worker/LEEME.md); '' = stored NodosP only
@@ -230,7 +230,7 @@ const PricesPage = (() => {
       const k = +bt.dataset.n; setRange(k ? addDays(b.max, 1 - k) : b.min, b.max);
     });
     // Long-term history (history.js) for this NodoP / load zone, below the query widgets
-    PriceHistory.mount(host.querySelector('#pr-history'), { node: n, priceName: P, onPick: (s, c, kind) => choose(s, c, kind) });
+    PriceHistory.mount(host.querySelector('#pr-history'), { node: n, priceName: P });
     if (err) return;
 
     // Charts
