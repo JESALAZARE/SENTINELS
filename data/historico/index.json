@@ -1,17 +1,19 @@
 {
- "actualizado": "2026-10-27T01:38:54.960Z",
+ "actualizado": "2026-10-27T01:46:23.890Z",
  "entidades": [
   {
    "tipo": "nodo",
    "sistema": "SIN",
    "clave": "06CDU-400",
    "MDA": {
-    "desde": "2023-01-11",
+    "desde": "2021-08-04",
     "hasta": "2026-10-27",
     "completo": false,
     "vacios": 0,
-    "avance": 35,
+    "avance": 48,
     "archivos": [
+     "nodo/SIN/06CDU-400/MDA/2021.json",
+     "nodo/SIN/06CDU-400/MDA/2022.json",
      "nodo/SIN/06CDU-400/MDA/2023.json",
      "nodo/SIN/06CDU-400/MDA/2024.json",
      "nodo/SIN/06CDU-400/MDA/2025.json",
@@ -28,12 +30,14 @@
     ]
    },
    "MTR": {
-    "desde": "2023-01-03",
+    "desde": "2021-07-27",
     "hasta": "2026-10-19",
     "completo": false,
     "vacios": 0,
-    "avance": 39,
+    "avance": 53,
     "archivos": [
+     "nodo/SIN/06CDU-400/MTR/2021.json",
+     "nodo/SIN/06CDU-400/MTR/2022.json",
      "nodo/SIN/06CDU-400/MTR/2023.json",
      "nodo/SIN/06CDU-400/MTR/2024.json",
      "nodo/SIN/06CDU-400/MTR/2025.json",
@@ -55,12 +59,14 @@
    "sistema": "SIN",
    "clave": "MONTERREY",
    "MDA": {
-    "desde": "2023-01-18",
+    "desde": "2021-08-11",
     "hasta": "2026-10-27",
     "completo": false,
     "vacios": 0,
-    "avance": 35,
+    "avance": 48,
     "archivos": [
+     "zona/SIN/MONTERREY/MDA/2021.json",
+     "zona/SIN/MONTERREY/MDA/2022.json",
      "zona/SIN/MONTERREY/MDA/2023.json",
      "zona/SIN/MONTERREY/MDA/2024.json",
      "zona/SIN/MONTERREY/MDA/2025.json",
@@ -77,12 +83,14 @@
     ]
    },
    "MTR": {
-    "desde": "2023-01-10",
+    "desde": "2021-08-03",
     "hasta": "2026-10-19",
     "completo": false,
     "vacios": 0,
-    "avance": 38,
+    "avance": 53,
     "archivos": [
+     "zona/SIN/MONTERREY/MTR/2021.json",
+     "zona/SIN/MONTERREY/MTR/2022.json",
      "zona/SIN/MONTERREY/MTR/2023.json",
      "zona/SIN/MONTERREY/MTR/2024.json",
      "zona/SIN/MONTERREY/MTR/2025.json",
