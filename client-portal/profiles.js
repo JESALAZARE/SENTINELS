@@ -13,20 +13,20 @@ const Profiles = (() => {
     supply: {
       label: 'Supply client', tag: 'Client Portal', theme: '',
       nav: ['dashboard', 'sites', 'assistant', 'intelligence', 'prices', 'contract', 'documents', 'support'],
-      cats: ['Plants & bills', 'Key figures', 'Charts', 'Contract', 'Updates'], widgets: [],
+      cats: ['Plants & bills', 'Key figures', 'Charts', 'Market', 'Contract', 'Updates'], widgets: [],
       title: 'Your dashboard', sub: 'Add, arrange and resize the widgets you care about'
     },
     trader: {
       label: 'Trader', tag: 'Trader Portal', theme: 'cp-theme-trader',
       nav: ['dashboard', 'assistant', 'intelligence', 'prices', 'documents', 'support'],
-      cats: ['Workspace', 'Updates'], widgets: ['advisor'], recat: { advisor: 'Workspace' },
+      cats: ['Workspace', 'Market', 'Updates'], widgets: ['advisor'], recat: { advisor: 'Workspace' },
       title: 'Trading desk', sub: 'Market intelligence, documents and Sentinel One in one place',
       layout: [['ws_welcome', 'l'], ['kpi_intel_count', 's'], ['kpi_latest_update', 'm'], ['kpi_docs_count', 's'], ['ws_ask', 'w'], ['advisor', 's'], ['intel_list', 'w'], ['docs_recent', 'w']]
     },
     guest: {
       label: 'Guest', tag: 'Guest Access', theme: 'cp-theme-trader cp-theme-guest',
       nav: ['dashboard', 'assistant', 'intelligence', 'prices', 'documents', 'support'],
-      cats: ['Workspace', 'Updates'], widgets: ['advisor'], recat: { advisor: 'Workspace' },
+      cats: ['Workspace', 'Market', 'Updates'], widgets: ['advisor'], recat: { advisor: 'Workspace' },
       title: 'Welcome to Sentinels', sub: 'Explore market intelligence, documents and Sentinel One',
       banner: 'You are using a guest account to explore the Sentinels platform. Contact your Sentinel advisor for full access.',
       layout: [['ws_welcome', 'l'], ['kpi_intel_count', 's'], ['kpi_latest_update', 'm'], ['kpi_docs_count', 's'], ['ws_ask', 'w'], ['advisor', 's'], ['intel_list', 'w'], ['docs_recent', 'w']]

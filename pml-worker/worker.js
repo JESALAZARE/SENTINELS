@@ -14,6 +14,8 @@
 
      GET /pml?sistema=SIN&proceso=MDA&nodos=06CDU-400&desde=2026-10-01&hasta=2026-10-26
      GET /pend?sistema=BCS&proceso=MDA&zonas=LOS CABOS,LA PAZ&desde=2026-10-01&hasta=2026-10-26
+     GET /demanda?gerencia=10 (today's hourly demand, generation and forecast of a system or
+                               region, from CENACE's "Operación del SEN" page; cached 5 minutes)
      GET /health              (?cenace=1 also checks that CENACE answers)
 
    Configure in Cloudflare (Settings → Variables and Secrets):
@@ -64,6 +66,7 @@ export default {
         }
       }
       if (!allowed.includes(origin)) return json({ error: 'forbidden', message: 'Origin not allowed.' }, 403);
+      if (url.pathname === '/demanda' && request.method === 'GET') return json(await demanda(url.searchParams, ctx), 200, 'public, max-age=120');
       const svc = Object.hasOwn(SERVICES, url.pathname.slice(1)) ? SERVICES[url.pathname.slice(1)] : null;
       if (request.method !== 'GET' || !svc) return json({ error: 'not_found' }, 404);
 
@@ -134,6 +137,36 @@ async function fetchWindow(svc, q, a, b, ctx) {
   return out;
 }
 
-const num = v => v === '' || v == null || !isFinite(Number(v)) ? null : Number(v);
+/* ── SEN demand (Operación del SEN) ────────────── */
+// gerencia: 10 = SIN, 1 = Baja California, 2 = Baja California Sur, 3–9 = SIN regions
+const GERENCIAS = { 10: 'Sistema Interconectado Nacional', 1: 'Baja California', 2: 'Baja California Sur', 3: 'Central',
+  4: 'Noreste', 5: 'Noroeste', 6: 'Norte', 7: 'Occidental', 8: 'Oriental', 9: 'Peninsular' };
+const DEMANDA_URL = 'https://www.cenace.gob.mx/Paginas/SIM/OperacionSEN.aspx/obtieneValoresTotal';
+const DEMANDA_TTL = 300;  // CENACE publishes one point per hour; 5 minutes keeps the widget current
+
+async function demanda(p, ctx) {
+  const g = String(p.get('gerencia') || '10');
+  if (!Object.hasOwn(GERENCIAS, g)) throw fail(400, 'bad_request', 'gerencia must be 1 to 10.');
+  const cache = typeof caches !== 'undefined' ? caches.default : null;
+  const key = new Request(`https://sentinels-pml.cache/demanda/${g}`);
+  if (cache) { const hit = await cache.match(key); if (hit) return hit.json(); }
+
+  const res = await fetch(DEMANDA_URL, {
+    method: 'POST', body: JSON.stringify({ gerencia: g }),
+    headers: { 'Content-Type': 'application/json; charset=utf-8', Accept: 'application/json' }
+  });
+  if (!res.ok) throw new Error(`OperacionSEN HTTP ${res.status}`);
+  // The page method answers { d: "<JSON text>" }; d is "" while CENACE has no data yet
+  const d = (await res.json()).d;
+  const rows = d ? JSON.parse(d) : [];
+  const horas = rows.map(r => ({ hora: Number(r.hora), demanda: num(r.valorDemanda), generacion: num(r.valorGeneracion), pronostico: num(r.valorPronostico) }))
+    .filter(r => r.hora >= 1 && r.hora <= 25).sort((a, b) => a.hora - b.hora);
+  const out = { gerencia: Number(g), nombre: GERENCIAS[g], fecha: todayMX(), unidades: 'MW', fuente: 'CENACE · Operación del SEN', consultado: new Date().toISOString(), horas };
+  // An empty answer is retried sooner
+  if (cache) ctx.waitUntil(cache.put(key, new Response(JSON.stringify(out), { headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${horas.length ? DEMANDA_TTL : 30}` } })));
+  return out;
+}
+
+const num = v => v == null || String(v).trim() === '' || !isFinite(Number(v)) ? null : Number(v);
 // One row shape for both services: pml = price; pml_ene / pml_per / pml_cng = energy / losses / congestion
 const rowOf = svc => { const [p, e, l, c] = svc.fields; return v => ({ fecha: v.fecha, hora: Number(v.hora), pml: num(v[p]), pml_ene: num(v[e]), pml_per: num(v[l]), pml_cng: num(v[c]) }); };
