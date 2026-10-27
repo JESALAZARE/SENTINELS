@@ -11,6 +11,8 @@ const Board = (() => {
   const SIZES = { s: 1, m: 2, w: 3, l: 4 };
   const SIZE_NAMES = { s: 'Small', m: 'Medium', w: 'Wide', l: 'Full width' };
   const C = { ink: '#0B0D0F', silver: '#B4BBC2', green: '#3E6B53', gold: '#C89D2A', steel: '#646C75', grid: '#E3E6E8' };
+  // sentinels-pml Worker (pml-worker/worker.js, same as PML_API in prices.js); '' hides the SEN demand widget
+  const LIVE_API = 'https://sentinels-pml.shy-wood-119b.workers.dev';
 
   /* ── Data helpers ─────────────────────────────── */
   const P = () => (ME && ME.profile) || {};
@@ -299,9 +301,14 @@ const Board = (() => {
             ${pct != null ? `<div class="cp-ctr-bar"><i style="width:${pct}%"></i></div><div class="cp-ctr-dates"><span>${esc(_fmtDate(c.start))}</span><span>${pct.toFixed(0)}% elapsed</span><span>${esc(_fmtDate(c.end))}</span></div>` : ''}
             ${c.notes ? `<div class="cp-ctr-notes">${esc(c.notes)}</div>` : ''}</div>`;
         }).join('')}</div>`;
-      } }
+      } },
+
+    /* Market — live CENACE data through the PML Worker */
+    sen_demand: { cat: 'Market', title: 'SEN demand · live', icon: 'line', sizes: ['m', 'w', 'l'], desc: 'Today\'s hourly demand, generation and forecast from CENACE, refreshed every 5 minutes.',
+      ready: () => !!LIVE_API, need: 'the live data service',
+      render: (b, w) => senDemand(b, w) }
   };
-  const CATS = ['Workspace', 'Plants & bills', 'Key figures', 'Charts', 'Contract', 'Updates'];
+  const CATS = ['Workspace', 'Plants & bills', 'Key figures', 'Charts', 'Market', 'Contract', 'Updates'];
   const titleOf = t => typeof CATALOG[t].title === 'function' ? CATALOG[t].title() : CATALOG[t].title;
 
   // Widgets fed by the advisor's manual contract data or by savings versus CFE only
@@ -630,6 +637,77 @@ const Board = (() => {
         ${p.renewal_note ? `<div class="cp-tl-note">${esc(p.renewal_note)}</div>` : ''}</div>`;
   }
 
+  /* ── SEN demand (CENACE "Operación del SEN") ─────
+     The Worker's /demanda answers today's 24 hours for a system or region;
+     hours still to come carry only the forecast. CENACE adds one point per
+     hour, so the widget asks again every 5 minutes while the page is visible.
+     The chosen system / region is kept in the widget's layout entry. */
+  const SEN_AREAS = [['10', 'National Interconnected System (SIN)'], ['1', 'Baja California'], ['2', 'Baja California Sur'],
+    ['3', 'SIN · Central'], ['4', 'SIN · Northeast'], ['5', 'SIN · Northwest'], ['6', 'SIN · North'], ['7', 'SIN · Western'], ['8', 'SIN · Eastern'], ['9', 'SIN · Peninsular']];
+  const SEN_REFRESH = 5 * 60 * 1000;
+  const senLast = {};  // gerencia → last good answer, shown if a refresh fails
+  const mw = v => fx(v, 0) + ' MW';
+  const mxTime = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Mexico_City' });
+
+  function senDemand(body, w) {
+    const g = () => SEN_AREAS.some(([k]) => k === w.gerencia) ? w.gerencia : '10';
+    body.innerHTML = `<div class="cp-sen-top">
+        <select class="cp-sen-sel" aria-label="System or region">${SEN_AREAS.map(([k, t]) => `<option value="${k}" ${k === g() ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+        <span class="cp-sen-live" aria-live="polite"></span></div>
+      <div class="cp-sen-kpis"></div><div class="cp-sen-chart"><div class="cp-widget-empty">Loading data from CENACE…</div></div>
+      <div class="cp-sen-note">Source: CENACE, Operación del SEN. Indicative figures, net MW by hour of the day (Mexico City time).</div>`;
+    const live = body.querySelector('.cp-sen-live'), kpis = body.querySelector('.cp-sen-kpis'), chart = body.querySelector('.cp-sen-chart');
+
+    function show(d, stale) {
+      const hrs = d.horas, done = hrs.filter(h => h.demanda != null);
+      const now = done[done.length - 1];
+      const peak = done.reduce((m, h) => !m || h.demanda > m.demanda ? h : m, null);
+      const fpeak = hrs.filter(h => h.pronostico != null).reduce((m, h) => !m || h.pronostico > m.pronostico ? h : m, null);
+      const dev = now && now.pronostico ? (now.demanda / now.pronostico - 1) * 100 : null;
+      live.className = 'cp-sen-live' + (stale ? ' cp-sen-live--stale' : '');
+      live.textContent = stale ? `Could not refresh · data from ${mxTime(d.consultado)}` : `Live · updated ${mxTime(d.consultado)}`;
+      const tile = (label, value, note, tone = 'neutral') => `<div class="cp-sen-kpi"><div class="cp-sen-kpi-l">${esc(label)}</div>
+        <div class="cp-sen-kpi-v">${esc(value)}</div><div class="cp-kpi-delta cp-kpi-delta--${tone}">${esc(note)}</div></div>`;
+      kpis.innerHTML = !hrs.length ? '' :
+        tile('Current demand', now ? mw(now.demanda) : '—', now ? `Hour ${now.hora}${dev != null ? ` · ${dev >= 0 ? '+' : '−'}${fx(Math.abs(dev), 1)}% vs forecast` : ''}` : 'No hour published yet') +
+        tile('Peak so far today', peak ? mw(peak.demanda) : '—', peak ? `Hour ${peak.hora}` : '') +
+        tile('Forecast peak', fpeak ? mw(fpeak.pronostico) : '—', fpeak ? `Hour ${fpeak.hora}` : '');
+      if (!hrs.length) { chart.innerHTML = '<div class="cp-widget-empty">CENACE has not published today\'s data yet. Trying again in 5 minutes.</div>'; return; }
+      lineChart(chart, { labels: hrs.map(h => 'H' + h.hora), band: false, ranges: false,
+        series: [{ name: 'Net demand', color: C.ink, values: hrs.map(h => h.demanda) },
+          { name: 'Net generation', color: C.gold, values: hrs.map(h => h.generacion) },
+          { name: 'Net forecast', color: C.silver, values: hrs.map(h => h.pronostico) }],
+        fmt: mw, axis: v => v >= 1e4 ? fx(v / 1e3, 0) + 'k' : fx(v, 0) });
+    }
+
+    async function load() {
+      const k = g();
+      try {
+        const r = await fetch(`${LIVE_API}/demanda?gerencia=${k}`);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        senLast[k] = await r.json();
+        if (k === g() && body.isConnected) show(senLast[k], false);
+      } catch {
+        if (k !== g() || !body.isConnected) return;
+        if (senLast[k]) show(senLast[k], true);
+        else { live.className = 'cp-sen-live cp-sen-live--stale'; live.textContent = 'CENACE did not answer'; chart.innerHTML = '<div class="cp-widget-empty">Could not load the data. Trying again in 5 minutes.</div>'; }
+      }
+    }
+
+    body.querySelector('.cp-sen-sel').onchange = ev => {
+      w.gerencia = ev.target.value;
+      const host = body.closest('.cp-board'), b = host && host.id.replace(/^board-/, '');
+      if (b && layouts[b]) save(b);
+      if (senLast[w.gerencia]) show(senLast[w.gerencia], false);
+      else { kpis.innerHTML = ''; chart.innerHTML = '<div class="cp-widget-empty">Loading data from CENACE…</div>'; }
+      load();
+    };
+    // Re-rendering the board replaces this body; the old timer then stops itself
+    const timer = setInterval(() => { if (!body.isConnected) clearInterval(timer); else if (!document.hidden) load(); }, SEN_REFRESH);
+    if (senLast[g()]) show(senLast[g()], false);
+    load();
+  }
+
   /* ── Boards ───────────────────────────────────── */
   const layouts = {};
   const uid = () => Math.random().toString(36).slice(2, 10);
@@ -824,7 +902,7 @@ const Board = (() => {
   function add(b, type) {
     const def = CATALOG[type];
     // Charts start wide; everything else at its smallest size
-    const w = { id: uid(), type, size: def.cat === 'Charts' && def.sizes.includes('w') ? 'w' : def.sizes[0] };
+    const w = { id: uid(), type, size: (def.cat === 'Charts' || def.cat === 'Market') && def.sizes.includes('w') ? 'w' : def.sizes[0] };
     layouts[b].push(w); save(b); closeGallery(); render(b);
     const el = document.querySelector(`#board-${b} [data-id="${w.id}"]`);
     if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('cp-widget-new'); }

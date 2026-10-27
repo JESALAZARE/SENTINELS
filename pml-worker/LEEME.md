@@ -57,6 +57,15 @@ se guardan en `data/pml`.
 
 ---
 
+### Demanda del SEN (widget del Dashboard)
+El mismo Worker atiende `/demanda?gerencia=10`: la demanda, generación y pronóstico de hoy,
+hora por hora, que el CENACE publica en su página "Operación del SEN" (10 = SIN, 1 = Baja
+California, 2 = Baja California Sur, 3 a 9 = regiones del SIN). Guarda cada respuesta 5 minutos
+en la caché, así que el CENACE recibe como máximo una consulta cada 5 minutos por región.
+El widget "SEN demand" del portal usa esta ruta; después de actualizar `worker.js`, vuelve a
+pegarlo en Cloudflare. Para comprobarlo, abre la URL del Worker seguida de
+`/demanda?gerencia=10` desde la consola del portal (el Worker rechaza otros orígenes).
+
 ### Notas
 - **Velocidad:** el CENACE tarda de 2 a 15 segundos en contestar una consulta nueva; mientras
   tanto el portal muestra "Loading … prices from CENACE…". Las consultas repetidas salen de la
