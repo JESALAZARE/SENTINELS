@@ -654,10 +654,12 @@ const Board = (() => {
     const g = () => SEN_AREAS.some(([k]) => k === w.gerencia) ? w.gerencia : '10';
     body.innerHTML = `<div class="cp-sen-top">
         <select class="cp-sen-sel" aria-label="System or region">${SEN_AREAS.map(([k, t]) => `<option value="${k}" ${k === g() ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
-        <span class="cp-sen-live" aria-live="polite"></span></div>
+        <span class="cp-sen-status"><span class="cp-sen-live" aria-live="polite"></span>
+          <button type="button" class="cp-sen-refresh" aria-label="Refresh now" title="Refresh now"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button></span></div>
       <div class="cp-sen-kpis"></div><div class="cp-sen-chart"><div class="cp-widget-empty">Loading data from CENACE…</div></div>
       <div class="cp-sen-note">Source: CENACE, Operación del SEN. Indicative figures, net MW by hour of the day (Mexico City time).</div>`;
     const live = body.querySelector('.cp-sen-live'), kpis = body.querySelector('.cp-sen-kpis'), chart = body.querySelector('.cp-sen-chart');
+    const btn = body.querySelector('.cp-sen-refresh');
 
     function show(d, stale) {
       const hrs = d.horas, done = hrs.filter(h => h.demanda != null);
@@ -683,10 +685,17 @@ const Board = (() => {
         fmt: mw, axis: v => v >= 1e4 ? fx(v / 1e3, 0) + 'k' : fx(v, 0) });
     }
 
-    async function load() {
+    // Every load sets the next automatic one SEN_REFRESH later; re-rendering the board replaces
+    // this body, and the pending timer then stops by itself
+    let timer = 0;
+    const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { if (body.isConnected) document.hidden ? schedule() : load(); }, SEN_REFRESH); };
+    // fresh: the refresh button asks the Worker for an answer at most 15 seconds old
+    async function load(fresh) {
       const k = g();
+      schedule();
+      btn.disabled = true; btn.classList.add('cp-sen-refresh--busy');
       try {
-        const r = await fetch(`${LIVE_API}/demanda?gerencia=${k}`);
+        const r = await fetch(`${LIVE_API}/demanda?gerencia=${k}${fresh ? '&fresh=1' : ''}`, { cache: 'no-store' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         senLast[k] = await r.json();
         if (k === g() && body.isConnected) show(senLast[k], false);
@@ -694,8 +703,11 @@ const Board = (() => {
         if (k !== g() || !body.isConnected) return;
         if (senLast[k]) show(senLast[k], true);
         else { live.className = 'cp-sen-live cp-sen-live--stale'; live.textContent = 'CENACE did not answer'; chart.innerHTML = '<div class="cp-widget-empty">Could not load the data. Trying again in 2 minutes.</div>'; }
+      } finally {
+        if (k === g()) { btn.disabled = false; btn.classList.remove('cp-sen-refresh--busy'); }
       }
     }
+    btn.onclick = () => load(true);
 
     body.querySelector('.cp-sen-sel').onchange = ev => {
       w.gerencia = ev.target.value;
@@ -705,8 +717,6 @@ const Board = (() => {
       else { kpis.innerHTML = ''; chart.innerHTML = '<div class="cp-widget-empty">Loading data from CENACE…</div>'; }
       load();
     };
-    // Re-rendering the board replaces this body; the old timer then stops itself
-    const timer = setInterval(() => { if (!body.isConnected) clearInterval(timer); else if (!document.hidden) load(); }, SEN_REFRESH);
     if (senLast[g()]) show(senLast[g()], false);
     load();
   }

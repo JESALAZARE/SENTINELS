@@ -15,7 +15,8 @@
      GET /pml?sistema=SIN&proceso=MDA&nodos=06CDU-400&desde=2026-10-01&hasta=2026-10-26
      GET /pend?sistema=BCS&proceso=MDA&zonas=LOS CABOS,LA PAZ&desde=2026-10-01&hasta=2026-10-26
      GET /demanda?gerencia=10 (today's hourly demand, generation and forecast of a system or
-                               region, from CENACE's "Operación del SEN" page; cached 1 minute;
+                               region, from CENACE's "Operación del SEN" page; cached 1 minute,
+                               &fresh=1 accepts at most 15 seconds;
                                previa = hour 24 of the previous day when CENACE sends it)
      GET /health              (?cenace=1 also checks that CENACE answers)
 
@@ -67,7 +68,7 @@ export default {
         }
       }
       if (!allowed.includes(origin)) return json({ error: 'forbidden', message: 'Origin not allowed.' }, 403);
-      if (url.pathname === '/demanda' && request.method === 'GET') return json(await demanda(url.searchParams, ctx), 200, 'public, max-age=120');
+      if (url.pathname === '/demanda' && request.method === 'GET') return json(await demanda(url.searchParams, ctx), 200, 'no-store');
       const svc = Object.hasOwn(SERVICES, url.pathname.slice(1)) ? SERVICES[url.pathname.slice(1)] : null;
       if (request.method !== 'GET' || !svc) return json({ error: 'not_found' }, 404);
 
@@ -144,13 +145,20 @@ const GERENCIAS = { 10: 'Sistema Interconectado Nacional', 1: 'Baja California',
   4: 'Noreste', 5: 'Noroeste', 6: 'Norte', 7: 'Occidental', 8: 'Oriental', 9: 'Peninsular' };
 const DEMANDA_URL = 'https://www.cenace.gob.mx/Paginas/SIM/OperacionSEN.aspx/obtieneValoresTotal';
 const DEMANDA_TTL = 60;  // at most one CENACE call a minute per region, so the widget follows CENACE's page
+const DEMANDA_FRESH = 15 * 1000;  // youngest cached answer the refresh button still accepts
 
 async function demanda(p, ctx) {
   const g = String(p.get('gerencia') || '10');
   if (!Object.hasOwn(GERENCIAS, g)) throw fail(400, 'bad_request', 'gerencia must be 1 to 10.');
   const cache = typeof caches !== 'undefined' ? caches.default : null;
   const key = new Request(`https://sentinels-pml.cache/demanda/${g}`);
-  if (cache) { const hit = await cache.match(key); if (hit) return hit.json(); }
+  // fresh=1 (the widget's refresh button) skips a cached answer older than DEMANDA_FRESH,
+  // so CENACE still gets at most one call per region in that time however often it's clicked
+  const fresh = p.get('fresh') === '1';
+  if (cache) {
+    const hit = await cache.match(key);
+    if (hit) { const d = await hit.json(); if (!fresh || Date.now() - Date.parse(d.consultado) < DEMANDA_FRESH) return d; }
+  }
 
   const res = await fetch(DEMANDA_URL, {
     method: 'POST', body: JSON.stringify({ gerencia: g }),
