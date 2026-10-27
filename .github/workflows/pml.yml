@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: pml
+  group: datos
   cancel-in-progress: false
 
 jobs:

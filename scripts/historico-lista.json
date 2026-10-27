@@ -1,0 +1,9 @@
+{
+ "_ayuda": "NodosP y Zonas de Carga con histórico horario completo (desde 2016) en Market Prices. Agrega o quita entradas y el Robot (.github/workflows/historico.yml) carga lo que falte. Claves exactamente como en el Catálogo de NodosP.",
+ "nodos": [
+  { "sistema": "SIN", "clave": "06CDU-400" }
+ ],
+ "zonas": [
+  { "sistema": "SIN", "zona": "MONTERREY" }
+ ]
+}
