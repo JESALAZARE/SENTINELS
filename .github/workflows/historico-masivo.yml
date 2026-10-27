@@ -8,6 +8,8 @@ name: Histórico masivo (Azure SQL)
 on:
   schedule:
     - cron: '10 8 * * *'   # 02:10 hora centro de México
+  push:  # TEMPORAL: prueba corta en la rama antes del PR
+    branches: [feat/historico-masivo]
   workflow_dispatch:
     inputs:
       minutos:
@@ -46,7 +48,7 @@ jobs:
           AZURE_SQL_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD }}
         run: >
           node scripts/historico-masivo.mjs
-          --minutos-cenace "${{ github.event.inputs.minutos || '240' }}"
+          --minutos-cenace "${{ github.event_name == 'push' && '10' || github.event.inputs.minutos || '240' }}"
           --llamadas "${{ github.event.inputs.llamadas || '20000' }}"
 
       - name: Publicar resúmenes
