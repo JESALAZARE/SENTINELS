@@ -1,118 +1,71 @@
 /* ── Sentinels Client Portal · Market Prices · Long-term history ─────
-   Hourly prices since 2016 for the NodosP and load zones listed in
-   scripts/historico-lista.json. The "Robot" (.github/workflows/historico.yml,
-   scripts/fetch-historico.mjs) loads them gradually from CENACE and stores only
-   the raw hourly rows in /data/historico; everything shown here is computed in
-   the browser by the VIEWS below (the equivalent of SQL views over one table):
-
-     precios_hora(proceso, fecha, hora, precio, energia, perdidas, congestion)
-     v_diario   = SELECT fecha, AVG(precio)…                 GROUP BY proceso, fecha
-     v_mensual  = SELECT mes, AVG/MAX/MIN(precio)…           GROUP BY proceso, mes
-     v_anual    = SELECT año, AVG/MAX/MIN(precio)…           GROUP BY proceso, año
-     v_perfil   = SELECT año, hora, AVG(precio)              GROUP BY proceso, año, hora
-
-   The data is loaded only when the client asks for it ("Load history").
-   Used by prices.js: PriceHistory.mount(el, { node, priceName, onPick }).
+   Monthly history since 2020 for ANY NodoP (PML) or load zone (PEND) of the
+   CENACE catalog. The hourly prices live in Azure SQL (azure/schema.sql), loaded
+   by the data robot (.github/workflows/historico-masivo.yml); its summary tables
+   (agg_mensual, agg_hora_mes = materialized views) are published once a month
+   as one small file per NodoP / zone:
+     /data/resumen/<nodo|zona>/<sistema>/<clave>.json
+       { desde, hasta_mes, MDA|MTR: { meses: [[mes, horas, avg, energy, losses,
+         congestion, max, max date, max hour, min, min date, min hour], …],
+         perfil: { year: [24 hourly averages] } } }
+     /data/resumen/index.json   robot progress
+   Only closed months are published (the MTR of a month is complete 7 days after
+   it ends); recent days are in the query widgets above (up to 31 days, any date).
+   The annual summary is computed here from the months (hour-weighted).
+   Used by prices.js: PriceHistory.mount(el, { node, priceName }).
    Uses Board.charts (board.js), Xlsx (xlsx.js) and _esc (index.html). */
 const PriceHistory = (() => {
-  const DATA = '../data/historico/';
+  const DATA = '../data/resumen/';
   const esc = s => _esc(s);
   const fx = (v, d = 2) => v == null || !isFinite(v) ? '—' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const mlabel = m => `${MONTHS[+m.slice(5, 7) - 1]} ${m.slice(2, 4)}`;
-  const dlabel = f => new Date(f + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const mlong = m => `${MONTHS[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}`;
   const C = { MDA: '#0B0D0F', MTR: '#C89D2A' };
   const YEAR_COLORS = ['#0B0D0F', '#C89D2A', '#3E6B53', '#5B7FA6', '#8C3A36', '#9A6FB0', '#646C75', '#B4BBC2', '#2F8F9D', '#D17A22', '#6B8E23'];
-  let INDEX = null;
-  const loaded = {};  // entity key → { MDA: rows, MTR: rows }
+  const cache = {};  // url → Promise(json | null)
+  const get = url => cache[url] || (cache[url] = fetch(url, { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null));
+  const fileOf = n => `${DATA}${n.kind === 'zone' ? 'zona' : 'nodo'}/${encodeURIComponent(n.sistema)}/${encodeURIComponent(n.nodo.replace(/ /g, '-'))}.json`;
 
-  const keyOf = n => `${n.kind === 'zone' ? 'zona' : 'nodo'}|${n.sistema}|${n.nodo}`;
-  const entKey = e => `${e.tipo}|${e.sistema}|${e.clave}`;
-  async function index() {
-    if (!INDEX) {
-      const r = await fetch(DATA + 'index.json', { cache: 'no-cache' });
-      INDEX = r.ok ? await r.json() : { entidades: [] };
-    }
-    return INDEX;
-  }
-
-  /* ── Table: precios_hora (only stored data) ── */
-  async function load(ent) {
-    const k = entKey(ent);
-    if (!loaded[k]) {
-      loaded[k] = Promise.all(['MDA', 'MTR'].map(async p => {
-        const files = (ent[p] && ent[p].archivos) || [];
-        const parts = await Promise.all(files.map(f => fetch(DATA + f, { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null)));
-        const rows = [];
-        for (const part of parts) if (part) for (const [md, h, pr, e, l, c] of part.filas) {
-          const m = Math.floor(md / 100), d = md % 100;
-          rows.push({ fecha: `${part.anio}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`, hora: h, precio: pr, energia: e, perdidas: l, congestion: c });
-        }
-        return rows.sort((a, b) => a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : a.hora - b.hora);
-      })).then(([MDA, MTR]) => ({ MDA, MTR }));
-      loaded[k].catch(() => delete loaded[k]);
-    }
-    return loaded[k];
-  }
-
-  /* ── Views ── */
-  // Generic GROUP BY: average of the price and its components, plus the max / min hour
-  function groupBy(rows, keyFn) {
+  // Month rows → objects, oldest first
+  const months = (doc, p) => ((doc[p] && doc[p].meses) || []).map(([mes, horas, avg, ene, per, cng, max, maxF, maxH, min, minF, minH]) =>
+    ({ mes, horas, avg, ene, per, cng, max: { v: max, f: maxF, h: maxH }, min: { v: min, f: minF, h: minH } })).sort((a, b) => a.mes < b.mes ? -1 : 1);
+  // Annual summary from the months: hour-weighted average, max / min hour of the year
+  function years(ms) {
     const g = new Map();
-    for (const r of rows) {
-      const k = keyFn(r);
-      let a = g.get(k);
-      if (!a) g.set(k, a = { key: k, n: 0, precio: 0, energia: 0, perdidas: 0, congestion: 0, max: r, min: r });
-      a.n++; a.precio += r.precio; a.energia += r.energia || 0; a.perdidas += r.perdidas || 0; a.congestion += r.congestion || 0;
-      if (r.precio > a.max.precio) a.max = r;
-      if (r.precio < a.min.precio) a.min = r;
+    for (const m of ms) {
+      const y = m.mes.slice(0, 4);
+      let a = g.get(y);
+      if (!a) g.set(y, a = { y, horas: 0, suma: 0, max: m.max, min: m.min });
+      a.horas += m.horas; a.suma += m.avg * m.horas;
+      if (m.max.v > a.max.v) a.max = m.max;
+      if (m.min.v < a.min.v) a.min = m.min;
     }
-    return [...g.values()].map(a => ({ ...a, precio: a.precio / a.n, energia: a.energia / a.n, perdidas: a.perdidas / a.n, congestion: a.congestion / a.n }));
+    return new Map([...g].map(([y, a]) => [y, { ...a, avg: a.suma / a.horas }]));
   }
-  const VIEWS = {
-    v_diario: rows => groupBy(rows, r => r.fecha),
-    v_mensual: rows => groupBy(rows, r => r.fecha.slice(0, 7)),
-    v_anual: rows => groupBy(rows, r => r.fecha.slice(0, 4)),
-    v_perfil: rows => groupBy(rows, r => r.fecha.slice(0, 4) + '|' + r.hora)
-  };
 
-  /* ── UI ── */
-  async function mount(el, { node, priceName, onPick }) {
+  async function mount(el, { node, priceName }) {
     if (!el) return;
-    let idx;
-    try { idx = await index(); } catch { idx = { entidades: [] }; }
+    const [idx, doc] = await Promise.all([get(DATA + 'index.json'), get(fileOf(node))]);
     if (!el.isConnected) return;
-    const P = priceName, ent = idx.entidades.find(e => entKey(e) === keyOf(node));
-    const label = e => e.tipo === 'zona' ? `${e.clave} (load zone)` : e.clave;
+    const P = priceName, who = node.kind === 'zone' ? `load zone ${node.nodo}` : node.nodo;
     const head = `<div class="cp-hi-head"><div><h2 class="cp-hi-title">Long-term history</h2>
-      <p class="cp-hi-sub">Hourly ${P} since 2016, kept by the Sentinels data robot and analysed in your browser.</p></div></div>`;
-
-    if (!ent) {
-      const others = idx.entidades;
-      el.innerHTML = `<div class="cp-card cp-hi">${head}<div class="cp-hi-msg">Long-term history is not kept for ${node.kind === 'zone' ? 'load zone ' : ''}<b>${esc(node.nodo)}</b> yet. Ask your Sentinel advisor to add it.</div>
-        ${others.length ? `<div class="cp-hi-chips"><span>Available for:</span>${others.map(e => `<button class="cp-doc-filter" data-e="${esc(entKey(e))}">${esc(label(e))}</button>`).join('')}</div>` : ''}</div>`;
-      el.querySelectorAll('[data-e]').forEach(b => b.onclick = () => { const e = others.find(x => entKey(x) === b.dataset.e); onPick(e.sistema, e.clave, e.tipo === 'zona' ? 'zone' : undefined); });
+      <p class="cp-hi-sub">Monthly ${P} since 2020 for every NodoP and load zone of the CENACE catalog, from the Sentinels data warehouse.</p></div></div>`;
+    const progress = idx && idx.avance < 100
+      ? ` The data robot is still loading older months (${idx.avance}% done): every NodoP and zone is covered since ${esc(mlong((idx.cargado_desde && idx.cargado_desde.MDA || '2020-01').slice(0, 7)))}.` : '';
+    const has = doc && ['MDA', 'MTR'].some(p => months(doc, p).length);
+    if (!has) {
+      el.innerHTML = `<div class="cp-card cp-hi">${head}<div class="cp-hi-msg">The history of <b>${esc(who)}</b> is not published yet.${progress || ' It appears after the next monthly update.'}</div></div>`;
       return;
     }
-
-    const prog = ['MDA', 'MTR'].map(p => ent[p] && ent[p].desde
-      ? `${p} ${dlabel(ent[p].desde)} – ${dlabel(ent[p].hasta)}${ent[p].completo ? '' : ` · loading ${ent[p].avance}%`}` : `${p} not loaded yet`).join(' · ');
-    const files = ['MDA', 'MTR'].reduce((t, p) => t + ((ent[p] && ent[p].archivos) || []).length, 0);
+    const all = ['MDA', 'MTR'].flatMap(p => months(doc, p).map(m => m.mes)).sort();
     el.innerHTML = `<div class="cp-card cp-hi">${head}
-      <div class="cp-hi-msg">${esc(prog)}.${['MDA', 'MTR'].some(p => !(ent[p] && ent[p].completo)) ? ' The robot keeps adding older years every hour.' : ''}</div>
-      <div class="cp-hi-body">${loaded[entKey(ent)] ? '' : `<button class="cp-btn-dark cp-btn-sm" id="hi-load" ${files ? '' : 'disabled'}>Load history</button>`}</div></div>`;
-    const body = el.querySelector('.cp-hi-body');
-    const show = async () => {
-      body.innerHTML = '<div class="cp-hi-msg">Loading the hourly history…</div>';
-      let d;
-      try { d = await load(ent); } catch { body.innerHTML = '<div class="cp-hi-msg">The history could not be loaded. Please try again later.</div>'; return; }
-      if (el.isConnected) draw(body, d, ent, P);
-    };
-    const btn = el.querySelector('#hi-load');
-    if (btn) btn.onclick = show; else show();
+      <div class="cp-hi-msg">${esc(mlong(all[0]))} – ${esc(mlong(doc.hasta_mes))}, closed months (MTR complete). Recent days: use the query above.${progress}</div>
+      <div class="cp-hi-body"></div></div>`;
+    draw(el.querySelector('.cp-hi-body'), doc, P);
   }
 
-  function draw(body, d, ent, P) {
+  function draw(body, doc, P) {
     const W = (id, title, cls, tools = '') => `<div class="cp-widget ${cls}" id="${id}"><div class="cp-widget-head"><div class="cp-widget-title">${esc(title)}</div>${tools}</div><div class="cp-widget-body"></div></div>`;
     const seg = `<div class="cp-ch-ranges cp-pr-seg" role="group" aria-label="Market">${['MDA', 'MTR'].map((p, i) => `<button data-p="${p}" class="${i ? '' : 'on'}">${p}</button>`).join('')}</div>`;
     const dl = '<button class="cp-pr-dl" id="hi-xlsx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>';
@@ -121,38 +74,36 @@ const PriceHistory = (() => {
       ${W('hi-year', `Annual summary ${P}`, 'cp-w-l')}
       ${W('hi-profile', `Average hourly profile by year · ${P}`, 'cp-w-l', seg)}</div>`;
     const fmt = v => fx(v) + ' MXN/MWh', axis = v => fx(v, 0);
+    const m = { MDA: months(doc, 'MDA'), MTR: months(doc, 'MTR') };
 
     // Monthly averages of both markets on one timeline
-    const m = { MDA: VIEWS.v_mensual(d.MDA), MTR: VIEWS.v_mensual(d.MTR) };
-    const months = [...new Set([...m.MDA, ...m.MTR].map(r => r.key))].sort();
-    const byKey = p => new Map(m[p].map(r => [r.key, r.precio]));
-    const mda = byKey('MDA'), mtr = byKey('MTR');
+    const keys = [...new Set([...m.MDA, ...m.MTR].map(r => r.mes))].sort();
+    const avgOf = p => new Map(m[p].map(r => [r.mes, r.avg]));
+    const mda = avgOf('MDA'), mtr = avgOf('MTR');
     Board.charts.lineChart(body.querySelector('#hi-month .cp-widget-body'), {
-      labels: months.map(mlabel), fmt, axis, band: false, ranges: [[12, '1Y'], [36, '3Y'], [60, '5Y']],
-      series: [{ name: 'MDA', color: C.MDA, values: months.map(k => mda.get(k) ?? null) }, { name: 'MTR', color: C.MTR, values: months.map(k => mtr.get(k) ?? null) }]
+      labels: keys.map(mlabel), fmt, axis, band: false, ranges: [[12, '1Y'], [36, '3Y'], [60, '5Y']],
+      series: [{ name: 'MDA', color: C.MDA, values: keys.map(k => mda.get(k) ?? null) }, { name: 'MTR', color: C.MTR, values: keys.map(k => mtr.get(k) ?? null) }]
     });
 
-    // Annual summary table (newest year first)
-    const y = { MDA: new Map(VIEWS.v_anual(d.MDA).map(r => [r.key, r])), MTR: new Map(VIEWS.v_anual(d.MTR).map(r => [r.key, r])) };
-    const years = [...new Set([...y.MDA.keys(), ...y.MTR.keys()])].sort().reverse();
-    // A year is partial when it lacks more than two days of hours (not loaded yet, or the current year)
-    const partial = (k, r) => !r || r.n < ((+k % 4 ? 365 : 366) - 2) * 24;
-    const cell = r => r ? `<td>${fx(r.precio)}</td><td>${fx(r.max.precio)}<small>${esc(r.max.fecha)} · H${r.max.hora}</small></td><td>${fx(r.min.precio)}<small>${esc(r.min.fecha)} · H${r.min.hora}</small></td>` : '<td>—</td><td>—</td><td>—</td>';
+    // Annual summary table (newest year first); a year is partial if it lacks more than two days of hours
+    const y = { MDA: years(m.MDA), MTR: years(m.MTR) };
+    const ys = [...new Set([...y.MDA.keys(), ...y.MTR.keys()])].sort().reverse();
+    const partial = (k, r) => !r || r.horas < ((+k % 4 ? 365 : 366) - 2) * 24;
+    const cell = r => r ? `<td>${fx(r.avg)}</td><td>${fx(r.max.v)}<small>${esc(r.max.f)} · H${r.max.h}</small></td><td>${fx(r.min.v)}<small>${esc(r.min.f)} · H${r.min.h}</small></td>` : '<td>—</td><td>—</td><td>—</td>';
     body.querySelector('#hi-year .cp-widget-body').innerHTML = `<div class="cp-pr-scroll cp-hi-scroll"><table class="cp-mini-table cp-pr-table cp-hi-table"><thead><tr><th>Year</th>
         <th>MDA avg<small>MXN/MWh</small></th><th>MDA max</th><th>MDA min</th><th>MTR avg<small>MXN/MWh</small></th><th>MTR max</th><th>MTR min</th><th>MTR − MDA<small>avg</small></th></tr></thead>
-      <tbody>${years.map(k => { const a = y.MDA.get(k), b = y.MTR.get(k); return `<tr><td>${k}${partial(k, a) || partial(k, b) ? '<small>partial</small>' : ''}</td>${cell(a)}${cell(b)}<td>${a && b ? fx(b.precio - a.precio) : '—'}</td></tr>`; }).join('')}</tbody></table></div>
-      <div class="cp-pr-count">Averages of every hour of the year · "partial" = the year is not complete in the history yet</div>`;
+      <tbody>${ys.map(k => { const a = y.MDA.get(k), b = y.MTR.get(k); return `<tr><td>${k}${partial(k, a) || partial(k, b) ? '<small>partial</small>' : ''}</td>${cell(a)}${cell(b)}<td>${a && b ? fx(b.avg - a.avg) : '—'}</td></tr>`; }).join('')}</tbody></table></div>
+      <div class="cp-pr-count">Hour-weighted averages of the year · "partial" = the year is not complete in the history</div>`;
 
     // Hourly profile: one line per year; the last three years start visible
     const profile = p => {
-      const v = VIEWS.v_perfil(d[p]), ys = [...new Set(v.map(r => r.key.split('|')[0]))].sort();
-      const map = new Map(v.map(r => [r.key, r.precio]));
+      const pf = (doc[p] && doc[p].perfil) || {}, yrs = Object.keys(pf).sort();
       const el = body.querySelector('#hi-profile .cp-widget-body');
-      if (!ys.length) { el.innerHTML = `<div class="cp-widget-empty">No ${p} history yet.</div>`; return; }
+      if (!yrs.length) { el.innerHTML = `<div class="cp-widget-empty">No ${p} history yet.</div>`; return; }
       Board.charts.lineChart(el, {
         labels: Array.from({ length: 24 }, (_, i) => 'H' + (i + 1)), fmt, axis, band: false, ranges: false,
-        series: ys.map((yr, i) => ({ name: yr, color: YEAR_COLORS[(ys.length - 1 - i) % YEAR_COLORS.length], values: Array.from({ length: 24 }, (_, h) => map.get(yr + '|' + (h + 1)) ?? null) })),
-        off: ys.map((_, i) => i).filter(i => i < ys.length - 3)
+        series: yrs.map((yr, i) => ({ name: yr, color: YEAR_COLORS[(yrs.length - 1 - i) % YEAR_COLORS.length], values: pf[yr] })),
+        off: yrs.map((_, i) => i).filter(i => i < yrs.length - 3)
       });
     };
     profile('MDA');
@@ -160,19 +111,20 @@ const PriceHistory = (() => {
       body.querySelectorAll('#hi-profile .cp-pr-seg button').forEach(o => o.classList.toggle('on', o === bt)); profile(bt.dataset.p);
     });
 
-    // Excel: the three views, ready for pivot tables
+    // Excel: monthly, annual and hourly profile, ready for pivot tables
     body.querySelector('#hi-xlsx').onclick = () => {
       const n2 = { width: 14, fmt: '0.00' };
-      const rowsOf = (view, p) => VIEWS[view](d[p]).sort((a, b) => a.key < b.key ? -1 : 1).map(r => [p, r.key, r.precio, r.energia, r.perdidas, r.congestion, r.max.precio, r.min.precio, r.n]);
-      const cols = keyTitle => [{ title: 'Market', width: 8 }, { title: keyTitle, width: 12 }, { title: P + ' avg', ...n2 }, { title: 'Energy avg', ...n2 }, { title: 'Losses avg', ...n2 },
-        { title: 'Congestion avg', ...n2 }, { title: P + ' max', ...n2 }, { title: P + ' min', ...n2 }, { title: 'Hours', width: 8, fmt: '0' }];
-      Xlsx.download(`${P}_history_${ent.sistema}_${ent.clave.replace(/ /g, '-')}.xlsx`, [
-        { name: 'Monthly', columns: cols('Month'), rows: [...rowsOf('v_mensual', 'MDA'), ...rowsOf('v_mensual', 'MTR')] },
-        { name: 'Annual', columns: cols('Year'), rows: [...rowsOf('v_anual', 'MDA'), ...rowsOf('v_anual', 'MTR')] },
-        { name: 'Daily', columns: cols('Date'), rows: [...rowsOf('v_diario', 'MDA'), ...rowsOf('v_diario', 'MTR')] }
+      const ext = (t) => [{ title: `${P} max`, ...n2 }, { title: `${t} max date`, width: 12 }, { title: 'Max hour', width: 9, fmt: '0' }, { title: `${P} min`, ...n2 }, { title: `${t} min date`, width: 12 }, { title: 'Min hour', width: 9, fmt: '0' }];
+      Xlsx.download(`${P}_history_${doc.sistema}_${doc.clave.replace(/ /g, '-')}.xlsx`, [
+        { name: 'Monthly', columns: [{ title: 'Market', width: 8 }, { title: 'Month', width: 9 }, { title: `${P} avg`, ...n2 }, { title: 'Energy avg', ...n2 }, { title: 'Losses avg', ...n2 }, { title: 'Congestion avg', ...n2 }, ...ext('Hour'), { title: 'Hours', width: 8, fmt: '0' }],
+          rows: ['MDA', 'MTR'].flatMap(p => m[p].map(r => [p, r.mes, r.avg, r.ene, r.per, r.cng, r.max.v, r.max.f, r.max.h, r.min.v, r.min.f, r.min.h, r.horas])) },
+        { name: 'Annual', columns: [{ title: 'Market', width: 8 }, { title: 'Year', width: 7 }, { title: `${P} avg`, ...n2 }, ...ext('Hour'), { title: 'Hours', width: 8, fmt: '0' }],
+          rows: ['MDA', 'MTR'].flatMap(p => [...y[p].values()].sort((a, b) => a.y < b.y ? -1 : 1).map(r => [p, r.y, r.avg, r.max.v, r.max.f, r.max.h, r.min.v, r.min.f, r.min.h, r.horas])) },
+        { name: 'Hourly profile', columns: [{ title: 'Market', width: 8 }, { title: 'Year', width: 7 }, ...Array.from({ length: 24 }, (_, i) => ({ title: 'H' + (i + 1), width: 9, fmt: '0.00' }))],
+          rows: ['MDA', 'MTR'].flatMap(p => Object.entries((doc[p] && doc[p].perfil) || {}).sort().map(([yr, v]) => [p, yr, ...v])) }
       ]);
     };
   }
 
-  return { mount, VIEWS };
+  return { mount };
 })();
