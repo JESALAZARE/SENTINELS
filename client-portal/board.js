@@ -304,7 +304,7 @@ const Board = (() => {
       } },
 
     /* Market — live CENACE data through the PML Worker */
-    sen_demand: { cat: 'Market', title: 'SEN demand · live', icon: 'line', sizes: ['m', 'w', 'l'], desc: 'Today\'s hourly demand, generation and forecast from CENACE, refreshed every 5 minutes.',
+    sen_demand: { cat: 'Market', title: 'SEN demand · live', icon: 'line', sizes: ['m', 'w', 'l'], desc: 'Today\'s hourly demand, generation and forecast from CENACE, refreshed every 2 minutes.',
       ready: () => !!LIVE_API, need: 'the live data service',
       render: (b, w) => senDemand(b, w) }
   };
@@ -640,11 +640,12 @@ const Board = (() => {
   /* ── SEN demand (CENACE "Operación del SEN") ─────
      The Worker's /demanda answers today's 24 hours for a system or region;
      hours still to come carry only the forecast. CENACE adds one point per
-     hour, so the widget asks again every 5 minutes while the page is visible.
+     hour and switches between two sets of values for past hours, so the widget asks
+     again every 2 minutes while the page is visible to stay in step with CENACE's page.
      The chosen system / region is kept in the widget's layout entry. */
   const SEN_AREAS = [['10', 'National Interconnected System (SIN)'], ['1', 'Baja California'], ['2', 'Baja California Sur'],
     ['3', 'SIN · Central'], ['4', 'SIN · Northeast'], ['5', 'SIN · Northwest'], ['6', 'SIN · North'], ['7', 'SIN · Western'], ['8', 'SIN · Eastern'], ['9', 'SIN · Peninsular']];
-  const SEN_REFRESH = 5 * 60 * 1000;
+  const SEN_REFRESH = 2 * 60 * 1000;
   const senLast = {};  // gerencia → last good answer, shown if a refresh fails
   const mw = v => fx(v, 0) + ' MW';
   const mxTime = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Mexico_City' });
@@ -672,7 +673,7 @@ const Board = (() => {
         tile('Current demand', now ? mw(now.demanda) : '—', now ? `Hour ${now.hora}${dev != null ? ` · ${dev >= 0 ? '+' : '−'}${fx(Math.abs(dev), 1)}% vs forecast` : ''}` : 'No hour published yet') +
         tile('Peak so far today', peak ? mw(peak.demanda) : '—', peak ? `Hour ${peak.hora}` : '') +
         tile('Forecast peak', fpeak ? mw(fpeak.pronostico) : '—', fpeak ? `Hour ${fpeak.hora}` : '');
-      if (!hrs.length) { chart.innerHTML = '<div class="cp-widget-empty">CENACE has not published today\'s data yet. Trying again in 5 minutes.</div>'; return; }
+      if (!hrs.length) { chart.innerHTML = '<div class="cp-widget-empty">CENACE has not published today\'s data yet. Trying again in 2 minutes.</div>'; return; }
       // Each point is the hour that ends at that time; CENACE's hour 24 of yesterday is today's 0:00
       const pts = (d.previa ? [d.previa] : []).concat(hrs);
       lineChart(chart, { labels: pts.map((h, i) => (d.previa && i === 0 ? 0 : h.hora) + ':00'), band: false, ranges: false,
@@ -692,7 +693,7 @@ const Board = (() => {
       } catch {
         if (k !== g() || !body.isConnected) return;
         if (senLast[k]) show(senLast[k], true);
-        else { live.className = 'cp-sen-live cp-sen-live--stale'; live.textContent = 'CENACE did not answer'; chart.innerHTML = '<div class="cp-widget-empty">Could not load the data. Trying again in 5 minutes.</div>'; }
+        else { live.className = 'cp-sen-live cp-sen-live--stale'; live.textContent = 'CENACE did not answer'; chart.innerHTML = '<div class="cp-widget-empty">Could not load the data. Trying again in 2 minutes.</div>'; }
       }
     }
 

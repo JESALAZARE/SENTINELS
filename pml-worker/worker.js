@@ -15,7 +15,7 @@
      GET /pml?sistema=SIN&proceso=MDA&nodos=06CDU-400&desde=2026-10-01&hasta=2026-10-26
      GET /pend?sistema=BCS&proceso=MDA&zonas=LOS CABOS,LA PAZ&desde=2026-10-01&hasta=2026-10-26
      GET /demanda?gerencia=10 (today's hourly demand, generation and forecast of a system or
-                               region, from CENACE's "Operación del SEN" page; cached 5 minutes;
+                               region, from CENACE's "Operación del SEN" page; cached 1 minute;
                                previa = hour 24 of the previous day when CENACE sends it)
      GET /health              (?cenace=1 also checks that CENACE answers)
 
@@ -143,8 +143,7 @@ async function fetchWindow(svc, q, a, b, ctx) {
 const GERENCIAS = { 10: 'Sistema Interconectado Nacional', 1: 'Baja California', 2: 'Baja California Sur', 3: 'Central',
   4: 'Noreste', 5: 'Noroeste', 6: 'Norte', 7: 'Occidental', 8: 'Oriental', 9: 'Peninsular' };
 const DEMANDA_URL = 'https://www.cenace.gob.mx/Paginas/SIM/OperacionSEN.aspx/obtieneValoresTotal';
-const DEMANDA_TTL = 300;  // CENACE publishes one point per hour; 5 minutes keeps the widget current
-const DEMANDA_SETTLE = 15 * 60 * 1000;  // how long a rewrite of published hours must last to be accepted
+const DEMANDA_TTL = 60;  // at most one CENACE call a minute per region, so the widget follows CENACE's page
 
 async function demanda(p, ctx) {
   const g = String(p.get('gerencia') || '10');
@@ -168,35 +167,14 @@ async function demanda(p, ctx) {
   const first = all.findIndex(r => r.hora === 1);
   const previa = first > 0 ? all[first - 1] : null;
   const horas = all.slice(Math.max(0, first));
+  // Now and then CENACE answers 0 MW for every hour; that is never real, so it isn't passed on
+  // (the widget keeps showing its last answer and asks again)
+  if (horas.some(h => h.demanda === 0)) throw new Error('OperacionSEN answered 0 MW');
   const out = { gerencia: Number(g), nombre: GERENCIAS[g], fecha: todayMX(), unidades: 'MW', fuente: 'CENACE · Operación del SEN', consultado: new Date(Date.now()).toISOString(), previa, horas };
-
-  // While CENACE publishes a new hour it can briefly answer different values for hours it had
-  // already published. The last good answer is kept a day; an answer that rewrites published
-  // hours is held back (the good one is served and CENACE asked again in a minute) unless the
-  // change is still there after DEMANDA_SETTLE, which makes it a real revision.
-  const goodKey = new Request(`https://sentinels-pml.cache/demanda-good/${g}`);
-  const good = cache ? await cache.match(goodKey).then(r => r ? r.json() : null) : null;
-  const put = (k, obj, ttl) => cache && ctx.waitUntil(cache.put(k, new Response(JSON.stringify(obj), { headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${ttl}` } })));
-  if (good && good.fecha === out.fecha && rewrites(good.horas, horas)) {
-    const since = good.cambio || out.consultado;
-    if (Date.now() - Date.parse(since) < DEMANDA_SETTLE) {
-      put(goodKey, { ...good, cambio: since }, 86400);
-      const { cambio, ...held } = good;
-      put(key, held, 60);
-      return held;
-    }
-  }
-  if (horas.length) put(goodKey, out, 86400);
-  // An empty answer is retried sooner
-  put(key, out, horas.length ? DEMANDA_TTL : 30);
+  // CENACE switches between two sets of values for the hours already published during the
+  // day (both show on its own page), so the answer is passed on as is and kept only briefly
+  if (cache) ctx.waitUntil(cache.put(key, new Response(JSON.stringify(out), { headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${horas.length ? DEMANDA_TTL : 30}` } })));
   return out;
-}
-
-// True when the new answer drops or changes (by more than 0.5%) an hour the good answer had published
-function rewrites(before, now) {
-  const at = new Map(now.map(h => [h.hora, h]));
-  const off = (a, b) => a != null && (b == null || Math.abs(b - a) > Math.abs(a) * 0.005);
-  return before.some(h => h.demanda != null && (!at.has(h.hora) || off(h.demanda, at.get(h.hora).demanda) || off(h.generacion, at.get(h.hora).generacion)));
 }
 
 const num = v => v == null || String(v).trim() === '' || !isFinite(Number(v)) ? null : Number(v);
