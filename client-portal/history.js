@@ -112,10 +112,12 @@ const PriceHistory = (() => {
     const keys = [...new Set([...m.MDA, ...m.MTR].map(r => r.mes))].sort();
     const avgOf = p => new Map(m[p].map(r => [r.mes, r.avg]));
     const mda = avgOf('MDA'), mtr = avgOf('MTR');
-    Board.charts.lineChart(body.querySelector('#hi-month .cp-widget-body'), {
+    const monthEl = body.querySelector('#hi-month .cp-widget-body');
+    Board.charts.lineChart(monthEl, {
       labels: keys.map(mlabel), fmt, axis, band: false, ranges: false,
       series: [{ name: 'MDA', color: C.MDA, values: keys.map(k => mda.get(k) ?? null) }, { name: 'MTR', color: C.MTR, values: keys.map(k => mtr.get(k) ?? null) }]
     });
+    monthEl.insertAdjacentHTML('beforeend', `<div class="cp-ch-foot">Hour-weighted monthly averages · ${esc(mlong(keys[0]))} – ${esc(mlong(keys.at(-1)))} · ${keys.length} month${keys.length === 1 ? '' : 's'}</div>`);
 
     // Annual summary of the months in the range (newest year first); partial = lacks more than two days of hours
     const y = { MDA: years(m.MDA), MTR: years(m.MTR) };
@@ -125,7 +127,7 @@ const PriceHistory = (() => {
     body.querySelector('#hi-year .cp-widget-body').innerHTML = `<div class="cp-pr-scroll cp-hi-scroll"><table class="cp-mini-table cp-pr-table cp-hi-table"><thead><tr><th>Year</th>
         <th>MDA avg<small>MXN/MWh</small></th><th>MDA max</th><th>MDA min</th><th>MTR avg<small>MXN/MWh</small></th><th>MTR max</th><th>MTR min</th><th>MTR − MDA<small>avg</small></th></tr></thead>
       <tbody>${ys.map(k => { const a = y.MDA.get(k), b = y.MTR.get(k); return `<tr><td>${k}${partial(k, a) || partial(k, b) ? '<small>partial</small>' : ''}</td>${cell(a)}${cell(b)}<td>${a && b ? fx(b.avg - a.avg) : '—'}</td></tr>`; }).join('')}</tbody></table></div>
-      <div class="cp-pr-count">Hour-weighted averages of the months in the range · "partial" = the year is not complete in the range or in the history</div>`;
+      <div class="cp-ch-foot">Hour-weighted averages of ${esc(mlong(from))} – ${esc(mlong(to))} · "partial" = the year is not complete in the range or in the history</div>`;
 
     // Hourly profile: one line per (whole) year of the range; the last three start visible
     const profile = p => {
@@ -137,7 +139,7 @@ const PriceHistory = (() => {
         series: yrs.map((yr, i) => ({ name: yr, color: YEAR_COLORS[(yrs.length - 1 - i) % YEAR_COLORS.length], values: pf[yr] })),
         off: yrs.map((_, i) => i).filter(i => i < yrs.length - 3)
       });
-      el.insertAdjacentHTML('beforeend', '<div class="cp-pr-count">Each line averages its whole year (all closed months), even if the range covers only part of it</div>');
+      el.insertAdjacentHTML('beforeend', `<div class="cp-ch-foot">Average of each hour by year · ${yrs[0]}${yrs.length > 1 ? ` – ${yrs.at(-1)}` : ''} · each line uses all closed months of its year, even if the range covers only part of it</div>`);
     };
     profile('MDA');
     body.querySelectorAll('#hi-profile .cp-pr-seg button').forEach(bt => bt.onclick = () => {

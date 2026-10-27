@@ -131,6 +131,72 @@ const PricesPage = (() => {
     return PARTS.map(([f]) => keys.map(k => mean(groups.get(k).map(r => r[f]).filter(v => v != null))));
   }
 
+  /* ── Date range: From / To, slider and the 31-day limit ── */
+  const ndays = (f, t) => (Date.parse(t) - Date.parse(f)) / 864e5 + 1;
+  const range2 = (f, t) => f === t ? long(f) : f.slice(0, 4) === t.slice(0, 4) ? `${short(f)} – ${long(t)}` : `${long(f)} – ${long(t)}`;
+  // The date the client moved (From or To) stays; the other one follows to keep From ≤ To (with the
+  // length the range had) and, with the Worker, at most 31 days. b = { min, max } allowed dates.
+  function fitRange(f, t, moved, b, keep = 1) {
+    const clamp = d => d < b.min ? b.min : d > b.max ? b.max : d;
+    f = clamp(f); t = clamp(t);
+    if (f > t) { if (moved === 'from') t = clamp(addDays(f, keep - 1)); else f = clamp(addDays(t, 1 - keep)); }
+    if (anyNode() && ndays(f, t) > MAX_DAYS) {
+      if (moved === 'from') { t = addDays(f, MAX_DAYS - 1); if (t > b.max) { t = b.max; f = addDays(t, 1 - MAX_DAYS); } }
+      else { f = addDays(t, 1 - MAX_DAYS); if (f < b.min) { f = b.min; t = addDays(f, MAX_DAYS - 1); } }
+    }
+    return [f, t];
+  }
+
+  // Two-handle slider over one year of dates (‹ › move that year). Dragging updates the dates
+  // live; the prices load when the handle is released.
+  // One year on wide screens; four months on phones, so the two handles of a short range stay apart
+  const sliderDays = () => matchMedia('(max-width:600px)').matches ? 120 : 365;
+  function slider(el, b, setRange, browsing = false) {
+    if (!el) return;
+    const len = Math.min(sliderDays(), ndays(b.min, b.max));
+    let end = S.domEnd && S.domEnd >= b.min && S.domEnd <= b.max ? S.domEnd : b.max;
+    // Show the year that holds the selection (near its right end), unless the client is browsing with ‹ ›
+    if (!browsing && (S.to > end || S.from < addDays(end, 1 - len))) end = [addDays(S.to, 30), b.max].sort()[0];
+    let start = addDays(end, 1 - len);
+    if (start < b.min) { start = b.min; end = addDays(start, len - 1); }
+    S.domEnd = end;
+    const N = len - 1, at = i => addDays(start, +i), pos = d => Math.max(0, Math.min(N, ndays(start, d) - 1));
+    el.innerHTML = `
+      <button type="button" class="cp-pr-sl-nav" data-d="-1" aria-label="Earlier dates" ${start <= b.min ? 'disabled' : ''}>‹</button>
+      <div class="cp-pr-sl-main">
+        <div class="cp-pr-sl-track"><i></i></div>
+        <input type="range" class="cp-pr-sl-a" min="0" max="${N}" value="${pos(S.from)}" aria-label="From date">
+        <input type="range" class="cp-pr-sl-b" min="0" max="${N}" value="${pos(S.to)}" aria-label="To date">
+        <div class="cp-pr-sl-ends"><span>${long(start)}</span><span>${long(end)}</span></div>
+        <b class="cp-pr-sl-sel" aria-live="polite"></b>
+      </div>
+      <button type="button" class="cp-pr-sl-nav" data-d="1" aria-label="Later dates" ${end >= b.max ? 'disabled' : ''}>›</button>`;
+    const a = el.querySelector('.cp-pr-sl-a'), z = el.querySelector('.cp-pr-sl-b'), bar = el.querySelector('.cp-pr-sl-track i'), sel = el.querySelector('.cp-pr-sl-sel');
+    const fromIn = document.getElementById('pr-from'), toIn = document.getElementById('pr-to');
+    let f = S.from, t = S.to, timer = null;
+    const paint = () => {
+      const inside = f >= start && t <= end;
+      bar.style.left = (pos(f) / N * 100) + '%'; bar.style.width = ((pos(t) - pos(f)) / N * 100) + '%';
+      bar.hidden = !inside;
+      sel.textContent = `${range2(f, t)} · ${ndays(f, t)} day${ndays(f, t) === 1 ? '' : 's'}`;
+      // The handle on top is the one that can still move (both on the same day: the From one)
+      a.style.zIndex = +a.value >= N - 1 || +a.value === +z.value ? 3 : 2;
+    };
+    const drag = moved => {
+      [f, t] = fitRange(moved === 'from' ? at(a.value) : f, moved === 'to' ? at(z.value) : t, moved, { min: start, max: end }, ndays(f, t));
+      a.value = pos(f); z.value = pos(t); fromIn.value = f; toIn.value = t; paint();
+    };
+    const commit = moved => { clearTimeout(timer); timer = setTimeout(() => { if (f !== S.from || t !== S.to) setRange(f, t, moved); }, 250); };
+    a.oninput = () => drag('from'); z.oninput = () => drag('to');
+    a.onchange = () => commit('from'); z.onchange = () => commit('to');
+    // ‹ › move the visible year by six months; the selection does not change until a handle moves
+    el.querySelectorAll('.cp-pr-sl-nav').forEach(btn => btn.onclick = () => {
+      S.domEnd = [[addDays(end, +btn.dataset.d * 182), addDays(b.min, len - 1)].sort().at(-1), b.max].sort()[0];
+      slider(el, b, setRange, true);
+    });
+    paint();
+  }
+
   /* ── Page ─────────────────────────────────────── */
   let seq = 0;
   async function render() {
@@ -162,14 +228,19 @@ const PricesPage = (() => {
       : `<select id="pr-node">${nodes.filter(x => x.sistema === n.sistema).map(x => `<option ${x.nodo === n.nodo ? 'selected' : ''}>${esc(x.nodo)}</option>`).join('')}</select>`;
     host.innerHTML = `
       <div class="cp-card cp-pr-bar">
-        <label class="cp-pr-f"><span>System</span><select id="pr-sys">${systems.map(s => `<option ${s === n.sistema ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
-        <label class="cp-pr-f cp-pr-f--node"><span>${zone ? 'Load zone' : 'NodoP'}</span>${nodeField}</label>
-        ${anyNode() ? `<label class="cp-pr-zone"><input type="checkbox" id="pr-zone" ${zone ? 'checked' : ''}><span>Distributed nodes<small>Load zones (PEND)</small></span></label>` : ''}
-        <label class="cp-pr-f"><span>From</span><input type="date" id="pr-from" value="${S.from}" min="${b.min}" max="${b.max}"></label>
-        <label class="cp-pr-f"><span>To</span><input type="date" id="pr-to" value="${S.to}" min="${b.min}" max="${b.max}"></label>
-        <div class="cp-pr-presets" role="group" aria-label="Quick ranges">${presets.map(([k, t]) =>
-          `<button class="cp-doc-filter ${S.to === b.max && (k ? span === k && S.from === addDays(b.max, 1 - k) : S.from === b.min) ? 'active' : ''}" data-n="${k}">${t}</button>`).join('')}</div>
-        <button class="cp-btn-ghost cp-btn-sm cp-pr-cat" id="pr-cat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>View NodoP catalog</button>
+        <div class="cp-pr-row cp-pr-row--what">
+          <label class="cp-pr-f cp-pr-f--sys"><span>System</span><select id="pr-sys">${systems.map(s => `<option ${s === n.sistema ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
+          <label class="cp-pr-f cp-pr-f--node"><span>${zone ? 'Load zone' : 'NodoP'}</span>${nodeField}</label>
+          ${anyNode() ? `<label class="cp-pr-zone"><input type="checkbox" id="pr-zone" ${zone ? 'checked' : ''}><span>Distributed nodes<small>Load zones (PEND)</small></span></label>` : ''}
+          <button class="cp-btn-ghost cp-btn-sm cp-pr-cat" id="pr-cat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><span><span class="cp-pr-cat-v">View </span>NodoP catalog</span></button>
+        </div>
+        <div class="cp-pr-row cp-pr-row--when">
+          <label class="cp-pr-f cp-pr-f--date"><span>From</span><input type="date" id="pr-from" value="${S.from}" min="${b.min}" max="${b.max}"></label>
+          <label class="cp-pr-f cp-pr-f--date"><span>To</span><input type="date" id="pr-to" value="${S.to}" min="${b.min}" max="${b.max}"></label>
+          <div class="cp-pr-presets" role="group" aria-label="Quick ranges">${presets.map(([k, t]) =>
+            `<button class="cp-doc-filter ${S.to === b.max && (k ? span === k && S.from === addDays(b.max, 1 - k) : S.from === b.min) ? 'active' : ''}" data-n="${k}">${t}</button>`).join('')}</div>
+          <div class="cp-pr-slider" id="pr-slider"></div>
+        </div>
         <div class="cp-pr-note">${title ? `<b id="pr-node-name">${esc(title)}</b> · ` : ''}${esc(note)}</div>
       </div>
       ${err ? `<div class="cp-card cp-pr-msg">The prices for ${zone ? 'load zone ' : ''}${esc(n.nodo)} could not be loaded${err.message ? ': ' + esc(err.message) : ''}. Please try again later.</div>` : `<div class="cp-board cp-pr-board">
@@ -213,19 +284,19 @@ const PricesPage = (() => {
         choose(n.sistema, st ? st.nodo : inZone[0] || (nodes.find(x => x.sistema === n.sistema) || nodes[0]).nodo);
       }
     };
-    // Keep the range inside the bounds and, with the Worker, at most 31 days (moving the start)
-    const setRange = (f, t) => {
-      if (f > t) [f, t] = [t, f];
-      f = f < b.min ? b.min : f; t = t > b.max ? b.max : t;
-      if (anyNode() && (Date.parse(t) - Date.parse(f)) / 864e5 + 1 > MAX_DAYS) f = addDays(t, 1 - MAX_DAYS);
+    // Keep the range inside the bounds and, with the Worker, at most 31 days: the date the client
+    // just moved stays and the other one follows it (moving From back drags To back too)
+    const setRange = (f, t, moved = 'to') => {
+      [f, t] = fitRange(f, t, moved, b, ndays(S.from, S.to));
       S.from = f; S.to = t; render();
     };
-    const setDates = () => { const f = host.querySelector('#pr-from').value, t = host.querySelector('#pr-to').value; if (f && t) setRange(f, t); };
+    const setDates = moved => { const f = host.querySelector('#pr-from').value, t = host.querySelector('#pr-to').value; if (f && t) setRange(f, t, moved); };
+    slider(host.querySelector('#pr-slider'), b, setRange);
     host.querySelector('#pr-cat').onclick = () => NodosCatalog.open(anyNode()
       ? { all: true, onPick: (s, c) => choose(s, c), onPickZone: (s, z) => choose(s, z, 'zone') }
       : { priced: new Set(nodes.map(x => x.sistema + '/' + x.nodo)), onPick: (sistema, clave) => { if (stored(sistema, clave)) choose(sistema, clave); } });
-    host.querySelector('#pr-from').onchange = setDates;
-    host.querySelector('#pr-to').onchange = setDates;
+    host.querySelector('#pr-from').onchange = () => setDates('from');
+    host.querySelector('#pr-to').onchange = () => setDates('to');
     host.querySelectorAll('.cp-pr-presets button').forEach(bt => bt.onclick = () => {
       const k = +bt.dataset.n; setRange(k ? addDays(b.max, 1 - k) : b.min, b.max);
     });
@@ -246,8 +317,9 @@ const PricesPage = (() => {
       const ds = days.filter(f => rows.some(r => r.fecha === f));
       Board.charts.lineChart(daily, { labels: ds.map(short), series: series(averages(rows, r => r.fecha, ds)), fmt, axis, band: false, off: [1, 2, 3], ranges: [[7, '7D'], [14, '14D'], [30, '30D']] });
       Board.charts.lineChart(hourly, { labels: hours.map(h => 'H' + h), series: series(averages(rows, r => r.hora, hours)), fmt, axis, band: false, off: [1, 2, 3], ranges: false });
-      summary(daily, rows, ds.length);
-      summary(hourly, rows, ds.length);
+      const period = `${range2(ds[0], ds.at(-1))} · ${ds.length} day${ds.length === 1 ? '' : 's'} with ${p} prices`;
+      summary(daily, rows, `Daily averages of ${period}`);
+      summary(hourly, rows, `Average of each hour over ${period}`);
     });
     extreme('max'); extreme('min'); table();
 
@@ -282,7 +354,8 @@ const PricesPage = (() => {
       const r = rows.reduce((a, c) => (w === 'max' ? c.pml > a.pml : c.pml < a.pml) ? c : a);
       body.innerHTML = `<div class="cp-kpi-value">${fx(r.pml)}<span class="cp-kpi-unit">MXN/MWh</span></div>
         <div class="cp-pr-when">${esc(long(r.fecha))} · Hour ${r.hora} · ${p}</div>
-        <div class="cp-pr-parts">${PARTS.slice(1).map(([f, name, color]) => `<div><span><i style="background:${color}"></i>${name}</span><b>${fx(r[f])}</b></div>`).join('')}</div>`;
+        <div class="cp-pr-parts">${PARTS.slice(1).map(([f, name, color]) => `<div><span><i style="background:${color}"></i>${name}</span><b>${fx(r[f])}</b></div>`).join('')}</div>
+        <div class="cp-ch-foot">${w === 'max' ? 'Highest' : 'Lowest'} hourly ${P} of ${range2(rows[0].fecha, rows.at(-1).fecha)} · ${rows.length} hours</div>`;
     }
 
     function table() {
@@ -297,7 +370,7 @@ const PricesPage = (() => {
         <div class="cp-pr-scroll"><table class="cp-mini-table cp-pr-table"><thead><tr><th>Date</th><th>Hour</th>
           ${[P, 'Energy comp.', 'Congestion comp.', 'Losses comp.'].map(t => `<th>${t}<small>${unit}</small></th>`).join('')}${usd ? '<th>FX<small>MXN/USD</small></th>' : ''}</tr></thead>
           <tbody>${rows.map(r => `<tr><td>${r.fecha}</td><td>${r.hora}</td>${['pml', 'pml_ene', 'pml_cng', 'pml_per'].map(f => `<td>${fx(conv(r, f))}</td>`).join('')}${usd ? `<td>${fx(rateFor(r.fecha), 4)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
-        <div class="cp-pr-count">${rows.length} hours · ${p} · ${zone ? 'load zone ' : ''}${esc(S.node.nodo)}</div>`;
+        <div class="cp-ch-foot">${rows.length} hours · ${p} · ${zone ? 'load zone ' : ''}${esc(S.node.nodo)} · ${range2(rows.at(-1).fecha, rows[0].fecha)}</div>`;
     }
   }
 
@@ -306,8 +379,9 @@ const PricesPage = (() => {
   }
   const seg = w => `<div class="cp-ch-ranges cp-pr-seg" data-w="${w}" role="group" aria-label="Market">${['MDA', 'MTR'].map(p => `<button data-p="${p}" class="${S.proc[w] === p ? 'on' : ''}" title="${PROCS[p]}">${p}</button>`).join('')}</div>`;
   const empty = p => `<div class="cp-widget-empty">No ${p} prices for these dates.${p === 'MTR' ? ' MTR prices are published 7 days after the operating day.' : ''}</div>`;
-  function summary(body, rows, n) {
-    body.insertAdjacentHTML('beforeend', `<div class="cp-pr-sum">Period average <b>${fx(mean(rows.map(r => r.pml)))}</b> MXN/MWh · ${n} day${n === 1 ? '' : 's'}</div>`);
+  // Period average, and a footnote with the days the chart actually uses
+  function summary(body, rows, foot) {
+    body.insertAdjacentHTML('beforeend', `<div class="cp-pr-sum">Period average <b>${fx(mean(rows.map(r => r.pml)))}</b> MXN/MWh</div><div class="cp-ch-foot">${esc(foot)}</div>`);
   }
 
   return { show };
