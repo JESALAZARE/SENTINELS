@@ -1,8 +1,10 @@
 /* ── Sentinels Client Portal · minimal .xlsx writer ─────────────────
    Builds an Excel workbook in the browser with no third-party library:
    one worksheet per sheet, a bold frozen header row, column widths and
-   number formats, packed in an uncompressed ZIP. Used by prices.js.
-     Xlsx.download('file.xlsx', [{ name, columns: [{ title, width, fmt }], rows: [[...]] }])
+   number formats, packed in a ZIP compressed with the browser's
+   CompressionStream (uncompressed where it is missing). Used by prices.js,
+   history.js and nodos.js.
+     await Xlsx.download('file.xlsx', [{ name, columns: [{ title, width, fmt }], rows: [[...]] }])
    fmt: 'text' (default), '0', '0.00' or '0.0000'. */
 const Xlsx = (() => {
   const FMT = { text: 0, '0': 3, '0.00': 4, '0.0000': 5 };  // cellXfs index (header is 1, see styles)
@@ -58,23 +60,26 @@ const Xlsx = (() => {
     return out;
   }
 
-  /* ── ZIP (stored, no compression) ── */
+  /* ── ZIP (deflate with the browser's CompressionStream; stored where it is missing) ── */
   const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
   const crc32 = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
-  function zip(entries) {
+  const canDeflate = typeof CompressionStream === 'function';
+  const deflate = async data => new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+  async function zip(entries) {
     const enc = new TextEncoder(), parts = [], dir = [];
     const d = new Date(), time = d.getHours() << 11 | d.getMinutes() << 5 | d.getSeconds() >> 1, date = d.getFullYear() - 1980 << 9 | d.getMonth() + 1 << 5 | d.getDate();
     let offset = 0;
     for (const [name, text] of Object.entries(entries)) {
       const n = enc.encode(name), data = enc.encode(text), crc = crc32(data);
+      const body = canDeflate ? await deflate(data) : data, method = canDeflate ? 8 : 0;
       const h = new DataView(new ArrayBuffer(30));
-      [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [8, 0, 2], [10, time, 2], [12, date, 2], [14, crc, 4], [18, data.length, 4], [22, data.length, 4], [26, n.length, 2], [28, 0, 2]]
+      [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [8, method, 2], [10, time, 2], [12, date, 2], [14, crc, 4], [18, body.length, 4], [22, data.length, 4], [26, n.length, 2], [28, 0, 2]]
         .forEach(([o, v, s]) => s === 4 ? h.setUint32(o, v, true) : h.setUint16(o, v, true));
       const c = new DataView(new ArrayBuffer(46));
-      [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [10, 0, 2], [12, time, 2], [14, date, 2], [16, crc, 4], [20, data.length, 4], [24, data.length, 4], [28, n.length, 2], [30, 0, 2], [32, 0, 2], [34, 0, 2], [36, 0, 2], [38, 0, 4], [42, offset, 4]]
+      [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [10, method, 2], [12, time, 2], [14, date, 2], [16, crc, 4], [20, body.length, 4], [24, data.length, 4], [28, n.length, 2], [30, 0, 2], [32, 0, 2], [34, 0, 2], [36, 0, 2], [38, 0, 4], [42, offset, 4]]
         .forEach(([o, v, s]) => s === 4 ? c.setUint32(o, v, true) : c.setUint16(o, v, true));
-      parts.push(h, n, data); dir.push(c, n);
-      offset += 30 + n.length + data.length;
+      parts.push(h, n, body); dir.push(c, n);
+      offset += 30 + n.length + body.length;
     }
     const size = dir.reduce((t, p) => t + p.byteLength, 0), e = new DataView(new ArrayBuffer(22));
     const count = Object.keys(entries).length;
@@ -83,9 +88,9 @@ const Xlsx = (() => {
     return new Blob([...parts, ...dir, e], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
 
-  const build = sheets => zip(files(sheets));
-  function download(filename, sheets) {
-    const url = URL.createObjectURL(build(sheets));
+  const build = sheets => zip(files(sheets));  // Promise<Blob>
+  async function download(filename, sheets) {
+    const url = URL.createObjectURL(await build(sheets));
     const a = Object.assign(document.createElement('a'), { href: url, download: filename });
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
