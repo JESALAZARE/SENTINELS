@@ -56,10 +56,11 @@ async function main() {
   for (const e of indice.entidades) {
     // Alta de la entidad (si no existe) y su id
     const r = await pool.request()
-      .input('tipo', sql.VarChar(4), e.tipo).input('sistema', sql.Char(3), e.sistema).input('clave', sql.VarChar(40), e.clave)
-      .query(`IF NOT EXISTS (SELECT 1 FROM dbo.entidades WHERE tipo = @tipo AND sistema = @sistema AND clave = @clave)
-                INSERT dbo.entidades (tipo, sistema, clave) VALUES (@tipo, @sistema, @clave);
-              SELECT id FROM dbo.entidades WHERE tipo = @tipo AND sistema = @sistema AND clave = @clave;`);
+      .input('tipo', sql.NVarChar(4), e.tipo).input('sistema', sql.NVarChar(3), e.sistema).input('clave', sql.NVarChar(40), e.clave)
+      .query(`DECLARE @t varchar(4) = @tipo, @s char(3) = @sistema, @c varchar(40) = @clave;
+              IF NOT EXISTS (SELECT 1 FROM dbo.entidades WHERE tipo = @t AND sistema = @s AND clave = @c)
+                INSERT dbo.entidades (tipo, sistema, clave) VALUES (@t, @s, @c);
+              SELECT id FROM dbo.entidades WHERE tipo = @t AND sistema = @s AND clave = @c;`);
     const id = r.recordset[0].id;
 
     for (const p of ['MDA', 'MTR']) {
@@ -67,8 +68,10 @@ async function main() {
       if (!archivos.length) continue;
       // Lo que ya tiene Azure: se suben los días anteriores al primero y del último en adelante
       // (el último se vuelve a subir por si quedó incompleto)
-      const cob = (await pool.request().input('id', sql.SmallInt, id).input('p', sql.Char(3), p)
-        .query('SELECT CONVERT(char(10), MIN(fecha), 23) AS desde, CONVERT(char(10), MAX(fecha), 23) AS hasta FROM dbo.precios_hora WHERE entidad_id = @id AND proceso = @p')).recordset[0];
+      const cob = (await pool.request().input('id', sql.SmallInt, id).input('p', sql.NVarChar(3), p)
+        .query(`DECLARE @pp char(3) = @p;
+                SELECT CONVERT(char(10), MIN(fecha), 23) AS desde, CONVERT(char(10), MAX(fecha), 23) AS hasta
+                FROM dbo.precios_hora WHERE entidad_id = @id AND proceso = @pp`)).recordset[0];
       const filas = [];
       for (const a of archivos) {
         const datos = JSON.parse(await readFile(path.join(ROOT, a), 'utf8'));
@@ -107,7 +110,10 @@ async function subir(sql, pool, id, proceso, filas) {
     for (const c of ['precio', 'energia', 'perdidas', 'congestion']) t.columns.add(c, sql.Decimal(12, 2), { nullable: c !== 'precio' });
     for (const [fecha, h, precio, ene, per, cng] of filas) t.rows.add(new Date(fecha + 'T00:00:00Z'), h, precio, ene, per, cng);
     await new sql.Request(tx).bulk(t);
-    await new sql.Request(tx).input('id', sql.SmallInt, id).input('p', sql.Char(3), proceso).batch(`
+    // query() (sp_executesql) and not batch(): batch() ignores parameters. #stg was created
+    // earlier on this same connection, so it is visible here.
+    await new sql.Request(tx).input('id', sql.SmallInt, id).input('proc', sql.NVarChar(3), proceso).query(`
+      DECLARE @p char(3) = @proc;
       MERGE dbo.precios_hora WITH (HOLDLOCK) AS d
       USING #stg AS s ON d.entidad_id = @id AND d.proceso = @p AND d.fecha = s.fecha AND d.hora = s.hora
       WHEN MATCHED AND (d.precio <> s.precio OR ISNULL(d.energia, -1e9) <> ISNULL(s.energia, -1e9)
