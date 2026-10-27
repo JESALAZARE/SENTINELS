@@ -201,7 +201,7 @@ async function cargarAzure(sql, pool, ents, archivo) {
   await pool.request().batch(`
     IF OBJECT_ID('tempdb..#stg') IS NOT NULL DROP TABLE #stg;
     IF OBJECT_ID('tempdb..#tocados') IS NOT NULL DROP TABLE #tocados;
-    CREATE TABLE #stg (entidad_id smallint NOT NULL, proc tinyint NOT NULL, fecha date NOT NULL, hora tinyint NOT NULL,
+    CREATE TABLE #stg (entidad_id smallint NOT NULL, mercado tinyint NOT NULL, fecha date NOT NULL, hora tinyint NOT NULL,
       precio decimal(12,2) NOT NULL, energia decimal(12,2) NULL, perdidas decimal(12,2) NULL, congestion decimal(12,2) NULL);
     CREATE TABLE #tocados (entidad_id smallint NOT NULL, proceso char(3) NOT NULL, mes date NOT NULL, PRIMARY KEY (entidad_id, proceso, mes));`);
 
@@ -210,7 +210,7 @@ async function cargarAzure(sql, pool, ents, archivo) {
     const t = new sql.Table('#stg');
     t.create = false;
     t.columns.add('entidad_id', sql.SmallInt, { nullable: false });
-    t.columns.add('proc', sql.TinyInt, { nullable: false });
+    t.columns.add('mercado', sql.TinyInt, { nullable: false });
     t.columns.add('fecha', sql.Date, { nullable: false });
     t.columns.add('hora', sql.TinyInt, { nullable: false });
     for (const c of ['precio', 'energia', 'perdidas', 'congestion']) t.columns.add(c, sql.Decimal(12, 2), { nullable: c !== 'precio' });
@@ -218,15 +218,15 @@ async function cargarAzure(sql, pool, ents, archivo) {
     await pool.request().bulk(t);
     const q = await pool.request().query(`
       INSERT dbo.precios_hora (entidad_id, proceso, fecha, hora, precio, energia, perdidas, congestion)
-      SELECT s.entidad_id, CASE s.proc WHEN 1 THEN 'MDA' ELSE 'MTR' END, s.fecha, s.hora, s.precio, s.energia, s.perdidas, s.congestion
-      FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY entidad_id, proc, fecha, hora ORDER BY (SELECT 0)) AS rn FROM #stg) s
+      SELECT s.entidad_id, CASE s.mercado WHEN 1 THEN 'MDA' ELSE 'MTR' END, s.fecha, s.hora, s.precio, s.energia, s.perdidas, s.congestion
+      FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY entidad_id, mercado, fecha, hora ORDER BY (SELECT 0)) AS rn FROM #stg) s
       WHERE s.rn = 1 AND NOT EXISTS (SELECT 1 FROM dbo.precios_hora p WHERE p.entidad_id = s.entidad_id
-        AND p.proceso = CASE s.proc WHEN 1 THEN 'MDA' ELSE 'MTR' END AND p.fecha = s.fecha AND p.hora = s.hora);
+        AND p.proceso = CASE s.mercado WHEN 1 THEN 'MDA' ELSE 'MTR' END AND p.fecha = s.fecha AND p.hora = s.hora);
       SELECT @@ROWCOUNT AS n;
       INSERT #tocados (entidad_id, proceso, mes)
-      SELECT DISTINCT s.entidad_id, CASE s.proc WHEN 1 THEN 'MDA' ELSE 'MTR' END, DATEFROMPARTS(YEAR(s.fecha), MONTH(s.fecha), 1)
+      SELECT DISTINCT s.entidad_id, CASE s.mercado WHEN 1 THEN 'MDA' ELSE 'MTR' END, DATEFROMPARTS(YEAR(s.fecha), MONTH(s.fecha), 1)
       FROM #stg s WHERE NOT EXISTS (SELECT 1 FROM #tocados t WHERE t.entidad_id = s.entidad_id
-        AND t.proceso = CASE s.proc WHEN 1 THEN 'MDA' ELSE 'MTR' END AND t.mes = DATEFROMPARTS(YEAR(s.fecha), MONTH(s.fecha), 1));
+        AND t.proceso = CASE s.mercado WHEN 1 THEN 'MDA' ELSE 'MTR' END AND t.mes = DATEFROMPARTS(YEAR(s.fecha), MONTH(s.fecha), 1));
       TRUNCATE TABLE #stg;`);
     insertadas += q.recordset[0].n;
   };
