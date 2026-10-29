@@ -11,7 +11,8 @@ quedan **Views SQL** listas para analizar con Excel, Power BI o cualquier herram
 2. Abre la base **una sola vez**: carga todo en bloque y recalcula los resúmenes solo de los
    meses que tocó. La base gratuita gasta cómputo mientras está despierta, por eso se abre una
    vez al día y no en cada consulta.
-3. Publica en el repositorio un resumen mensual pequeño por NodoP o zona (`data/resumen`), que
+3. Publica en el bucket privado de Cloudflare R2 un resumen mensual pequeño por NodoP o zona
+   (`resumen/`; ver `pml-worker/LEEME.md`), que
    es lo que muestra el portal en **Market Prices → Long-term history**. El portal nunca
    consulta Azure en vivo.
 
