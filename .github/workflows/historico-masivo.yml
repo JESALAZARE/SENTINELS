@@ -29,7 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 340
     steps:
+      # La punta de la rama al arrancar, no el commit de cuando se programó: si esta
+      # corrida esperó en cola detrás de otra, debe leer el estado.json que dejó esa.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
 
       - uses: actions/setup-node@v7
         with:
@@ -59,8 +63,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           git commit -q -m "Datos: histórico masivo $(TZ=America/Mexico_City date '+%F')"
+          # Si otro commit tocó data/resumen, ganan los archivos de esta corrida (los más
+          # recientes); si aun así el rebase falla, se cancela limpio para reintentar.
           for intento in 1 2 3; do
-            git pull -q --rebase origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            git pull -q --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            git rebase --abort 2>/dev/null || true
             sleep 20
           done
           exit 1
