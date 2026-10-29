@@ -1,6 +1,8 @@
 # Robot de ofertas del MDA y MTR (SIM del CENACE) → bucket privado de Cloudflare R2.
 # Cada día baja solo los días nuevos (el CENACE publica las ofertas con ~60 días de rezago),
-# los limpia (scripts/ofertas.mjs) y los sube al bucket. No escribe nada en el repositorio:
+# los limpia (scripts/ofertas.mjs) y los sube al bucket, junto con la demanda real y el
+# componente de energía del PML; después calcula los resúmenes del portal
+# (scripts/ofertas-resumen.mjs). No escribe nada en el repositorio:
 # las ofertas son privadas y el repo es público, así que en el log solo van conteos y no
 # se suben artifacts. Credenciales solo en los secrets R2_*.
 name: Ofertas MDA/MTR (R2)
@@ -48,5 +50,15 @@ jobs:
           HASTA: ${{ inputs.hasta }}
           SOLO: ${{ inputs.solo }}
         run: >
-          node scripts/ofertas.mjs --r2 --minutos 300
+          node scripts/ofertas.mjs --r2 --minutos 270
           ${DESDE:+--desde "$DESDE"} ${HASTA:+--hasta "$HASTA"} ${SOLO:+--solo "$SOLO"}
+
+      # Resúmenes de la pestaña de ofertas (solo días nuevos); corre aunque algún reporte haya fallado
+      - name: Calcular resúmenes en el bucket
+        if: ${{ !cancelled() }}
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: node scripts/ofertas-resumen.mjs --r2

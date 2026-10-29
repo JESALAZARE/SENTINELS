@@ -29,6 +29,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash, createHmac } from 'node:crypto';
 import { inflateRawSync, gzipSync } from 'node:zlib';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const SIM = 'https://www.cenace.gob.mx/Paginas/SIM/';
 const UA = 'Mozilla/5.0 (Sentinels ofertas)';
@@ -50,11 +51,14 @@ const REPORTES = [
   { mercado: 'MDA', tipo: 'gi_generacion', pagina: 'Reportes/OfertasMDA.aspx', reporte: '374',     periodicidad: 'D', sistemas: TODOS },
   { mercado: 'MDA', tipo: 'gi_consumo',    pagina: 'Reportes/OfertasMDA.aspx', reporte: '375',     periodicidad: 'D', sistemas: ['SIN', 'BCA'] },
   { mercado: 'MDA', tipo: 'precios_sombra', pagina: 'PreciosSombra.aspx',      reporte: '385',     periodicidad: null, sistemas: ['SIN'] },
+  { mercado: 'MDA', tipo: 'servicios_conexos', pagina: 'Reportes/ReqServConexosMDA.aspx', reporte: '358', periodicidad: null, sistemas: TODOS },
+  { mercado: 'MDA', tipo: 'servicios_conexos_asignados', pagina: 'Reportes/ResultadosMDA.aspx', reporte: '349', periodicidad: null, sistemas: TODOS },
   { mercado: 'MTR', tipo: 'termica',       pagina: 'Reportes/OfertasMTR.aspx', reporte: '376,377', periodicidad: 'H', sistemas: TODOS },
   { mercado: 'MTR', tipo: 'hidro',         pagina: 'Reportes/OfertasMTR.aspx', reporte: '378,379', periodicidad: 'H', sistemas: ['SIN'] },
   { mercado: 'MTR', tipo: 'nodespachable', pagina: 'Reportes/OfertasMTR.aspx', reporte: '380',     periodicidad: 'H', sistemas: TODOS },
   { mercado: 'MTR', tipo: 'intermitente',  pagina: 'Reportes/OfertasMTR.aspx', reporte: '381',     periodicidad: 'H', sistemas: TODOS },
   { mercado: 'MTR', tipo: 'gi_generacion', pagina: 'Reportes/OfertasMTR.aspx', reporte: '382',     periodicidad: 'D', sistemas: TODOS },
+  { mercado: 'MTR', tipo: 'servicios_conexos', pagina: 'Reportes/ReqServConexosMTR.aspx', reporte: '357', periodicidad: null, sistemas: TODOS },
 ];
 
 /* ── Columnas por tipo ──────────────────────────────────────────────── */
@@ -67,6 +71,8 @@ const COSTO_MIN = 'Costo de Operacion a potencia minima ($)';
 const COSTO_UNIT = 'Costo Unitario de Potencia Minima ($/MWh)';
 const LIM_MAX = 'Limite de despacho maximo (MW)', LIM_MIN = 'Limite de despacho minimo (MW)';
 const pares = (n, a, b) => Array.from({ length: n }, (_, i) => [a(N2(i + 1)), b(N2(i + 1))]).flat();
+const RT_REG = 'RT Reserva Regulacion (MW)', RT_ROD = 'RT Reserva Rodante 10 (MW)', RT_10 = 'RT Reserva 10 (MW)', RT_SUP = 'RT Reserva Suplementaria (MW)';
+const RT = ['Hora', RT_REG, RT_ROD, RT_10, RT_SUP];
 const intercambio = (dir, punto) => [
   'Hora', punto, 'Enlace Internacional', `${dir} fija (MW)`,
   ...pares(3, (b) => `${dir} de energia-Bloque ${b} (MW)`, (b) => `Precio de la energia-Bloque ${b} ($/MWh)`),
@@ -89,7 +95,25 @@ const TIPOS = {
   gi_generacion: { columnas: ['Hora', 'Potencia Media (MW)'] },
   gi_consumo:    { columnas: ['Hora', 'Potencia Media (MW)'] },
   precios_sombra: { columnas: ['COSTO_OPORTUNIDAD', 'PRECIO_SOMBRA'] },
+  // Requerimientos (MDA y MTR) y cantidades asignadas (MDA) de servicios conexos: el CENACE
+  // publica totales acumulados (cada uno incluye al anterior); las columnas "Real" separan cada
+  // reserva por diferencia.
+  servicios_conexos: reservasReales(RT_REG, RT_ROD, RT_10, RT_SUP),
+  servicios_conexos_asignados: reservasReales('Reserva de Regulacion Secundaria (MW)', 'Reserva Rodante de 10 minutos (MW)', 'Reserva de 10 minutos (MW)', 'Reserva Suplementaria (MW)'),
 };
+function reservasReales(reg, rod, r10, sup) {
+  const n = (f, c) => Number(f[c]);
+  return {
+    clave: 'Zona de Reserva',
+    columnas: ['Hora', reg, rod, r10, sup, 'Reserva Total Real', 'Reserva Rodante 10 Real', 'Reserva No Rodante 10 Real', 'Reserva Sup Real'],
+    calculadas: {
+      'Reserva Total Real': (f) => redondea(n(f, sup) - n(f, reg)),
+      'Reserva Rodante 10 Real': (f) => redondea(n(f, rod) - n(f, reg)),
+      'Reserva No Rodante 10 Real': (f) => redondea(n(f, r10) - n(f, rod)),
+      'Reserva Sup Real': (f) => redondea(n(f, sup) - n(f, r10)),
+    },
+  };
+}
 const TEXTO = new Set(['Estatus asignacion', 'NodoP/Zona de Carga', 'Punto de Recepcion (NodoP)', 'Punto de Entrega (NodoP)', 'Enlace Internacional']);
 
 /* ── Utilidades ─────────────────────────────────────────────────────── */
@@ -234,16 +258,16 @@ function limpiar(rep, texto) {
   if (!f || !MESES[f[2].toLowerCase()]) throw new Error('sin fila "Fecha:"');
   const fecha = `${f[3]}-${N2(MESES[f[2].toLowerCase()])}-${N2(Number(f[1]))}`;
   const sistema = sistemaDe(meta[2] || '');
-  const iEnc = lineas.findIndex((l, i) => i < 12 && /^(Codigo|CODIGO)$/.test(celdas(l)[0]));
-  if (iEnc < 0) throw new Error('sin encabezado "Codigo"');
+  const tipo = TIPOS[rep.tipo], calc = tipo.calculadas || {}, clave = tipo.clave || 'Codigo';
+  const iEnc = lineas.findIndex((l, i) => i < 12 && celdas(l)[0].toLowerCase() === clave.toLowerCase());
+  if (iEnc < 0) throw new Error(`sin encabezado "${clave}"`);
   const enc = celdas(lineas[iEnc]), cod = enc[0];
 
-  const tipo = TIPOS[rep.tipo], calc = tipo.calculadas || {};
   const fuente = tipo.columnas.filter((c) => !calc[c]);
   const faltan = fuente.filter((c) => !enc.includes(c)), sobran = enc.slice(1).filter((c) => !fuente.includes(c));
   if (faltan.length || sobran.length) throw new Error(`columnas cambiaron (faltan: ${faltan.join(' | ') || '-'}; nuevas: ${sobran.join(' | ') || '-'})`);
 
-  const cabecera = ['Fecha', 'Sistema', 'Mercado', 'Codigo',
+  const cabecera = ['Fecha', 'Sistema', 'Mercado', clave,
     ...(tipo.short ? ['Short'] : []), ...(tipo.short === 6 ? ['Short CE'] : []), ...(tipo.modalidad ? ['Modalidad'] : []), ...tipo.columnas];
   const filas = [];
   let vacios = 0;
@@ -265,6 +289,120 @@ function limpiar(rep, texto) {
       ...tipo.columnas.map(valor)]);
   }
   return { fecha, sistema, cabecera, filas, vacios };
+}
+
+/* ── Estimación de la Demanda Real (referencia para la curva de oferta) ─
+   Dos métodos: por balance (generación + importación − exportación, por sistema y
+   área; incluye pérdidas) y por retiros (compras por zona de carga; sin pérdidas).
+   Cada día tiene varias liquidaciones (0, 1, 2…); se guarda cada una y los resúmenes
+   usan la más reciente. La página usa calendarios Telerik en lugar del formulario de
+   las ofertas: se envían fecha inicial / final y el botón "Descargar". */
+const DEMANDA_URL = SIM + 'Reportes/EstimacionDemandaReal.aspx';
+const METODOS = { balance: 'PorBalance', retiros: 'PorRetiros' };
+
+async function descargarDemanda(metodo, desde, hasta) {
+  const s = new Sesion(DEMANDA_URL), m = METODOS[metodo];
+  const html = await (await s.pedir()).text();
+  const max = html.match(/"maxDate":"(\d{4}-\d\d-\d\d)/)?.[1];
+  if (!max) throw new Error('el SIM no indica la fecha más reciente de la demanda real');
+  if (hasta > max) hasta = max;
+  if (desde > hasta) return { max, csvs: [] };
+  const campos = { ...ocultos(html), __EVENTTARGET: '', __EVENTARGUMENT: '', [PRE + 'DescargarArchivosCsv_' + m]: 'Descargar' };
+  for (const [k, iso] of [['FI', desde], ['FF', hasta]]) {
+    const id = `RadDatePicker${k}Visualizar${m}`, dd = ddmmyyyy(iso);
+    campos[PRE + id] = iso;
+    campos[PRE + id + '$dateInput'] = dd;
+    campos[`ctl00_ContentPlaceHolder1_${id}_dateInput_ClientState`] = JSON.stringify({
+      enabled: true, emptyMessage: '', validationText: iso + '-00-00-00', valueAsString: iso + '-00-00-00',
+      minDateStr: '2016-01-27-00-00-00', maxDateStr: max + '-00-00-00', lastSetTextBoxValue: dd,
+    });
+  }
+  const buf = Buffer.from(await (await s.pedir(campos)).arrayBuffer());
+  return { max, csvs: buf.length > 4 && buf.readUInt32LE(0) === 0x04034b50 ? unzip(buf) : [] };
+}
+
+function limpiarDemanda(texto) {
+  const lineas = texto.split(/\r?\n/);
+  const liq = lineas.slice(0, 10).map((l) => celdas(l)[0].match(/^LIQUIDACION (\d+) \(Dia de Operacion: (\d\d\/\d\d\/\d{4})\)/)).find(Boolean);
+  if (!liq) throw new Error('demanda real: sin fila "LIQUIDACION"');
+  const iEnc = lineas.findIndex((l, i) => i < 12 && celdas(l)[0] === 'Sistema');
+  if (iEnc < 0) throw new Error('demanda real: sin encabezado "Sistema"');
+  const enc = celdas(lineas[iEnc]), fecha = isoDe(liq[2]), liquidacion = Number(liq[1]);
+  const filas = lineas.slice(iEnc + 1).filter((l) => l.trim()).map((l) => {
+    const c = celdas(l);
+    // "---" = no aplica (p. ej. intercambio entre gerencias fuera del SIN): se guarda 0
+    return [fecha, liquidacion, ...c.map((v, i) => (i < 2 ? v : v === '---' || v === '' ? 0 : Number(v)))];
+  });
+  return { fecha, liquidacion, cabecera: ['Fecha', 'Liquidacion', ...enc], filas };
+}
+
+/* ── Energía generada por tipo de tecnología (liquidada) ────────────────
+   Generación real por hora en 11 tecnologías, solo como total nacional ("SEN"). Un CSV
+   por mes y liquidación (L0, L1, L2…); un mes en curso se vuelve a publicar con versión
+   nueva, así que la clave incluye la versión del archivo ("v2026 06 14" → v20260614).
+   Sirve para fijar la hidro de la curva (toda está en el SIN) y medir el ajuste. */
+const GENERACION_URL = SIM + 'Reportes/EnergiaGeneradaTipoTec.aspx';
+
+async function descargarGeneracion(mes) {
+  const s = new Sesion(GENERACION_URL);
+  const html = await (await s.pedir()).text();
+  const max = html.match(/"maxDate":"(\d{4}-\d\d-\d\d)/)?.[1];
+  if (!max) throw new Error('el SIM no indica la fecha más reciente de la generación por tecnología');
+  if (`${mes}-01` > max) return { max, csvs: [] };
+  const iso = `${mes}-01`, dd = ddmmyyyy(iso);
+  const campos = { ...ocultos(html), __EVENTTARGET: '', __EVENTARGUMENT: '', [PRE + 'DescargarReportes']: 'Descargar en archivo .zip' };
+  for (const k of ['FechaInicial', 'FechaFinal']) {
+    campos[PRE + k] = iso;
+    campos[PRE + k + '$dateInput'] = dd;
+    campos[`ctl00_ContentPlaceHolder1_${k}_dateInput_ClientState`] = JSON.stringify({
+      enabled: true, emptyMessage: '', validationText: iso + '-00-00-00', valueAsString: iso + '-00-00-00',
+      minDateStr: '2016-04-30-00-00-00', maxDateStr: max + '-00-00-00', lastSetTextBoxValue: dd,
+    });
+  }
+  const buf = Buffer.from(await (await s.pedir(campos)).arrayBuffer());
+  return { max, csvs: buf.length > 4 && buf.readUInt32LE(0) === 0x04034b50 ? unzip(buf) : [] };
+}
+
+function limpiarGeneracion(nombre, texto) {
+  const v = nombre.match(/_L(\d+) .* v(\d{4}) (\d\d) (\d\d)_/);
+  if (!v) throw new Error(`generación: nombre inesperado ${nombre}`);
+  const lineas = texto.split(/\r?\n/);
+  const iEnc = lineas.findIndex((l, i) => i < 12 && celdas(l)[0] === 'Sistema');
+  if (iEnc < 0) throw new Error('generación: sin encabezado "Sistema"');
+  const enc = celdas(lineas[iEnc]);
+  if (enc[1] !== 'Dia' || enc[2] !== 'Hora') throw new Error('generación: columnas cambiaron');
+  const filas = lineas.slice(iEnc + 1).filter((l) => l.trim()).map((l) => {
+    const c = celdas(l);
+    return [isoDe(c[1]), c[0], Number(c[2]), ...c.slice(3).map((x) => (x === '' ? 0 : Number(x)))];
+  });
+  const mes = filas[0]?.[0].slice(0, 7);
+  return { mes, clave: `${mes}_L${v[1]}_v${v[2]}${v[3]}${v[4]}`, cabecera: ['Fecha', 'Sistema', 'Hora', ...enc.slice(3)], filas };
+}
+
+/* ── Componente de energía del PML (SW-PML), un NodoP de referencia por sistema ─
+   El componente de energía es el mismo en todos los nodos de un sistema; sirve para
+   comparar el precio marginal estimado con la curva de oferta. Manual SW-PML: máximo
+   7 días por consulta; el MDA se publica un día antes, el MTR ~7 días después. */
+const SWPML = 'https://ws01.cenace.gob.mx:8082/SWPML/SIM';
+const NODO_REF = { SIN: '06CDU-400', BCA: '07RIN-161', BCS: '07OLA-115' };
+
+async function pmlEnergia(sistema, proceso, desde, hasta) {
+  const p = (iso) => iso.replaceAll('-', '/');
+  for (let intento = 1; ; intento++) {
+    try {
+      const res = await fetch(`${SWPML}/${sistema}/${proceso}/${NODO_REF[sistema]}/${p(desde)}/${p(hasta)}/JSON`, { signal: AbortSignal.timeout(60000) });
+      if (res.status === 204) return [];
+      if (!res.ok) throw new Error(`SW-PML HTTP ${res.status}`);
+      const body = await res.json();
+      if (body.status && body.status !== 'OK') throw new Error(`SW-PML status ${body.status}`);
+      return (body.Resultados?.[0]?.Valores || []).map((v) => ({
+        fecha: v.fecha, hora: Number(v.hora), pml: Number(v.pml), energia: Number(v.pml_ene), perdidas: Number(v.pml_per), congestion: Number(v.pml_cng),
+      }));
+    } catch (e) {
+      if (intento >= 3) throw e;
+      await espera(5000 * intento);
+    }
+  }
 }
 
 /* ── Almacén: bucket R2 (API S3, firma SigV4) o carpeta local ─────────── */
@@ -389,8 +527,105 @@ async function main() {
       }
     }
   }
-  console.log(`Total: ${archivos} archivos, ${filasTot} filas, ${errores} errores` + (pendientes ? `; se acabó el tiempo, faltan ${pendientes} reportes para la siguiente corrida` : ''));
+
+  const guardarEstado = () => {
+    estado.actualizado = new Date().toISOString();
+    return almacen.escribir(ESTADO, Buffer.from(JSON.stringify(estado)), 'application/json');
+  };
+
+  // Demanda real: se vuelve a pedir todo el periodo por meses porque el CENACE agrega
+  // reliquidaciones a días pasados; solo se suben las liquidaciones que no teníamos.
+  if (!solo || solo.includes('demanda_real')) {
+    for (const metodo of Object.keys(METODOS)) {
+      const id = `demanda_real|${metodo}`, hechos = new Set(estado.reportes[id] || []);
+      try {
+        let nuevos = 0, max;
+        for (const [ini, fin] of tramos(dias(desde, hasta))) {
+          if (Date.now() - t0 > minutos * 60000) { pendientes++; break; }
+          const r = await descargarDemanda(metodo, ini, fin);
+          max = r.max;
+          for (const { texto } of r.csvs) {
+            const d = limpiarDemanda(texto), clave = `${d.fecha}_L${d.liquidacion}`;
+            if (hechos.has(clave) || d.fecha < ini || d.fecha > fin) continue;
+            await almacen.escribir(`demanda_real/${metodo}/${d.fecha.slice(0, 4)}/${clave}.csv.gz`, gzipSync(csv([d.cabecera, ...d.filas])), 'application/gzip');
+            hechos.add(clave); nuevos++;
+          }
+          if (fin >= max) break;
+          await espera(500);
+        }
+        estado.reportes[id] = [...hechos].sort();
+        await guardarEstado();
+        archivos += nuevos;
+        console.log(`Demanda real ${metodo}: ${nuevos} archivos nuevos (día-liquidación), publicada hasta ${max}`);
+      } catch (e) {
+        errores++;
+        console.log(`Demanda real ${metodo}: ERROR ${e.message}`);
+      }
+    }
+  }
+
+  // Generación por tecnología: cada mes del periodo, para captar liquidaciones y versiones nuevas
+  if (!solo || solo.includes('generacion_tec')) {
+    const id = 'generacion_tec', hechos = new Set(estado.reportes[id] || []);
+    try {
+      let nuevos = 0, max;
+      for (const mes of [...new Set(dias(desde, hasta).map((d) => d.slice(0, 7)))]) {
+        if (Date.now() - t0 > minutos * 60000) { pendientes++; break; }
+        const r = await descargarGeneracion(mes);
+        max = r.max;
+        for (const { nombre, texto } of r.csvs) {
+          const g = limpiarGeneracion(nombre, texto);
+          if (g.mes !== mes || hechos.has(g.clave)) continue;
+          await almacen.escribir(`generacion_tec/${mes.slice(0, 4)}/${g.clave}.csv.gz`, gzipSync(csv([g.cabecera, ...g.filas])), 'application/gzip');
+          hechos.add(g.clave); nuevos++;
+        }
+        if (`${mes}-01` > max) break;
+        await espera(500);
+      }
+      estado.reportes[id] = [...hechos].sort();
+      await guardarEstado();
+      archivos += nuevos;
+      console.log(`Generación por tecnología: ${nuevos} archivos nuevos (mes-liquidación-versión), publicada hasta ${max}`);
+    } catch (e) {
+      errores++;
+      console.log(`Generación por tecnología: ERROR ${e.message}`);
+    }
+  }
+
+  // Componente de energía del PML: días que faltan, en consultas de 7 días
+  if (!solo || solo.includes('pml_energia')) {
+    for (const proceso of ['MDA', 'MTR']) {
+      const limite = new Date(new Date(hoyMx() + 'T00:00:00Z').getTime() + (proceso === 'MDA' ? 1 : -7) * 864e5).toISOString().slice(0, 10);
+      for (const sistema of TODOS) {
+        const id = `pml_energia|${proceso}|${sistema}`, hechos = new Set(estado.reportes[id] || []);
+        try {
+          const faltan = dias(desde, hasta < limite ? hasta : limite).filter((d) => !hechos.has(d));
+          let nuevos = 0;
+          for (let i = 0; i < faltan.length; i += 7) {
+            const semana = faltan.slice(i, i + 7), porDia = Map.groupBy(await pmlEnergia(sistema, proceso, semana[0], semana.at(-1)), (v) => v.fecha);
+            for (const [fecha, horas] of porDia) {
+              if (!semana.includes(fecha) || horas.length < 23) continue;  // día incompleto: se reintenta después
+              const filas = horas.sort((a, b) => a.hora - b.hora).map((v) => [fecha, sistema, proceso, NODO_REF[sistema], v.hora, v.pml, v.energia, v.perdidas, v.congestion]);
+              await almacen.escribir(`pml_energia/${proceso}/${fecha.slice(0, 4)}/${fecha}_${sistema}.csv.gz`,
+                gzipSync(csv([['Fecha', 'Sistema', 'Mercado', 'NodoP', 'Hora', 'PML', 'Energia', 'Perdidas', 'Congestion'], ...filas])), 'application/gzip');
+              hechos.add(fecha); nuevos++;
+            }
+          }
+          estado.reportes[id] = [...hechos].sort();
+          await guardarEstado();
+          archivos += nuevos;
+          console.log(`PML energía ${proceso} ${sistema}: ${nuevos} días nuevos`);
+        } catch (e) {
+          errores++;
+          console.log(`PML energía ${proceso} ${sistema}: ERROR ${e.message}`);
+        }
+      }
+    }
+  }
+
+  console.log(`Total: ${archivos} archivos, ${filasTot} filas de ofertas, ${errores} errores` + (pendientes ? `; se acabó el tiempo, faltan ${pendientes} reportes para la siguiente corrida` : ''));
   if (errores) process.exitCode = 1;
 }
 
-main();
+export { bucketR2, carpetaLocal, celdas, descargar, dias, hoyMx, INICIO, ESTADO };
+if (import.meta.url === pathToFileURL(process.argv[1]).href) main();
