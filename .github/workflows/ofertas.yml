@@ -1,0 +1,52 @@
+# Robot de ofertas del MDA y MTR (SIM del CENACE) → bucket privado de Cloudflare R2.
+# Cada día baja solo los días nuevos (el CENACE publica las ofertas con ~60 días de rezago),
+# los limpia (scripts/ofertas.mjs) y los sube al bucket. No escribe nada en el repositorio:
+# las ofertas son privadas y el repo es público, así que en el log solo van conteos y no
+# se suben artifacts. Credenciales solo en los secrets R2_*.
+name: Ofertas MDA/MTR (R2)
+
+on:
+  schedule:
+    - cron: '40 9 * * *'   # 03:40 hora centro de México
+  workflow_dispatch:
+    inputs:
+      desde:
+        description: 'Desde (AAAA-MM-DD; vacío = 2026-01-01)'
+        required: false
+      hasta:
+        description: 'Hasta (AAAA-MM-DD; vacío = último día publicado)'
+        required: false
+      solo:
+        description: 'Solo estos tipos, separados por coma (vacío = todos)'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ofertas
+  cancel-in-progress: false
+
+jobs:
+  ofertas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Descargar, limpiar y subir al bucket
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          DESDE: ${{ inputs.desde }}
+          HASTA: ${{ inputs.hasta }}
+          SOLO: ${{ inputs.solo }}
+        run: >
+          node scripts/ofertas.mjs --r2 --minutos 300
+          ${DESDE:+--desde "$DESDE"} ${HASTA:+--hasta "$HASTA"} ${SOLO:+--solo "$SOLO"}
