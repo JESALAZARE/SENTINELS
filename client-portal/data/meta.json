@@ -24,5 +24,12 @@
    "iv": "RlMNUDEaV6uzpmc/",
    "ct": "ZRPQ5Dy9bnzkbt0Rutm2tuEY8117GHqMpKdZE4tfXEQQpl5OyguhsBkZ4bcxyiunu0d0jVGcxYAluMk/PCH7wlkKF0x9jjlDh73tb2SI11s="
   }
+ },
+ "market": {
+  "url": "https://sentinels-pml.shy-wood-119b.workers.dev",
+  "secret": {
+   "iv": "TliGomb4XHm9hD+o",
+   "ct": "ncYu+F/ULFVj0ag6vnioB6Ki5ADw2noVKKhaZZ0FEa89rpXz/iev5MTDS9hz9oae7+c7zxk/AHcHqwoIRWzSM9Urwhuh7LK1/odFTF5+4rI="
+  }
  }
 }
