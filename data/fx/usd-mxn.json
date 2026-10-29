@@ -2,8 +2,9 @@
  "descripcion": "Tipo de cambio para solventar obligaciones denominadas en dólares de los EE.UU.A., pagaderas en la República Mexicana",
  "fuente": "Banco de México",
  "url": "https://www.banxico.org.mx/tipcamb/tipCamMIAction.do?idioma=sp",
- "actualizado": "2026-10-28T18:42:52.804Z",
+ "actualizado": "2026-10-29T18:50:59.436Z",
  "serie": [
+  {"fecha":"2026-10-29","fix":18.8148,"dof":18.6673,"para_pagos":18.6525},
   {"fecha":"2026-10-28","fix":18.6673,"dof":18.6525,"para_pagos":18.5798},
   {"fecha":"2026-10-27","fix":18.6525,"dof":18.5798,"para_pagos":18.667},
   {"fecha":"2026-10-26","fix":18.5798,"dof":18.667,"para_pagos":18.7005},
