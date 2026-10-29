@@ -1,7 +1,8 @@
 /* ── Sentinels Client Portal · NodoP catalog ─────────────────────────
    The CENACE "Catálogo de NodosP", always the latest version: the GitHub
    Action (scripts/fetch-nodos.mjs) checks https://www.cenace.gob.mx/Paginas/SIM/NodosP.aspx
-   every day and stores the newest file in /data/nodos/catalogo.json.
+   every day and stores the newest file as nodos/catalogo.json in the private
+   bucket, read through the PML Worker with the client's market pass (Market, market.js).
    Opened from Market Prices as a dialog: free-text search, faceted filters
    (each list shows only the values left by the other filters, with counts),
    sortable columns, a detail row per NodoP and an Excel export of the
@@ -26,9 +27,9 @@ const NodosCatalog = (() => {
 
   async function load() {
     if (CAT) return;
-    const r = await fetch('../data/nodos/catalogo.json', { cache: 'no-cache' });
-    if (!r.ok) throw new Error('catalog ' + r.status);
-    CAT = await r.json();
+    const c = await Market.file('nodos/catalogo.json');
+    if (!c) throw new Error('catalog 404');
+    CAT = c;
     const ix = Object.fromEntries(CAT.columnas.map((c, i) => [c, i]));
     rows = CAT.nodos.map(n => {
       const o = Object.fromEntries(CAT.columnas.map(c => [c, n[ix[c]]]));

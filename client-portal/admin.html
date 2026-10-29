@@ -201,6 +201,7 @@ fieldset table{display:block;overflow-x:auto;white-space:nowrap}
       <button class="tab active" data-tab="clients" onclick="showTab('clients')">Clientes</button>
       <button class="tab" data-tab="intel" onclick="showTab('intel')">Market Intelligence</button>
       <button class="tab" data-tab="ai" onclick="showTab('ai')">Sentinel One</button>
+      <button class="tab" data-tab="market" onclick="showTab('market')">Datos de mercado</button>
     </div>
 
     <!-- Clientes -->
@@ -241,6 +242,15 @@ fieldset table{display:block;overflow-x:auto;white-space:nowrap}
         <div id="ai-usage"><p class="muted small" style="margin:0">Configura el Worker para ver el uso.</p></div>
       </div>
     </div>
+
+    <!-- Datos de mercado -->
+    <div id="t-market" class="hidden stack" style="max-width:860px">
+      <div class="card stack">
+        <h2>Datos de mercado · acceso privado</h2>
+        <p class="muted" style="margin:0">Precios, histórico, catálogo de NodosP, tipo de cambio y demanda del SEN viven en un bucket privado de Cloudflare R2. Solo salen por el Worker de precios, y solo para un cliente activo con su pase. Cada cliente tiene un límite de consultas por hora y por día.</p>
+        <div id="mk-config"></div>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -270,6 +280,20 @@ fieldset table{display:block;overflow-x:auto;white-space:nowrap}
       <span class="small muted" id="ai-secret-copied"></span>
       <button class="btn" onclick="copyAiSecret()">Copiar</button>
       <button class="btn btn-dark" onclick="document.getElementById('ai-secret-modal').hidden=true">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Llave secreta de los datos de mercado -->
+<div class="modal" id="mk-secret-modal" hidden>
+  <div class="card stack">
+    <h2>Llave secreta de los datos de mercado</h2>
+    <p class="muted" style="margin:0">Cópiala y pégala en Cloudflare como el secreto <b class="mono">DATA_SECRET</b> del Worker <b class="mono">sentinels-pml</b> (Settings → Variables and Secrets → Add → tipo <i>Secret</i>). <b>Solo se muestra ahora.</b></p>
+    <div class="pw" id="mk-secret-value" style="font-size:14px;word-break:break-all"></div>
+    <div class="row" style="justify-content:flex-end">
+      <span class="small muted" id="mk-secret-copied"></span>
+      <button class="btn" onclick="copyMarketSecret()">Copiar</button>
+      <button class="btn btn-dark" onclick="document.getElementById('mk-secret-modal').hidden=true">Listo</button>
     </div>
   </div>
 </div>
@@ -556,6 +580,8 @@ async function doUnlock(e) {
     PORTAL_RAW = await SP.open(ADMIN_KEY, META.portalKey);
     AI.url = (META.ai && META.ai.url) || '';
     AI.secret = META.ai && META.ai.secret ? dec.decode(await SP.open(ADMIN_KEY, META.ai.secret)) : null;
+    MK.url = (META.market && META.market.url) || MK.url;
+    MK.secret = META.market && META.market.secret ? dec.decode(await SP.open(ADMIN_KEY, META.market.secret)) : null;
     const idx = await readJSON('data/admin-index.json');
     INDEX = idx ? await SP.openJSON(ADMIN_KEY, idx) : [];
     const intel = await readJSON('data/intel.json');
@@ -585,7 +611,9 @@ function showTab(t) {
   $('t-clients').classList.toggle('hidden', t !== 'clients');
   $('t-intel').classList.toggle('hidden', t !== 'intel');
   $('t-ai').classList.toggle('hidden', t !== 'ai');
+  $('t-market').classList.toggle('hidden', t !== 'market');
   if (t === 'ai') { renderAiConfig(); loadAiUsage(); }
+  if (t === 'market') renderMarketConfig();
 }
 
 const saveIndex = async () => writeJSON('data/admin-index.json', await SP.sealJSON(ADMIN_KEY, INDEX));
@@ -846,6 +874,7 @@ async function saveClient(btn) {
     }
     Object.assign(CUR.data, form, { portalKey: SP.b64(PORTAL_RAW) });
     CUR.data.ai = await aiPass(id, $('f-ai').checked);
+  CUR.data.market = await marketPass(id);
     const oldId = CUR.id;
     CUR.id = id;
     await writeVault();
@@ -1059,6 +1088,100 @@ async function loadAiUsage(btn) {
   return btn ? busy(btn, 'Actualizando…', run) : run();
 }
 
+/* ── Market data (private R2 bucket behind the PML Worker) ──
+   The Worker serves market files and CENACE queries only to a client presenting
+   HMAC(DATA_SECRET, "market:<id>"). The secret lives encrypted in meta.json (admin
+   key) and as the Worker's DATA_SECRET; every client's pass is stored inside their
+   encrypted vault, whatever their client type. */
+const MK = { url: 'https://sentinels-pml.shy-wood-119b.workers.dev', secret: null };
+async function marketPass(id) {
+  return MK.secret ? { url: MK.url, token: await hmacHex(MK.secret, 'market:' + id) } : null;
+}
+
+function renderMarketConfig() {
+  $('mk-config').innerHTML = `
+    <div><label for="mk-url">URL del Worker de precios</label>
+      <input id="mk-url" type="url" placeholder="https://sentinels-pml.tu-cuenta.workers.dev" value="${esc(MK.url)}"></div>
+    <div class="row">
+      <button class="btn btn-dark" onclick="saveMarketConfig(this)">Guardar URL</button>
+      <button class="btn" onclick="testMarket(this)">Probar conexión</button>
+    </div>
+    <div class="row" style="justify-content:space-between;border-top:1px solid var(--border-subtle);padding-top:14px">
+      <div><b>Llave secreta (DATA_SECRET)</b><div class="small muted">${MK.secret ? 'Generada ✓ — también debe estar guardada en Cloudflare. Todos los clientes tienen su pase.' : 'Aún no generada: mientras tanto, los clientes no ven datos de mercado.'}</div></div>
+      <button class="btn ${MK.secret ? '' : 'btn-gold'}" onclick="generateMarketSecret(this)">${MK.secret ? 'Generar nueva' : 'Generar llave'}</button>
+    </div>
+    <div id="mk-msg"></div>`;
+}
+
+// Re-issue the pass of every client (after the URL or secret changes)
+async function reissueMarketPasses() {
+  let n = 0;
+  for (const c of INDEX) {
+    const v = await readJSON(`data/clients/${c.id}.json`);
+    if (!v) continue;
+    const key = await SP.importKey(await SP.open(ADMIN_KEY, v.admin));
+    const data = await SP.openJSON(key, v.data);
+    data.market = await marketPass(c.id);
+    v.data = await SP.sealJSON(key, data);
+    await writeJSON(`data/clients/${c.id}.json`, v);
+    n++;
+  }
+  if (CUR && CUR.id) await openClient(CUR.id);
+  return n;
+}
+
+async function saveMarketMeta() {
+  META.market = { url: MK.url, secret: MK.secret ? await SP.seal(ADMIN_KEY, enc.encode(MK.secret)) : null };
+  await writeJSON('data/meta.json', META);
+}
+
+async function saveMarketConfig(btn) {
+  const url = $('mk-url').value.trim().replace(/\/+$/, '');
+  if (!/^https:\/\/[\w.-]+(\/.*)?$/.test(url)) return msg('mk-msg', 'Escribe la URL completa del Worker, empezando con https://');
+  await busy(btn, 'Guardando…', async () => {
+    MK.url = url;
+    await saveMarketMeta();
+    const n = MK.secret ? await reissueMarketPasses() : 0;
+    await publish('configurar datos de mercado');
+    renderMarketConfig();
+    msg('mk-msg', `URL guardada${n ? ` y ${n} cliente(s) actualizados` : ''}.`, 'ok');
+  });
+}
+
+async function generateMarketSecret(btn) {
+  if (MK.secret && !confirm('Al generar una nueva llave, la anterior y todos los pases actuales dejan de funcionar: tendrás que pegar la nueva en Cloudflare. ¿Continuar?')) return;
+  await busy(btn, 'Generando…', async () => {
+    MK.secret = SP.hex(SP.rand(32));
+    await saveMarketMeta();
+    const n = await reissueMarketPasses();
+    await publish('llave de datos de mercado');
+    renderMarketConfig();
+    $('mk-secret-value').textContent = MK.secret;
+    $('mk-secret-copied').textContent = '';
+    $('mk-secret-modal').hidden = false;
+    msg('mk-msg', `${n} cliente(s) con su pase de datos de mercado.`, 'ok');
+  });
+}
+async function copyMarketSecret() {
+  try { await navigator.clipboard.writeText(MK.secret); $('mk-secret-copied').textContent = 'Copiada ✓'; } catch { $('mk-secret-copied').textContent = 'Selecciónala y cópiala manualmente.'; }
+}
+
+async function testMarket(btn) {
+  if (!MK.secret) return msg('mk-msg', 'Primero genera la llave y pégala en Cloudflare.');
+  await busy(btn, 'Probando…', async () => {
+    try {
+      const h = await (await fetch(MK.url + '/health', { cache: 'no-store' })).json();
+      if (!h.configured) return msg('mk-msg', 'El Worker responde, pero le falta configuración: revisa el secreto DATA_SECRET y el bucket R2 enlazado como DATOS. Si acabas de pegar el código nuevo, confirma que diste Deploy.');
+      const r = await fetch(MK.url + '/admin/check', { headers: { Authorization: 'Bearer ' + MK.secret }, cache: 'no-store' });
+      if (r.status === 401) return msg('mk-msg', 'El Worker funciona, pero su DATA_SECRET no coincide con la llave de este panel. Vuelve a pegarla en Cloudflare.');
+      if (!r.ok) return msg('mk-msg', 'El Worker respondió con un error (' + r.status + ').');
+      const c = await r.json();
+      if (!c.catalogo || !c.historico) return msg('mk-msg', 'Conexión correcta, pero el bucket aún no tiene ' + (!c.catalogo ? 'el catálogo de NodosP' : 'el histórico') + ': en GitHub, Actions → "PML CENACE" → Run workflow; la primera corrida sube todo al bucket.');
+      msg('mk-msg', `Conexión correcta ✓ El bucket tiene los datos (histórico actualizado ${esc(new Date(c.actualizado).toLocaleString('es-MX'))}).`, 'ok');
+    } catch { msg('mk-msg', 'No pude conectar con el Worker. Revisa la URL.'); }
+  });
+}
+
 /* ── Change the admin password ──────────────────────
    Re-wraps every key held for the admin; client passwords are untouched. */
 function openAdminPwModal() {
@@ -1092,6 +1215,7 @@ async function changeAdminPassword(btn) {
     META.portalKey = await rewrap(META.portalKey);
     if (META.ghToken) META.ghToken = await rewrap(META.ghToken);
     if (META.ai && META.ai.secret) META.ai.secret = await rewrap(META.ai.secret);
+    if (META.market && META.market.secret) META.market.secret = await rewrap(META.market.secret);
     ADMIN_KEY = NEW;
     await saveIndex();
     await writeJSON('data/meta.json', META);

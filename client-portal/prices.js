@@ -1,23 +1,21 @@
 /* ── Sentinels Client Portal · Market Prices page ────────────────────
    Local marginal prices (PML) published by CENACE for the day-ahead (MDA)
-   and real-time (MTR) markets. Two sources:
-   - /data/pml: the GitHub Action .github/workflows/pml.yml downloads a 60-day
-     history of the NodosP in index.json every day (fast, no Worker needed);
-   - PML_API: the sentinels-pml Cloudflare Worker (pml-worker/worker.js) queries
-     CENACE on demand, so any NodoP of the catalog (/data/nodos) can be shown,
-     up to 31 days at a time. Leave PML_API empty to use only /data/pml.
-     With the Worker the "Distributed nodes" checkbox switches to load zones:
-     their PEND (SW-PEND, the zone's weighted average of its NodosP PML) is
-     shown in the same widgets.
-   /data/fx/usd-mxn.json holds the Banxico FIX for payments for the USD switch.
+   and real-time (MTR) markets, all read through the sentinels-pml Worker with
+   the client's market pass (Market, market.js). Two sources:
+   - pml/: the GitHub Action .github/workflows/pml.yml downloads a 60-day
+     history of the NodosP in index.json every day into the private bucket (fast);
+   - /pml and /pend: the Worker queries CENACE on demand, so any NodoP of the
+     catalog (nodos/) can be shown, up to 31 days at a time.
+     The "Distributed nodes" checkbox switches to load zones: their PEND
+     (SW-PEND, the zone's weighted average of its NodosP PML) is shown in the
+     same widgets.
+   fx/usd-mxn.json holds the Banxico FIX for payments for the USD switch.
    The client picks a NodoP and a date range; every widget is computed from
    the hourly rows in that range.
    Below the widgets, PriceHistory (history.js) shows the monthly history since 2020
    of the NodoP / load zone (Azure SQL data warehouse summaries).
-   Uses Board.charts (board.js), NodosCatalog (nodos.js), PriceHistory, Xlsx (xlsx.js) and _esc. */
+   Uses Market (market.js), Board.charts (board.js), NodosCatalog (nodos.js), PriceHistory, Xlsx (xlsx.js) and _esc. */
 const PricesPage = (() => {
-  const PML_API = 'https://sentinels-pml.shy-wood-119b.workers.dev';  // sentinels-pml Worker (pml-worker/LEEME.md); '' = stored NodosP only
-  const DATA = '../data/';
   const MAX_DAYS = 31;
   // First operating day with MDA prices per system (SW-PML technical manual)
   const FIRST = { SIN: '2016-01-29', BCA: '2016-01-27', BCS: '2016-03-23' };
@@ -32,15 +30,15 @@ const PricesPage = (() => {
   const addDays = (f, n) => iso(new Date(Date.parse(f + 'T00:00:00Z') + n * 864e5));
   const todayMX = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
   const mean = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
-  const live = () => !!PML_API;
+  const live = () => true;  // the Worker always answers on-demand queries
 
-  // catalog: NodosP of the CENACE catalog (only loaded when the Worker is configured)
+  // catalog: NodosP of the CENACE catalog
   const S = { index: null, catalog: null, fx: null, node: null, from: null, to: null, cache: {}, proc: { max: 'MDA', min: 'MDA', table: 'MDA' }, usd: false, error: null };
 
   async function getJSON(path) {
-    const r = await fetch(DATA + path, { cache: 'no-cache' });
-    if (!r.ok) throw new Error(path + ': ' + r.status);
-    return r.json();
+    const d = await Market.file(path);
+    if (!d) throw new Error(path + ': 404');
+    return d;
   }
 
   // Banxico rate for payments on an operating day: its "para pagos" value (the FIX published
@@ -64,13 +62,18 @@ const PricesPage = (() => {
         S.index = index; S.fx = fxData; S.catalog = catalog;
         if (!(index.nodos || []).length) throw new Error('no nodes');
         pickNode(index.nodos[0]);
-      } catch { S.error = true; }
+      } catch (e) {
+        // Missing pass, paused access or request limit: say so; anything else is a generic outage
+        S.error = e.status ? e.message : 'Market prices are not available right now. Please try again later.';
+        // A request limit passes with time, so the next visit asks again
+        if (e.status === 429) { const m = S.error; S.error = null; host.innerHTML = `<div class="cp-card cp-pr-msg">${esc(m)}</div>`; return; }
+      }
     }
-    if (S.error) { host.innerHTML = '<div class="cp-card cp-pr-msg">Market prices are not available right now. Please try again later.</div>'; return; }
+    if (S.error) { host.innerHTML = `<div class="cp-card cp-pr-msg">${esc(S.error)}</div>`; return; }
     await render();
   }
 
-  // Stored NodosP (60-day history in /data/pml) and, with the Worker, every NodoP of the catalog
+  // Stored NodosP (60-day history in pml/) and, with the Worker, every NodoP of the catalog
   const stored = (sistema, nodo) => S.index.nodos.find(n => n.sistema === sistema && n.nodo === nodo);
   const anyNode = () => live() && S.catalog;
   const nameOf = n => (S.catalog && (S.catalog.find(r => r.sistema === n.sistema && r.clave === n.nodo) || {}).nombre) || '';
@@ -110,10 +113,10 @@ const PricesPage = (() => {
     if (!S.cache[kq]) {
       const one = async p => {
         const qs = new URLSearchParams({ sistema: n.sistema, proceso: p, [zone ? 'zonas' : 'nodos']: n.nodo, desde: S.from, hasta: S.to });
-        const r = await fetch(`${PML_API}/${zone ? 'pend' : 'pml'}?${qs}`);
+        const r = await Market.get(`/${zone ? 'pend' : 'pml'}?${qs}`);
         if (r.status === 422) return [];  // nothing published yet for those dates (e.g. recent MTR)
-        const b = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(b.message || 'HTTP ' + r.status);
+        if (!r.ok) throw await Market.errorOf(r);
+        const b = await r.json();
         const res = zone ? b.zonas : b.nodos;
         return (res && res[n.nodo]) || [];
       };
@@ -301,7 +304,7 @@ const PricesPage = (() => {
       const k = +bt.dataset.n; setRange(k ? addDays(b.max, 1 - k) : b.min, b.max);
     });
     // Long-term history (history.js) for this NodoP / load zone, below the query widgets
-    PriceHistory.mount(host.querySelector('#pr-history'), { node: n, priceName: P, api: PML_API });
+    PriceHistory.mount(host.querySelector('#pr-history'), { node: n, priceName: P });
     if (err) return;
 
     // Charts
