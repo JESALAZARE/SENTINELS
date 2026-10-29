@@ -1,0 +1,3 @@
+# Market data lives only in the private R2 bucket (pml-worker/LEEME.md); the robots use
+# data/ as a scratch folder on the runner and must never commit it.
+/data/

@@ -15,7 +15,7 @@
    - splits it into the 7-day windows CENACE allows and fetches them in parallel;
    - caches every window in Cloudflare's cache (published days for a week,
      days that may still change for 30 minutes), so CENACE sees few calls;
-   - returns numbers, always in the row shape of /data/pml/<sistema>/<nodo>.json
+   - returns numbers, always in the row shape of the stored pml/<sistema>/<nodo>.json files
      ({ fecha, hora, pml, pml_ene, pml_per, pml_cng }; for load zones the PEND
      "pz" fields are mapped to the same names).
 

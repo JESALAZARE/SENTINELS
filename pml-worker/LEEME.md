@@ -104,7 +104,9 @@ lugar.
    https://sentinels-pml.TU-CUENTA.workers.dev/pml?sistema=SIN&proceso=MDA&nodos=06CDU-400&desde=2026-10-01&hasta=2026-10-02
    ```
 
-Cuando todo funcione, se borra la carpeta `data/` del repositorio (otro PR).
+La carpeta `data/` ya no existe en el repositorio (está en `.gitignore`): el bucket es la única
+copia. Si algún día se pierde el bucket, el Robot masivo no arranca (no hay avance) y hay que
+volver a cargar el histórico.
 
 ---
 
