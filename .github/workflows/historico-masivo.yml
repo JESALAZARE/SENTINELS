@@ -3,7 +3,9 @@ name: Histórico masivo (Azure SQL)
 # Robot del histórico desde 2020 de todos los NodosP y Zonas de Carga del catálogo
 # (scripts/historico-masivo.mjs): baja del CENACE hasta ~4 horas, lo carga en Azure SQL
 # en una sola sesión (para gastar poco cómputo gratis) y publica los resúmenes del
-# portal en data/resumen. Una vez completo, cada día solo agrega los días nuevos.
+# portal (resumen/) en el bucket privado de Cloudflare R2, que el portal lee por el
+# Worker de precios. Una vez completo, cada día solo agrega los días nuevos.
+# El avance (resumen/estado.json) y el catálogo (nodos/) también se traen del bucket.
 # Guía: azure/LEEME.md
 on:
   schedule:
@@ -18,19 +20,27 @@ on:
         default: '20000'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: historico-masivo
   cancel-in-progress: false
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.R2_MERCADO_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_MERCADO_SECRET_ACCESS_KEY }}
+  AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+  AWS_DEFAULT_REGION: auto
+  AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+  AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+  R2: s3://${{ secrets.R2_MERCADO_BUCKET }}
 
 jobs:
   historico:
     runs-on: ubuntu-latest
     timeout-minutes: 340
     steps:
-      # La punta de la rama al arrancar, no el commit de cuando se programó: si esta
-      # corrida esperó en cola detrás de otra, debe leer el estado.json que dejó esa.
+      # La punta de la rama al arrancar, no el commit de cuando se programó
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
@@ -38,6 +48,21 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+
+      # El avance y los resúmenes que dejó la corrida anterior, tal como están en el bucket
+      # (se leen al arrancar, así que una corrida que esperó en cola sigue desde ahí)
+      - name: Traer avance, resúmenes y catálogo del bucket R2
+        run: |
+          # Primera vez: el bucket recibe lo que aún está en el repositorio. Sin avance en
+          # ningún lado no se arranca, para no recargar desde 2020 por error.
+          if ! aws s3 ls "$R2/resumen/estado.json" > /dev/null; then
+            if [ ! -f data/resumen/estado.json ]; then echo "::error::El bucket no tiene resumen/estado.json"; exit 1; fi
+            for d in pml fx nodos resumen; do
+              if [ -d "data/$d" ]; then aws s3 sync "data/$d" "$R2/$d" --content-type application/json --only-show-errors; fi
+            done
+          fi
+          aws s3 sync "$R2/resumen" data/resumen --only-show-errors
+          aws s3 sync "$R2/nodos" data/nodos --only-show-errors
 
       - name: Instalar cliente de SQL Server
         run: npm install --no-save --no-package-lock --ignore-scripts mssql@12.7.4
@@ -53,21 +78,9 @@ jobs:
           --minutos-cenace "${{ github.event.inputs.minutos || '240' }}"
           --llamadas "${{ github.event.inputs.llamadas || '20000' }}"
 
-      - name: Publicar resúmenes
+      # Solo si la carga en Azure terminó; estado.json va al final para que el avance
+      # nunca quede adelante de los resúmenes publicados
+      - name: Publicar resúmenes en el bucket R2
         run: |
-          git add data/resumen
-          if git diff --cached --quiet; then
-            echo "Sin cambios"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git commit -q -m "Datos: histórico masivo $(TZ=America/Mexico_City date '+%F')"
-          # Si otro commit tocó data/resumen, ganan los archivos de esta corrida (los más
-          # recientes); si aun así el rebase falla, se cancela limpio para reintentar.
-          for intento in 1 2 3; do
-            git pull -q --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}" && exit 0
-            git rebase --abort 2>/dev/null || true
-            sleep 20
-          done
-          exit 1
+          aws s3 sync data/resumen "$R2/resumen" --exclude estado.json --content-type application/json --only-show-errors
+          aws s3 cp data/resumen/estado.json "$R2/resumen/estado.json" --content-type application/json --only-show-errors
