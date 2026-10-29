@@ -11,8 +11,6 @@ const Board = (() => {
   const SIZES = { s: 1, m: 2, w: 3, l: 4 };
   const SIZE_NAMES = { s: 'Small', m: 'Medium', w: 'Wide', l: 'Full width' };
   const C = { ink: '#0B0D0F', silver: '#B4BBC2', green: '#3E6B53', gold: '#C89D2A', steel: '#646C75', grid: '#E3E6E8' };
-  // sentinels-pml Worker (pml-worker/worker.js, same as PML_API in prices.js); '' hides the SEN demand widget
-  const LIVE_API = 'https://sentinels-pml.shy-wood-119b.workers.dev';
 
   /* ── Data helpers ─────────────────────────────── */
   const P = () => (ME && ME.profile) || {};
@@ -305,7 +303,7 @@ const Board = (() => {
 
     /* Market — live CENACE data through the PML Worker */
     sen_demand: { cat: 'Market', title: 'SEN demand · live', icon: 'line', sizes: ['m', 'w', 'l'], desc: 'Today\'s hourly demand, generation and forecast from CENACE, refreshed every 2 minutes.',
-      ready: () => !!LIVE_API, need: 'the live data service',
+      ready: () => Market.ready(), need: 'market data access',
       render: (b, w) => senDemand(b, w) }
   };
   const CATS = ['Workspace', 'Plants & bills', 'Key figures', 'Charts', 'Market', 'Contract', 'Updates'];
@@ -695,14 +693,16 @@ const Board = (() => {
       schedule();
       btn.disabled = true; btn.classList.add('cp-sen-refresh--busy');
       try {
-        const r = await fetch(`${LIVE_API}/demanda?gerencia=${k}${fresh ? '&fresh=1' : ''}`, { cache: 'no-store' });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const r = await Market.get(`/demanda?gerencia=${k}${fresh ? '&fresh=1' : ''}`, { cache: 'no-store' });
+        if (!r.ok) throw await Market.errorOf(r);
         senLast[k] = await r.json();
         if (k === g() && body.isConnected) show(senLast[k], false);
-      } catch {
+      } catch (e) {
         if (k !== g() || !body.isConnected) return;
-        if (senLast[k]) show(senLast[k], true);
-        else { live.className = 'cp-sen-live cp-sen-live--stale'; live.textContent = 'CENACE did not answer'; chart.innerHTML = '<div class="cp-widget-empty">Could not load the data. Trying again in 2 minutes.</div>'; }
+        // Access or request-limit answers are shown as they come; anything else is CENACE's
+        const why = e.status >= 400 && e.status < 500 && e.status !== 404 ? e.message : null;
+        if (senLast[k] && !why) show(senLast[k], true);
+        else { live.className = 'cp-sen-live cp-sen-live--stale'; live.textContent = why ? 'Not available' : 'CENACE did not answer'; chart.innerHTML = `<div class="cp-widget-empty">${esc(why || 'Could not load the data. Trying again in 2 minutes.')}</div>`; }
       } finally {
         if (k === g()) { btn.disabled = false; btn.classList.remove('cp-sen-refresh--busy'); }
       }

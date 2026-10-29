@@ -3,12 +3,13 @@
    CENACE catalog. The hourly prices live in Azure SQL (azure/schema.sql), loaded
    by the data robot (.github/workflows/historico-masivo.yml); its summary tables
    (agg_mensual, agg_hora_mes = materialized views) are published once a month
-   as one small file per NodoP / zone:
-     /data/resumen/<nodo|zona>/<sistema>/<clave>.json
+   as one small file per NodoP / zone in the private bucket, read through the PML
+   Worker with the client's market pass (Market, market.js):
+     resumen/<nodo|zona>/<sistema>/<clave>.json
        { desde, hasta_mes, MDA|MTR: { meses: [[mes, horas, avg, energy, losses,
          congestion, max, max date, max hour, min, min date, min hour], …],
          perfil: { year: [24 hourly averages] } } }
-     /data/resumen/index.json   robot progress
+     resumen/index.json   robot progress
    Only closed months are published (the MTR of a month is complete 7 days after
    it ends); recent days are in the query widgets above (up to 31 days, any date).
    The client picks a month range (From / To or 1Y · 3Y · 5Y · All) that applies
@@ -16,10 +17,10 @@
    the months in the range (hour-weighted); the hourly profile is per whole year.
    "Excel + hourly" also adds every hour of the range, fetched month by month from
    CENACE through the PML Worker (/pml or /pend), with progress and cancel.
-   Used by prices.js: PriceHistory.mount(el, { node, priceName, api }).
-   Uses Board.charts (board.js), Xlsx (xlsx.js) and _esc (index.html). */
+   Used by prices.js: PriceHistory.mount(el, { node, priceName }).
+   Uses Market (market.js), Board.charts (board.js), Xlsx (xlsx.js) and _esc (index.html). */
 const PriceHistory = (() => {
-  const DATA = '../data/resumen/';
+  const DATA = 'resumen/';
   const esc = s => _esc(s);
   const fx = (v, d = 2) => v == null || !isFinite(v) ? '—' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -30,8 +31,8 @@ const PriceHistory = (() => {
   const C = { MDA: '#0B0D0F', MTR: '#C89D2A' };
   const YEAR_COLORS = ['#0B0D0F', '#C89D2A', '#3E6B53', '#5B7FA6', '#8C3A36', '#9A6FB0', '#646C75', '#B4BBC2', '#2F8F9D', '#D17A22', '#6B8E23'];
   const PRESETS = [[12, '1Y'], [36, '3Y'], [60, '5Y'], [0, 'All']];
-  const cache = {};  // url → Promise(json | null)
-  const get = url => cache[url] || (cache[url] = fetch(url, { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null));
+  const cache = {};  // path → Promise(json | null | { error }); errors are asked again next time
+  const get = path => cache[path] || (cache[path] = Market.file(path).catch(e => { delete cache[path]; return { error: e.status ? e.message : 'The history is not available right now. Please try again later.' }; }));
   const fileOf = n => `${DATA}${n.kind === 'zone' ? 'zona' : 'nodo'}/${encodeURIComponent(n.sistema)}/${encodeURIComponent(n.nodo.replace(/ /g, '-'))}.json`;
   let range = { from: null, to: null };  // chosen months (kept while the client switches NodoP)
 
@@ -52,13 +53,14 @@ const PriceHistory = (() => {
     return new Map([...g].map(([y, a]) => [y, { ...a, avg: a.suma / a.horas }]));
   }
 
-  async function mount(el, { node, priceName, api }) {
+  async function mount(el, { node, priceName }) {
     if (!el) return;
     const [idx, doc] = await Promise.all([get(DATA + 'index.json'), get(fileOf(node))]);
     if (!el.isConnected) return;
     const P = priceName, who = node.kind === 'zone' ? `load zone ${node.nodo}` : node.nodo;
     const head = `<div class="cp-hi-head"><div><h2 class="cp-hi-title">Long-term history</h2>
       <p class="cp-hi-sub">Monthly ${P} since 2020 for every NodoP and load zone of the CENACE catalog, from the Sentinels data warehouse.</p></div></div>`;
+    if (doc && doc.error) { el.innerHTML = `<div class="cp-card cp-hi">${head}<div class="cp-hi-msg">${esc(doc.error)}</div></div>`; return; }
     const progress = idx && idx.avance < 100
       ? ` The data robot is still loading older months (${idx.avance}% done): every NodoP and zone is covered since ${esc(mlong((idx.cargado_desde && idx.cargado_desde.MDA || '2020-01').slice(0, 7)))}.` : '';
     const has = doc && ['MDA', 'MTR'].some(p => months(doc, p).length);
@@ -70,7 +72,7 @@ const PriceHistory = (() => {
     el.innerHTML = `<div class="cp-card cp-hi">${head}
       <div class="cp-hi-msg">${esc(mlong(all[0]))} – ${esc(mlong(doc.hasta_mes))}, closed months (MTR complete). Recent days: use the query above.${progress}</div>
       <div class="cp-hi-range"></div><div class="cp-hi-body"></div></div>`;
-    controls(el.querySelector('.cp-hi-range'), el.querySelector('.cp-hi-body'), doc, all, P, { node, api });
+    controls(el.querySelector('.cp-hi-range'), el.querySelector('.cp-hi-body'), doc, all, P, { node });
   }
 
   /* ── Range: From / To months and presets ── */
@@ -98,7 +100,7 @@ const PriceHistory = (() => {
     const seg = `<div class="cp-ch-ranges cp-pr-seg" role="group" aria-label="Market">${['MDA', 'MTR'].map((p, i) => `<button data-p="${p}" class="${i ? '' : 'on'}">${p}</button>`).join('')}</div>`;
     const icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>';
     const dl = `<button class="cp-pr-dl" id="hi-xlsx" title="Monthly, annual and hourly-profile sheets">${icon}Excel</button>` +
-      (ctx.api ? `<button class="cp-pr-dl" id="hi-xlsx-h" title="Also every hour of the range, fetched from CENACE">${icon}Excel + hourly</button>` : '');
+      `<button class="cp-pr-dl" id="hi-xlsx-h" title="Also every hour of the range, fetched from CENACE">${icon}Excel + hourly</button>`;
     body.innerHTML = `<div class="cp-hi-dlmsg" hidden></div><div class="cp-board cp-pr-board cp-hi-board">
       ${W('hi-month', `Monthly average ${P} · MDA vs MTR`, 'cp-w-l', dl)}
       ${W('hi-year', `Annual summary ${P}`, 'cp-w-l')}
@@ -187,13 +189,17 @@ const PriceHistory = (() => {
       const qs = new URLSearchParams({ sistema: ctx.node.sistema, proceso: p, [zone ? 'zonas' : 'nodos']: ctx.node.nodo, desde: `${mo}-01`, hasta: monthEnd(mo) });
       for (let attempt = 1; ; attempt++) {
         try {
-          const r = await fetch(`${ctx.api}/${zone ? 'pend' : 'pml'}?${qs}`);
+          const r = await Market.get(`/${zone ? 'pend' : 'pml'}?${qs}`);
           if (r.status === 422) return;  // not published for those dates
-          const b = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(b.message || 'HTTP ' + r.status);
+          if (!r.ok) throw await Market.errorOf(r);
+          const b = await r.json();
           for (const h of ((zone ? b.zonas : b.nodos) || {})[ctx.node.nodo] || []) rows.push([p, h.fecha, h.hora, h.pml, h.pml_ene, h.pml_per, h.pml_cng]);
           return;
-        } catch (e) { if (attempt >= 2) throw e; await new Promise(res => setTimeout(res, 3000)); }
+        } catch (e) {
+          // Access or request-limit answers don't change by asking again
+          if (attempt >= 2 || (e.status >= 400 && e.status < 500)) throw e;
+          await new Promise(res => setTimeout(res, 3000));
+        }
       }
     };
     // Three requests at a time; each month is cached by Cloudflare for the next client

@@ -3,6 +3,9 @@ name: PML CENACE
 # Descarga diaria de Precios Marginales Locales (scripts/fetch-pml.mjs), del
 # tipo de cambio FIX para pagos de Banxico (scripts/fetch-fx.mjs) y de la versión
 # más reciente del Catálogo de NodosP del CENACE (scripts/fetch-nodos.mjs).
+# Los datos viven en el bucket privado de Cloudflare R2 (no en el repositorio):
+# se traen al inicio, los scripts los actualizan y se suben al final. El portal
+# los lee por el Worker de precios con el pase de cada cliente (pml-worker/LEEME.md).
 on:
   schedule:
     - cron: '0 13 * * *'   # 07:00 hora centro de México (tipo de cambio del día)
@@ -11,11 +14,20 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: datos
   cancel-in-progress: false
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.R2_MERCADO_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_MERCADO_SECRET_ACCESS_KEY }}
+  AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+  AWS_DEFAULT_REGION: auto
+  AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+  AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+  R2: s3://${{ secrets.R2_MERCADO_BUCKET }}
 
 jobs:
   pml:
@@ -26,6 +38,17 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+
+      - name: Traer datos del bucket R2
+        run: |
+          # Primera vez: el bucket recibe lo que aún está en el repositorio (precios,
+          # tipo de cambio, catálogo e histórico)
+          if ! aws s3 ls "$R2/nodos/catalogo.json" > /dev/null; then
+            for d in pml fx nodos resumen; do
+              if [ -d "data/$d" ]; then aws s3 sync "data/$d" "$R2/$d" --content-type application/json --only-show-errors; fi
+            done
+          fi
+          for d in pml fx nodos; do aws s3 sync "$R2/$d" "data/$d" --only-show-errors; done
 
       - name: Descargar PML
         run: node scripts/fetch-pml.mjs
@@ -38,16 +61,9 @@ jobs:
         if: always()
         run: node scripts/fetch-nodos.mjs
 
-      - name: Publicar cambios
+      - name: Subir datos al bucket R2
         if: always()
         run: |
-          git add data/pml data/fx data/nodos
-          if git diff --cached --quiet; then
-            echo "Sin cambios"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Datos: PML CENACE $(TZ=America/Mexico_City date +%F)"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          for d in pml fx nodos; do
+            if [ -d "data/$d" ]; then aws s3 sync "data/$d" "$R2/$d" --content-type application/json --only-show-errors; fi
+          done
