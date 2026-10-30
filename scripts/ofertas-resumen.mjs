@@ -23,14 +23,19 @@
 //    resumen/ajuste/<año>.json.gz mide el error contra el PML por sistema, mes y versión.
 //    Aproximación: el MDA real también resuelve arranques, rampas, reservas y la red.
 // 2. Desvío MDA vs MTR (resumen/desvio/…): intermitentes (pronóstico), no despachables
-//    (programa), térmicas e hidro (capacidad máxima disponible y cambios ND ↔ ECO), por Short CE.
-// 3. Costos térmicos por Short CE (resumen/costos/<año>_<sistema>_<mercado>.json.gz):
+//    (programa), térmicas e hidro (capacidad máxima disponible y cambios ND ↔ ECO), por empresa.
+// 3. Costos térmicos por empresa y planta (resumen/costos/<año>_<sistema>_<mercado>.json.gz):
 //    costo unitario de potencia mínima y costo de cada bloque, promedios ponderados por MW.
-// 4. Hidro (resumen/hidro/<año>.json.gz): costo de oportunidad y precio sombra por código.
-// 5. Compras por Short (resumen/compras/<año>_<sistema>.json.gz): MWh por día, perfil por
-//    hora, máximos / mínimos y nodos; el consumo del GI va aparte con la clave "GI".
+// 4. Hidro (resumen/hidro/<año>.json.gz): distribución diaria del costo de oportunidad y del
+//    precio sombra (los códigos cambian cada día).
+// 5. Participación de mercado (resumen/participacion/<año>_<sistema>.json.gz): suministro
+//    calificado (C + U) por empresa, mes, zona de carga y hora; generación y reservas asignadas
+//    por empresa; HHI / CR3 / CR5. Solo porcentajes.
+// 6. Validación horaria de reservas (resumen/reservas/…).
+// Los resúmenes del portal no llevan códigos: empresas (catálogo privado catalogos/participantes.xlsx)
+// y etiquetas estables de planta y unidad (catalogos/plantas.json).
 
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync, inflateRawSync } from 'node:zlib';
 import path from 'node:path';
 import { bucketR2, carpetaLocal, celdas, hoyMx, INICIO, ESTADO } from './ofertas.mjs';
 
@@ -43,6 +48,99 @@ const num = (v) => (v === '' || v == null ? 0 : Number(v));
 function arg(nombre, def) {
   const i = process.argv.indexOf(nombre);
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : def;
+}
+
+/* ── Participantes ─────────────────────────────────────────────────────
+   Catálogo privado de participantes (catalogos/participantes.xlsx en el almacén, que sube el
+   usuario; nunca en el repositorio): hoja CLAVE_PM (SHORT | CLAVE_PM | EMPRESA) y hoja NODOS
+   (Codigo | SHORT_CE | SHORT | CLAVE_PM | EMPRESA | NodoP | Nombre_NodoP | Zona de Carga).
+   Primera letra de la CLAVE_PM: C suministrador calificado, U usuario calificado, G generador,
+   B suministro básico; I = contratos legados (GI). Los resúmenes usan solo nombres de empresa
+   y etiquetas de planta: ningún código llega al portal. */
+const CATALOGO = 'catalogos/participantes.xlsx', PLANTAS = 'catalogos/plantas.json';
+const LEGADO = 'Legacy contracts', OTROS_SUM = 'Otros Suministradores';
+
+function leerXlsx(buf) {
+  const files = {};
+  let e = buf.length - 22;
+  while (e >= 0 && buf.readUInt32LE(e) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('catálogo de participantes: no es un .xlsx');
+  let p = buf.readUInt32LE(e + 16);
+  for (let i = 0, n = buf.readUInt16LE(e + 10); i < n; i++) {
+    const m = buf.readUInt16LE(p + 10), sz = buf.readUInt32LE(p + 20), nl = buf.readUInt16LE(p + 28), el = buf.readUInt16LE(p + 30), cl = buf.readUInt16LE(p + 32);
+    const lo = buf.readUInt32LE(p + 42), nombre = buf.toString('utf8', p + 46, p + 46 + nl), st = lo + 30 + buf.readUInt16LE(lo + 26) + buf.readUInt16LE(lo + 28);
+    const raw = buf.subarray(st, st + sz);
+    files[nombre] = (m === 8 ? inflateRawSync(raw) : raw).toString('utf8');
+    p += 46 + nl + el + cl;
+  }
+  const xml = (s) => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+  const ss = [...(files['xl/sharedStrings.xml'] || '').matchAll(/<si>([\s\S]*?)<\/si>/g)].map((x) => xml([...x[1].matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map((t) => t[1]).join('')));
+  const rels = Object.fromEntries([...files['xl/_rels/workbook.xml.rels'].matchAll(/Id="([^"]+)"[^>]*Target="([^"]+)"/g)].map((x) => [x[1], x[2]]));
+  const hojas = {};
+  for (const [, nombre, rid] of files['xl/workbook.xml'].matchAll(/<sheet [^>]*name="([^"]+)"[^>]*r:id="([^"]+)"/g)) {
+    const doc = files['xl/' + rels[rid].replace(/^\/?xl\//, '')] || '';
+    hojas[xml(nombre)] = [...doc.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)].map((r) => {
+      const fila = [];
+      for (const c of r[1].matchAll(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const col = [...c[1]].reduce((s, ch) => s * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+        const v = (c[3] || '').match(/<v>([^<]*)<\/v>/)?.[1] ?? (c[3] || '').match(/<t[^>]*>([^<]*)<\/t>/)?.[1] ?? '';
+        fila[col] = /t="s"/.test(c[2]) ? ss[+v] : xml(v);
+      }
+      return fila.map((x) => (x ?? '').trim());
+    });
+  }
+  return hojas;
+}
+
+// Nombre comercial: sin la razón social ("IBERDROLA CLIENTES, S.A. DE C.V." → "Iberdrola Clientes")
+const corto = (s) => s.replace(/,?\s*(S\.?\s*A\.?\s*P\.?\s*I\.?|S\.?\s*A\.?|S\.?\s*DE\s*R\.?\s*L\.?|S\.?\s*C\.?|E\.?\s*P\.?\s*S\.?)\s*,?(\s*DE\s*C\.?\s*V\.?)?\.?\s*$/i, '')
+  .replace(/,\s*$/, '').toLowerCase().replace(/(^|[\s(/-])([a-záéíóúñ0-9])/g, (m, a, b) => a + b.toUpperCase())
+  .replace(/\b(Cfe|Ssb|Gi|Mx|Usa|Fv|Fse|Ric|Epg|Rc|At|E2m|Ii|Iii|Iv|Vi)\b/g, (w) => w.toUpperCase()).replace(/\bDe\b/g, 'de').replace(/\bY\b/g, 'y');
+
+async function cargarParticipantes(a) {
+  const b = await a.leer(CATALOGO);
+  if (!b) { console.log(`Aviso: falta ${CATALOGO}; los participantes aparecerán sin nombre`); return null; }
+  const h = leerXlsx(b);
+  const porShort = {}, porClave = {}, zonaDe = {};
+  // Una fila puede traer solo la CLAVE_PM (participantes que no tienen ofertas propias)
+  for (const [s, clave, empresa] of (h.CLAVE_PM || []).slice(1)) {
+    if (!empresa || (!s && !clave)) continue;
+    // Suministradores sin nombre identificado (empresa "C") se agrupan como "Otros Suministradores"
+    const info = { nombre: empresa === 'C' ? OTROS_SUM : corto(empresa), tipo: (clave || '?')[0].toUpperCase() };
+    if (s) porShort[s] = info;
+    if (clave && clave.length > 1) porClave[clave] = info;
+  }
+  for (const f of (h.NODOS || []).slice(1)) if (f[0]) zonaDe[f[0]] = f[7] || f[5];
+  const catalogo = Object.fromEntries((h['CATALOGO DE NODOS'] || []).slice(1).filter((f) => f[3]).map((f) => [f[3], f[2]]));
+  return { porShort, porClave, zonaDe, catalogo };
+}
+
+// Empresa de un código de oferta (Short = 4 primeros caracteres) o de una clave de participante
+function empresaDe(P, codigo) {
+  if (/^LJXX/.test(codigo)) return { nombre: LEGADO, tipo: 'I' };
+  return (P && P.porShort[codigo.slice(0, 4)]) || { nombre: 'Other participants', tipo: '?' };
+}
+// Claves sin empresa en el catálogo: "Generador" (G) u "Otros Suministradores" (C) hasta tener su nombre
+function empresaClave(P, clave) {
+  if (/^I/.test(clave)) return { nombre: LEGADO, tipo: 'I' };
+  return (P && P.porClave[clave]) || { nombre: { G: 'Generador', C: OTROS_SUM }[clave[0]] || 'Other participants', tipo: clave[0] };
+}
+
+// Etiquetas estables de planta y unidad por empresa ("Plant 3", "Plant 3 · Unit 2"), guardadas en el almacén
+async function registroPlantas(a) {
+  const r = JSON.parse((await a.leer(PLANTAS))?.toString() || '{"plantas":{},"unidades":{},"siguiente":{}}');
+  let cambio = false;
+  const planta = (P, codigo) => {
+    const ce = codigo.slice(0, 6), emp = empresaDe(P, codigo).nombre;
+    if (!r.plantas[ce]) { r.siguiente[emp] = (r.siguiente[emp] || 0) + 1; r.plantas[ce] = { empresa: emp, n: r.siguiente[emp] }; cambio = true; }
+    return { empresa: emp, planta: `Plant ${r.plantas[ce].n}` };
+  };
+  const unidad = (P, codigo) => {
+    const p = planta(P, codigo), ce = codigo.slice(0, 6);
+    if (!r.unidades[codigo]) { const k = 'u:' + ce; r.siguiente[k] = (r.siguiente[k] || 0) + 1; r.unidades[codigo] = r.siguiente[k]; cambio = true; }
+    return { ...p, unidad: `${p.planta} · Unit ${r.unidades[codigo]}` };
+  };
+  return { planta, unidad, guardar: () => (cambio ? a.escribir(PLANTAS, Buffer.from(JSON.stringify(r)), 'application/json') : null) };
 }
 
 /* ── Lectura ─────────────────────────────────────────────────────────── */
@@ -121,16 +219,18 @@ function bloquesHora(H, t, { precioHidro, hidroReal, conImportacion, encendidas 
 // - margen: capacidad encendida por encima de lo que hay que cubrir.
 // - reserva (requerimientos de servicios conexos "Real"): 'ninguna'; 'rodante' (las encendidas
 //   cubren demanda + reserva rodante); 'rodante_retenida' (además se aparta de la energía);
-//   'rodante_hidro' (se aparta solo lo que no cubre la holgura hidro).
+//   'rodante_hidro' (se aparta solo lo que no cubre la holgura hidro); 'rodante_ofertada' (la hidro
+//   cubre solo la reserva rodante que ofrece, hasta su holgura).
 // - ventana: una unidad encendida para la hora más exigente de ±ventana horas sigue encendida.
+// - perdidas: la demanda del MDA suma las pérdidas reales de la hora (balance / retiros − 1).
 // Para probar otros valores sin tocar el código: variables de entorno MODO_MINIMO, MARGEN,
-// RESERVA_MODO y VENTANA (aplican a los tres sistemas).
+// RESERVA_MODO, VENTANA y PERDIDAS (aplican a los tres sistemas).
 // Las reservas solo se aplican al MDA (donde el CENACE las co-optimiza con la energía); la curva
 // del MTR ex post ya cruza contra la generación real y apartarlas la desvía (BCA junio: 31% → 12%).
 const SIN_RESERVA = { minimo: 'compromiso', margen: 0.05, reserva: 'ninguna', ventana: 0 };
 const PARAMETROS = {
-  SIN: { MDA: { minimo: 'compromiso', margen: 0, reserva: 'rodante_hidro', ventana: 0 }, MTR: SIN_RESERVA },
-  BCA: { MDA: { minimo: 'compromiso', margen: 0, reserva: 'rodante_hidro', ventana: 0 }, MTR: SIN_RESERVA },
+  SIN: { MDA: { minimo: 'compromiso', margen: 0, reserva: 'rodante_ofertada', ventana: 0, perdidas: true }, MTR: SIN_RESERVA },
+  BCA: { MDA: { minimo: 'compromiso', margen: 0, reserva: 'rodante_hidro', ventana: 0, perdidas: true }, MTR: SIN_RESERVA },
   BCS: { MDA: SIN_RESERVA, MTR: SIN_RESERVA },
 };
 function parametros(sistema, mercado) {
@@ -138,6 +238,7 @@ function parametros(sistema, mercado) {
   return {
     minimo: e.MODO_MINIMO || p.minimo, margen: e.MARGEN != null ? Number(e.MARGEN) : p.margen,
     reserva: e.RESERVA_MODO || p.reserva, ventana: e.VENTANA != null ? Number(e.VENTANA) : p.ventana,
+    perdidas: e.PERDIDAS != null ? e.PERDIDAS === '1' : !!p.perdidas,
   };
 }
 
@@ -193,7 +294,7 @@ function cruzar(blq, demandaA) {
   }
   return {
     precio: marginal ? r2(marginal.precio) : null,
-    marginal: marginal ? { tipo: marginal.tipo, ce: marginal.ce || null, codigo: marginal.codigo, en_minimo: marginal.tipo === 'termica_min' } : null,
+    marginal: marginal ? { tipo: marginal.tipo, empresa: marginal.codigo && marginal.tipo !== 'hidro_real' ? empresaDe(PART, marginal.codigo).nombre : null, en_minimo: marginal.tipo === 'termica_min' } : null,
     demanda,
     oferta_total: r1(blq.reduce((s, b) => s + b.mw, 0)),
     mezcla: Object.fromEntries(Object.entries(mezcla).map(([k, v]) => [k, r1(v)])),
@@ -277,33 +378,41 @@ async function curvaDia(a, fecha, sistema, estado) {
     // Reservas: la rodante se cubre con unidades encendidas (entra en lo que hay que encender) y,
     // según el modo, una parte se aparta de la energía. La holgura hidro (capacidad disponible
     // menos lo que generó) puede cubrir reserva sin quitarle energía a las térmicas.
-    const holgura = (t) => (hidroReal == null ? 0 : Math.max(0, (t.hidro || []).filter((f) => f.Hora === H && f['Estatus asignacion'] !== 'ND').reduce((s, f) => s + num(f['Limite de despacho maximo (MW)']), 0) - hidroReal));
+    const hidroH = (t) => (t.hidro || []).filter((f) => f.Hora === H && f['Estatus asignacion'] !== 'ND');
+    const holgura = (t) => (hidroReal == null ? 0 : Math.max(0, hidroH(t).reduce((s, f) => s + num(f['Limite de despacho maximo (MW)']), 0) - hidroReal));
+    // Reserva rodante que la hidro ofrece (rodante 10 min + regulación), sin pasar de su holgura
+    const hidroOfrece = (t) => Math.min(holgura(t), hidroH(t).reduce((s, f) => s + num(f['Reserva rodante 10 min (MW)']) + num(f['Reserva regulacion secundaria (MW)']), 0));
     const reserva = (rod, t, p) => {
       const r = rod[H] || 0;
       if (p.reserva === 'ninguna') return { encender: 0, apartar: 0, rodante: r };
-      return { encender: r, rodante: r, apartar: p.reserva === 'rodante_retenida' ? r : p.reserva === 'rodante_hidro' ? Math.max(0, r - holgura(t)) : 0 };
+      const cubre = { rodante_retenida: 0, rodante_hidro: holgura(t), rodante_ofertada: hidroOfrece(t) }[p.reserva] ?? r;
+      return { encender: r, rodante: r, apartar: Math.max(0, r - cubre) };
     };
     const resvMda = reserva(rodMda, mda, parMda), resvMtr = reserva(rodMtr, mtr, parMtr);
+    // Pérdidas: las compras del MDA no las incluyen; se suman como la proporción real de la hora
+    // (demanda real por balance / por retiros − 1), acotada entre 0 y 8%
+    const bal0 = real.balance.demanda[H], ret0 = real.retiros.demanda[H];
+    const perdidas = parMda.perdidas && bal0 && ret0 ? ((compras[H] || 0) + (gi[H] || 0)) * Math.min(0.08, Math.max(0, bal0 / ret0 - 1)) : 0;
     return {
-      h, H, g, hidroReal, expFija, d0, demandaA, genSis, opMda, opMtr, resvMda, resvMtr,
-      resMda: demandaA(0) + resvMda.encender - noTermica(H, mda, opMda),
-      resMed: demandaA(0) + resvMda.encender - noTermica(H, mda, { precioHidro: medianaCO, conImportacion: true }),
+      h, H, g, hidroReal, expFija, d0, demandaA, genSis, opMda, opMtr, resvMda, resvMtr, perdidas,
+      resMda: demandaA(0) + perdidas + resvMda.encender - noTermica(H, mda, opMda),
+      resMed: demandaA(0) + perdidas + resvMda.encender - noTermica(H, mda, { precioHidro: medianaCO, conImportacion: true }),
       resMtr: genSis == null ? null : genSis + resvMtr.encender - noTermica(H, mtr, opMtr),
     };
   });
   const vMda = ventana(ctx.map((c) => c.resMda), parMda.ventana), vMed = ventana(ctx.map((c) => c.resMed), parMda.ventana), vMtr = ventana(ctx.map((c) => c.resMtr), parMtr.ventana);
 
   const out = [];
-  for (const [i, { h, H, g, hidroReal, expFija, d0, demandaA, genSis, opMda, opMtr, resvMda, resvMtr }] of ctx.entries()) {
-    // La reserva apartada se suma a la demanda que cruza con la energía
-    const conReserva = (precio) => demandaA(precio) + resvMda.apartar;
+  for (const [i, { h, H, g, hidroReal, expFija, d0, demandaA, genSis, opMda, opMtr, resvMda, resvMtr, perdidas }] of ctx.entries()) {
+    // La reserva apartada y las pérdidas se suman a la demanda que cruza con la energía
+    const conReserva = (precio) => demandaA(precio) + perdidas + resvMda.apartar;
     const cMda = cruzar(ofertaHora(H, mda, opMda, vMda[i], parMda), conReserva);
     // Versión anterior (hidro con la mediana del costo de oportunidad), solo para comparar
     const cMed = sistema === 'SIN' ? cruzar(ofertaHora(H, mda, { precioHidro: medianaCO, conImportacion: true }, vMed[i], parMda), conReserva) : cMda;
     const cMtr = genSis == null ? null : cruzar(ofertaHora(H, mtr, opMtr, vMtr[i], parMtr), () => genSis + resvMtr.apartar);
 
     const bal = real.balance.demanda[H], ret = real.retiros.demanda[H];
-    const { demanda: dConReserva, ...mdaResto } = cMda, demanda = dConReserva - resvMda.apartar;
+    const { demanda: dConReserva, ...mdaResto } = cMda, demanda = dConReserva - resvMda.apartar - perdidas;
     out.push({
       hora: h,
       demanda: { compras: r1(compras[H] || 0), gi: r1(gi[H] || 0), exportacion_fija: r1(expFija), exportacion_bloques: r1(demanda - d0), total: r1(demanda) },
@@ -346,7 +455,7 @@ async function desvioDia(a, fecha, sistema) {
     const sumar = (filas, lado) => {
       for (const f of filas) {
         if (cfg.estatus && f['Estatus asignacion'] === 'ND') continue;
-        const k = f['Short CE'], e = (ce[k] ??= { short: f.Short, mda: Array(24).fill(0), mtr: Array(24).fill(0) });
+        const k = empresaDe(PART, f.Codigo).nombre, e = (ce[k] ??= { mda: Array(24).fill(0), mtr: Array(24).fill(0) });
         const i = Math.min(Number(f.Hora), 24) - 1;
         e[lado][i] = r1(e[lado][i] + num(f[cfg.col]));
       }
@@ -361,19 +470,20 @@ async function desvioDia(a, fecha, sistema) {
       }
     }
     const tot = (lado) => r1(Object.values(ce).reduce((s, e) => s + e[lado].reduce((x, y) => x + y, 0), 0));
-    res.tipos[tipo] = { mwh_mda: tot('mda'), mwh_mtr: tot('mtr'), ...(cfg.estatus ? { cambios_estatus: cambios } : {}), short_ce: ce };
+    res.tipos[tipo] = { mwh_mda: tot('mda'), mwh_mtr: tot('mtr'), ...(cfg.estatus ? { cambios_estatus: cambios } : {}), empresas: ce };
   }
   return res;
 }
 
-/* ── 3. Costos térmicos por Short CE ──────────────────────────────────── */
+/* ── 3. Costos térmicos por empresa y planta ──────────────────────────── */
 async function costosDia(a, fecha, sistema, mercado) {
   const filas = await oferta(a, mercado, 'termica', fecha, sistema);
   if (!filas) return null;
   const ce = {};
   for (const f of filas) {
     if (f['Estatus asignacion'] === 'ND' || num(f['Limite de despacho maximo (MW)']) <= 0) continue;
-    const e = (ce[f['Short CE']] ??= { short: f.Short, u: [0, 0, Infinity, -Infinity], b: BLQ.map(() => [0, 0]) });
+    const p = REG.planta(PART, f.Codigo), k = `${p.empresa} · ${p.planta}`;
+    const e = (ce[k] ??= { empresa: p.empresa, planta: p.planta, u: [0, 0, Infinity, -Infinity], b: BLQ.map(() => [0, 0]) });
     const min = num(f['Limite de despacho minimo (MW)']), cu = num(f['Costo Unitario de Potencia Minima ($/MWh)']);
     if (min > 0) { e.u[0] += cu * min; e.u[1] += min; e.u[2] = Math.min(e.u[2], cu); e.u[3] = Math.max(e.u[3], cu); }
     BLQ.forEach((b, i) => {
@@ -383,7 +493,7 @@ async function costosDia(a, fecha, sistema, mercado) {
   }
   // Por día: [costo unitario prom, mín, máx] y el promedio ponderado de cada bloque (null si no hubo MW)
   return Object.fromEntries(Object.entries(ce).map(([k, e]) => [k, {
-    short: e.short,
+    empresa: e.empresa, planta: e.planta,
     u: e.u[1] ? [r2(e.u[0] / e.u[1]), r2(e.u[2]), r2(e.u[3])] : null,
     b: e.b.map(([s, mw]) => (mw ? r2(s / mw) : null)),
   }]));
@@ -426,7 +536,8 @@ async function reservasDia(a, fecha, sistema) {
         const cambiaReserva = Object.values(RESERVAS_OFERTA).some((n) => num(x[`Reserva ${n} (MW)`]) !== num(y[`Reserva ${n} (MW)`]));
         if (d !== 0 || x[EST] !== y[EST] || cambiaReserva) {
           // Detalle por unidad: [MDA, MTR] de límite máx / mín, estatus y reserva ofrecida por tipo
-          const u = (unidades[y.Codigo] ??= { tipo: t, short_ce: y['Short CE'], horas: {} });
+          const id = REG.unidad(PART, y.Codigo), k = `${id.empresa} · ${id.unidad}`;
+          const u = (unidades[k] ??= { tipo: t, empresa: id.empresa, unidad: id.unidad, horas: {} });
           u.horas[H] = {
             max: [num(x[MAX]), num(y[MAX])], min: [num(x[MIN]), num(y[MIN])], estatus: [x[EST], y[EST]],
             reserva: Object.fromEntries(Object.entries(RESERVAS_OFERTA).map(([k, n]) => [k, [num(x[`Reserva ${n} (MW)`]), num(y[`Reserva ${n} (MW)`])]])),
@@ -446,30 +557,70 @@ async function reservasDia(a, fecha, sistema) {
   return { fecha, sistema, horas, unidades };
 }
 
-/* ── 5. Compras por Short ────────────────────────────────────────────── */
-function acumularCompras(serie, fecha, filas, clave, colMw, colNodo) {
-  for (const f of filas || []) {
-    const k = clave(f), mw = num(f[colMw]), i = Math.min(Number(f.Hora), 24) - 1;
-    const s = (serie.short[k] ??= { dias: {}, suma_hora: Array(24).fill(0), dias_hora: Array(24).fill(0), max: null, min: null, nodos: [] });
-    s.dias[fecha] = r1((s.dias[fecha] || 0) + mw);
-    s._h ??= {};
-    s._h[i] = (s._h[i] || 0) + mw;
-    if (colNodo && !s.nodos.includes(f[colNodo])) s.nodos.push(f[colNodo]);
+/* ── 5. Participación de mercado ──────────────────────────────────────────
+   Suministro: solo suministradores calificados (C) y usuarios calificados (U); sin suministro
+   básico ni generadores. Se mide con la energía de sus compras del MDA, por mes, zona de carga y
+   hora del día. Generación y reservas: energía y reservas asignadas en el MDA por empresa
+   (generadores y contratos legados). El portal recibe solo porcentajes; los MWh se acumulan en
+   resumen/_acum/ (fuera de las rutas del Worker). */
+async function acumularParticipacion(a, ac, fecha, sistema) {
+  const mes = fecha.slice(0, 7);
+  for (const f of (await oferta(a, 'MDA', 'compra', fecha, sistema)) || []) {
+    const emp = empresaDe(PART, f.Codigo);
+    if (emp.tipo !== 'C' && emp.tipo !== 'U') continue;
+    const mw = num(f['Demanda fija (MW)']), nodo = f['NodoP/Zona de Carga'];
+    const zona = (PART && (PART.zonaDe[f.Codigo] || PART.catalogo[nodo])) || nodo, i = Math.min(Number(f.Hora), 24) - 1;
+    ac.tipos[emp.nombre] = emp.tipo;
+    const m = (ac.sum[mes] ??= {}); m[emp.nombre] = (m[emp.nombre] || 0) + mw;
+    (ac.hora[emp.nombre] ??= Array(24).fill(0))[i] += mw;
+    const z = ((ac.zonas[zona] ??= {})[mes] ??= {}); z[emp.nombre] = (z[emp.nombre] || 0) + mw;
   }
-  // Totales por hora del día de cada Short: suma del perfil y extremos horarios
-  for (const s of Object.values(serie.short)) {
-    if (!s._h) continue;
-    for (const [i, mw] of Object.entries(s._h)) {
-      s.suma_hora[i] = r1(s.suma_hora[i] + mw); s.dias_hora[i]++;
-      if (!s.max || mw > s.max.mw) s.max = { fecha, hora: Number(i) + 1, mw: r1(mw) };
-      if (!s.min || mw < s.min.mw) s.min = { fecha, hora: Number(i) + 1, mw: r1(mw) };
-    }
-    delete s._h;
+  for (const f of (await oferta(a, 'MDA', 'asignacion_participantes', fecha, sistema)) || []) {
+    const emp = empresaClave(PART, f['Zona de Reserva'] ?? f.Participante ?? f.Codigo);
+    if (emp.tipo !== 'G' && emp.tipo !== 'I') continue;
+    const e = num(f['Cantidad total de energia asignada (MWh)']);
+    const r = ['Reserva de Regulacion (MW)', 'Reserva Rodante de 10 minutos (MW)', 'Reserva No Rodante de 10 minutos (MW)', 'Reserva Rodante Suplementaria (MW)', 'Reserva No Rodante Suplementaria (MW)'].reduce((s, c) => s + num(f[c]), 0);
+    const g = (ac.gen[mes] ??= {}); g[emp.nombre] = (g[emp.nombre] || 0) + e;
+    const rr = (ac.res[mes] ??= {}); rr[emp.nombre] = (rr[emp.nombre] || 0) + r;
   }
+  ac.dias.push(fecha);
+}
+
+// Porcentajes por empresa de un conjunto de MWh por mes, con concentración (HHI, CR3, CR5) y activos
+function participacion(porMes) {
+  const meses = Object.keys(porMes).sort(), ytd = {};
+  for (const m of meses) for (const [e, v] of Object.entries(porMes[m])) ytd[e] = (ytd[e] || 0) + v;
+  const pct = (o) => { const t = Object.values(o).reduce((s, v) => s + Math.max(0, v), 0); return Object.fromEntries(Object.entries(o).map(([e, v]) => [e, t ? (100 * Math.max(0, v)) / t : 0])); };
+  const conc = (p) => { const s = Object.values(p).sort((x, y) => y - x); return { hhi: Math.round(s.reduce((a, v) => a + v * v, 0)), cr3: r1(s.slice(0, 3).reduce((a, v) => a + v, 0)), cr5: r1(s.slice(0, 5).reduce((a, v) => a + v, 0)), activos: s.filter((v) => v > 0).length }; };
+  const porM = Object.fromEntries(meses.map((m) => [m, pct(porMes[m])])), anual = pct(ytd);
+  // Solo empresas con participación en el periodo (sin volumen no hay participación que mostrar)
+  const empresas = Object.keys(anual).filter((e) => anual[e] > 0).sort((x, y) => anual[y] - anual[x])
+    .map((e) => ({ nombre: e, ytd: r2(anual[e]), meses: Object.fromEntries(meses.map((m) => [m, r2(porM[m][e] || 0)])) }));
+  return { meses, empresas, concentracion: { ytd: conc(anual), meses: Object.fromEntries(meses.map((m) => [m, conc(porM[m])])) } };
+}
+
+function salidaParticipacion(ac, sistema, anio) {
+  const sum = participacion(ac.sum);
+  for (const e of sum.empresas) e.tipo = ac.tipos[e.nombre];
+  // Perfil horario: participación de cada empresa en cada hora del día (año a la fecha)
+  const totH = Array.from({ length: 24 }, (_, i) => Object.values(ac.hora).reduce((s, v) => s + v[i], 0));
+  for (const e of sum.empresas) e.perfil = (ac.hora[e.nombre] || Array(24).fill(0)).map((v, i) => (totH[i] ? r2((100 * v) / totH[i]) : 0));
+  // Zonas de carga: peso de la zona en el suministro calificado y participación de cada empresa en ella
+  const zt = Object.fromEntries(Object.entries(ac.zonas).map(([z, ms]) => [z, Object.values(ms).reduce((s, o) => s + Object.values(o).reduce((x, y) => x + y, 0), 0)]));
+  const total = Object.values(zt).reduce((s, v) => s + v, 0);
+  const zonas = Object.entries(ac.zonas).filter(([z]) => zt[z] > 0).sort((x, y) => zt[y[0]] - zt[x[0]]).map(([z, ms]) => {
+    const p = participacion(ms);
+    return { zona: z, peso: r2((100 * zt[z]) / total), concentracion: p.concentracion.ytd, empresas: p.empresas.map(({ nombre, ytd, meses }) => ({ nombre, ytd, meses })) };
+  });
+  return {
+    sistema, anio, actualizado: new Date().toISOString().slice(0, 10), hasta: ac.dias.slice().sort().at(-1),
+    suministro: sum, zonas,
+    generacion: participacion(ac.gen), reservas: participacion(ac.res),
+  };
 }
 
 /* ── Ajuste del modelo: precio estimado contra el componente de energía del PML ─ */
-const VERSION_CURVA = 5;  // súbela al cambiar el método de la curva: se recalcula todo
+const VERSION_CURVA = 6;  // súbela al cambiar el método de la curva: se recalcula todo
 
 // Qué datos tenía el cálculo de un día; si cambian (liquidación nueva), se recalcula
 function firma(estado, fecha, sistema) {
@@ -505,11 +656,18 @@ function metricas(serie) {
 }
 
 /* ── Principal ──────────────────────────────────────────────────────── */
+// Versión de los resúmenes por empresa (desvío, reservas, costos, hidro, participación): al cambiarla se recalculan
+const VERSION_RESUMEN = 2;
+let PART = null, REG = null;  // catálogo de participantes y registro de plantas de la corrida
+
 async function main() {
   const ajuste = {};
   const almacen = process.argv.includes('--r2') ? bucketR2() : carpetaLocal(path.resolve(arg('--salida', 'ofertas_limpias')));
   const desde = arg('--desde', INICIO), hasta = arg('--hasta', hoyMx());
   const estado = JSON.parse((await almacen.leer(ESTADO))?.toString() || '{"reportes":{}}');
+  PART = await cargarParticipantes(almacen);
+  REG = await registroPlantas(almacen);
+  const serieDe = async (k, base) => { const s = await leerJson(almacen, k, null); return s && s.version === VERSION_RESUMEN ? s : { ...base, version: VERSION_RESUMEN }; };
   const tiene = (id) => new Set(estado.reportes[id] || []);
   let errores = 0;
   const t0 = Date.now();
@@ -545,7 +703,7 @@ async function main() {
 
       // 2. Desvío MDA vs MTR
       const kDes = `resumen/desvio/serie_${anio}_${sistema}.json.gz`;
-      const des = await leerJson(almacen, kDes, { sistema, anio, dias: {} });
+      const des = await serieDe(kDes, { sistema, anio, dias: {} });
       n = 0;
       for (const fecha of delAnio(conMtr).filter((d) => !des.dias[d])) {
         try {
@@ -560,7 +718,7 @@ async function main() {
 
       // 6. Validación horaria de reservas (días con MTR): archivo por día + serie anual por hora
       const kRes = `resumen/reservas/serie_${anio}_${sistema}.json.gz`;
-      const resv = await leerJson(almacen, kRes, { sistema, anio, dias: {} });
+      const resv = await serieDe(kRes, { sistema, anio, dias: {} });
       resv.columnas = ['hora', 'termica_mw_bajan', 'termica_mw_suben', 'termica_holgura_mda', 'termica_holgura_mtr', 'reserva_ofrecida_total_mda', 'reserva_ofrecida_total_mtr',
         'requerido_total_mda', 'requerido_total_mtr', 'asignado_menos_requerido_rod10', 'asignado_menos_requerido_nr10', 'asignado_menos_requerido_sup'];
       n = 0;
@@ -577,16 +735,16 @@ async function main() {
       if (n) await escribirJson(almacen, kRes, resv);
       console.log(`Reservas ${sistema} ${anio}: ${n} días nuevos`);
 
-      // 3. Costos por Short CE, MDA y MTR
+      // 3. Costos térmicos por empresa y planta, MDA y MTR
       for (const mercado of ['MDA', 'MTR']) {
         const kCos = `resumen/costos/${anio}_${sistema}_${mercado}.json.gz`;
-        const cos = await leerJson(almacen, kCos, { sistema, anio, mercado, bloques: BLQ, dias: [], short_ce: {} });
+        const cos = await serieDe(kCos, { sistema, anio, mercado, bloques: BLQ, dias: [], plantas: {} });
         const pend = [...tiene(`${mercado}|termica|${sistema}`)].filter((d) => d.startsWith(anio) && d >= desde && d <= hasta && !cos.dias.includes(d)).sort();
         for (const fecha of pend) {
           try {
             const c = await costosDia(almacen, fecha, sistema, mercado);
             if (!c) continue;
-            for (const [k, v] of Object.entries(c)) { const e = (cos.short_ce[k] ??= { short: v.short, dias: {} }); e.dias[fecha] = { u: v.u, b: v.b }; }
+            for (const [k, v] of Object.entries(c)) { const e = (cos.plantas[k] ??= { empresa: v.empresa, planta: v.planta, dias: {} }); e.dias[fecha] = { u: v.u, b: v.b }; }
             cos.dias.push(fecha);
           } catch (e) { errores++; console.log(`Costos ${sistema} ${mercado} ${fecha}: ERROR ${e.message}`); }
         }
@@ -595,37 +753,34 @@ async function main() {
         console.log(`Costos ${sistema} ${mercado} ${anio}: ${pend.length} días nuevos`);
       }
 
-      // 5. Compras por Short (+ consumo del GI)
-      const kCom = `resumen/compras/${anio}_${sistema}.json.gz`;
-      const com = await leerJson(almacen, kCom, { sistema, anio, dias: [], short: {} });
-      const pendC = [...tiene(`MDA|compra|${sistema}`)].filter((d) => d.startsWith(anio) && d >= desde && d <= hasta && !com.dias.includes(d)).sort();
-      for (const fecha of pendC) {
-        try {
-          acumularCompras(com, fecha, await oferta(almacen, 'MDA', 'compra', fecha, sistema), (f) => f.Short, 'Demanda fija (MW)', 'NodoP/Zona de Carga');
-          acumularCompras(com, fecha, await oferta(almacen, 'MDA', 'gi_consumo', fecha, sistema), () => 'GI', 'Potencia Media (MW)');
-          com.dias.push(fecha);
-        } catch (e) { errores++; console.log(`Compras ${sistema} ${fecha}: ERROR ${e.message}`); }
+      // 5. Participación de mercado (acumulados privados en resumen/_acum/, salida solo en %)
+      const kAc = `resumen/_acum/participacion_${anio}_${sistema}.json.gz`;
+      const ac = await serieDe(kAc, { dias: [], sum: {}, hora: {}, zonas: {}, tipos: {}, gen: {}, res: {} });
+      const pendP = [...tiene(`MDA|compra|${sistema}`)].filter((d) => d.startsWith(anio) && d >= desde && d <= hasta && !ac.dias.includes(d)).sort();
+      for (const fecha of pendP) {
+        try { await acumularParticipacion(almacen, ac, fecha, sistema); } catch (e) { errores++; console.log(`Participación ${sistema} ${fecha}: ERROR ${e.message}`); }
       }
-      com.dias.sort();
-      if (pendC.length) await escribirJson(almacen, kCom, com);
-      console.log(`Compras ${sistema} ${anio}: ${pendC.length} días nuevos (${Object.keys(com.short).length} Short)`);
+      if (pendP.length || !(await almacen.leer(`resumen/participacion/${anio}_${sistema}.json.gz`))) {
+        await escribirJson(almacen, kAc, ac);
+        await escribirJson(almacen, `resumen/participacion/${anio}_${sistema}.json.gz`, salidaParticipacion(ac, sistema, anio));
+      }
+      console.log(`Participación ${sistema} ${anio}: ${pendP.length} días nuevos`);
     }
   }
 
-  // 4. Hidro: costo de oportunidad y precio sombra por código
+  // 4. Hidro: costo de oportunidad y precio sombra (los códigos cambian cada día: se guarda la distribución diaria)
   const ps = [...tiene('MDA|precios_sombra|SIN')].filter((d) => d >= desde && d <= hasta).sort();
   for (const anio of [...new Set(ps.map((d) => d.slice(0, 4)))]) {
     const kH = `resumen/hidro/${anio}.json.gz`;
-    const hid = await leerJson(almacen, kH, { anio, columnas: ['costo_oportunidad', 'precio_sombra'], dias: [], codigos: {} });
-    const pend = ps.filter((d) => d.startsWith(anio) && !hid.dias.includes(d));
+    const hid = await serieDe(kH, { anio, columnas: ['costo_oportunidad', 'precio_sombra'], dias: {} });
+    const pend = ps.filter((d) => d.startsWith(anio) && !hid.dias[d]);
     for (const fecha of pend) {
-      for (const f of (await oferta(almacen, 'MDA', 'precios_sombra', fecha, 'SIN')) || []) (hid.codigos[f.Codigo] ??= {})[fecha] = [num(f.COSTO_OPORTUNIDAD), num(f.PRECIO_SOMBRA)];
-      hid.dias.push(fecha);
+      hid.dias[fecha] = ((await oferta(almacen, 'MDA', 'precios_sombra', fecha, 'SIN')) || []).map((f) => [num(f.COSTO_OPORTUNIDAD), num(f.PRECIO_SOMBRA)]).sort((x, y) => x[0] - y[0]);
     }
-    hid.dias.sort();
     if (pend.length) await escribirJson(almacen, kH, hid);
-    console.log(`Hidro ${anio}: ${pend.length} días nuevos (${Object.keys(hid.codigos).length} códigos)`);
+    console.log(`Hidro ${anio}: ${pend.length} días nuevos`);
   }
+  await REG.guardar();
 
   for (const [anio, sistemas] of Object.entries(ajuste)) {
     await escribirJson(almacen, `resumen/ajuste/${anio}.json.gz`, { anio, version_curva: VERSION_CURVA, actualizado: new Date().toISOString(), sistemas });

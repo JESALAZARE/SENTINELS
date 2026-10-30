@@ -1,53 +1,77 @@
 /* ── Sentinels Client Portal · MEM Insights ──────────────────────────
-   Supply and bids of the wholesale market (MDA / MTR), for traders and guests
-   (profiles.js). Reads the summaries that scripts/ofertas-resumen.mjs writes to
-   the private offers bucket, through the PML Worker's /ofertas/ route
-   (Market.offers, with the client's market pass). Views:
-     curve      merit-order supply curve of an hour, crossing with demand,
-                estimated price vs the PML energy component, and the model's fit
-     deviation  day-ahead (MDA) vs real-time (MTR) offered MW by type and Short CE
-     costs      thermal costs (unit cost at minimum and each block) by Short CE
-     hydro      hydro opportunity costs and shadow prices
-     purchases  purchase bids by Short (year to date)
-     reserves   hourly reserve validation: MDA→MTR thermal/hydro changes vs required
-                and assigned reserves
+   Market structure, price formation and dispatch analytics of the wholesale
+   electricity market, for traders and guests (profiles.js). Reads the summaries
+   of the private analytics bucket through the PML Worker's /ofertas/ route
+   (Market.offers, with the client's market pass). Sections:
+     overview   headline indicators, findings and trends
+     share      market share (qualified supply, generation, reserves) by company,
+                month, load zone and hour, with concentration (HHI, CR3, CR5)
+     price      merit-order curve of an hour, estimated price vs the PML energy
+                component and the model's fit
+     dispatch   generation mix by technology and day-ahead vs real-time by company
+     costs      thermal costs by company and plant
+     hydro      value of water and binding energy limits
+     reserves   hourly requirement, assignment and capability changes
+   The page shows companies and shares only: no codes and no data sources.
    Uses Market (market.js), Board.charts (board.js) and _esc. */
 const InsightsPage = (() => {
   const esc = s => _esc(s);
   const fx = (v, d = 0) => v == null || !isFinite(v) ? '—' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const pct = (v, d = 1) => v == null || !isFinite(v) ? '—' : fx(v, d) + '%';
+  const pp = v => v == null || !isFinite(v) ? '—' : Math.abs(v) < 0.05 ? '0.0 pp' : (v > 0 ? '+' : '') + fx(v, 1) + ' pp';
   const C = { ink: '#0B0D0F', gold: '#C89D2A', steel: '#646C75', grid: '#E3E6E8', green: '#3E6B53', red: '#9B3B2E', blue: '#2F5D8A', silver: '#B4BBC2' };
-  // Offer types of the supply curve, in the order of the summaries (resumen/curva … tipos)
+  const PAL = ['#C89D2A', '#2F5D8A', '#3E6B53', '#9B3B2E', '#7C6A9E', '#2F7A73', '#B5562F', '#4F8FB8', '#8A9A3A', '#9A5A86', '#0B0D0F', '#646C75'];
+  // Same color for a company in every chart of the session, given in ranking order so the leaders never share one
+  const colors = new Map();
+  const colorOf = name => { if (!colors.has(name)) colors.set(name, PAL[colors.size % PAL.length]); return colors.get(name); };
+  const seedColors = list => list.forEach(e => colorOf(e.nombre));
   const TYPE = {
-    tomador: ['Must-run thermal (minimum)', '#8A8F96'], nodespachable: ['Non-dispatchable', '#B4BBC2'], gi: ['Legacy (GI)', '#7C6A9E'],
+    tomador: ['Must-run thermal', '#8A8F96'], nodespachable: ['Non-dispatchable', '#B4BBC2'], gi: ['Legacy contracts', '#7C6A9E'],
     importacion: ['Imports', '#2F5D8A'], intermitente: ['Wind / solar', '#3E6B53'], hidro: ['Hydro', '#4F8FB8'],
-    termica_min: ['Thermal (minimum block)', '#C89D2A'], termica: ['Thermal', '#9B3B2E'], hidro_real: ['Hydro (actual generation)', '#4F8FB8'],
+    termica_min: ['Thermal (minimum)', '#C89D2A'], termica: ['Thermal', '#9B3B2E'], hidro_real: ['Hydro', '#4F8FB8'],
   };
-  const VIEWS = [['curve', 'Supply curve'], ['deviation', 'MDA vs MTR'], ['costs', 'Thermal costs'], ['hydro', 'Hydro'], ['purchases', 'Purchases'], ['reserves', 'Reserves']];
-  const DEV = { intermitente: 'Wind / solar forecast', nodespachable: 'Non-dispatchable', termica: 'Thermal available capacity', hidro: 'Hydro available capacity' };
+  const TECH = [['Nucleoelectrica', 'Nuclear', '#7C6A9E'], ['Geotermoelectrica', 'Geothermal', '#9A5A86'], ['Hidroelectrica', 'Hydro', '#4F8FB8'], ['Eolica', 'Wind', '#2F7A73'],
+    ['Fotovoltaica', 'Solar', '#C89D2A'], ['Biomasa', 'Biomass', '#8A9A3A'], ['Ciclo Combinado', 'Combined cycle', '#2F5D8A'], ['Carboelectrica', 'Coal', '#0B0D0F'],
+    ['Termica Convencional', 'Conventional thermal', '#646C75'], ['Turbo Gas', 'Gas turbine', '#B5562F'], ['Combustion Interna', 'Internal combustion', '#9B3B2E']];
+  const SEGMENT = { C: 'Qualified supplier', U: 'Qualified user', G: 'Generator', I: 'Legacy contracts' };
+  const VIEWS = [['overview', 'Overview'], ['share', 'Market share'], ['price', 'Price formation'], ['dispatch', 'Dispatch'], ['costs', 'Thermal costs'], ['hydro', 'Hydro'], ['reserves', 'Reserves']];
+  const DAY_VIEWS = ['price', 'dispatch', 'reserves'];
+  const DEV = { intermitente: 'Wind / solar', nodespachable: 'Must-run & non-dispatchable', termica: 'Thermal capacity', hidro: 'Hydro capacity' };
   const RES = { rod10: 'Spinning 10 min', nr10: 'Non-spinning 10 min', rsup: 'Spinning supplemental', nrsup: 'Non-spinning supplemental', reg: 'Regulation' };
+  const SHARE = { suministro: 'Qualified supply', generacion: 'Generation', reservas: 'Reserves' };
 
-  const S = { view: 'curve', sys: 'SIN', year: null, fecha: null, hora: 20, mkt: 'MDA', devType: 'nodespachable', short: '', ce: '', costMkt: 'MDA', buyer: '' };
+  const S = { view: 'overview', sys: 'SIN', year: null, fecha: null, hora: 20, mkt: 'MDA', devType: 'termica', company: '', plant: '', costMkt: 'MDA', shareKind: 'suministro', zone: '', focus: '' };
   const cache = new Map();
   let seq = 0;
 
-  // A summary of the bucket (Market.offers), kept for the session
+  // A summary (Market.offers), kept for the session; "not found" is asked again next time
   function get(path) {
-    if (!cache.has(path)) cache.set(path, Market.offers(path).catch(e => { cache.delete(path); throw e; }));
+    if (!cache.has(path)) cache.set(path, Market.offers(path).then(r => { if (r == null) cache.delete(path); return r; }, e => { cache.delete(path); throw e; }));
     return cache.get(path);
   }
   const widget = (id, title, cls, tools = '') =>
     `<div class="cp-widget ${cls}" id="${id}"><div class="cp-widget-head"><div class="cp-widget-title">${esc(title)}</div>${tools}</div><div class="cp-widget-body"></div></div>`;
   const body = (host, id) => host.querySelector(`#${id} .cp-widget-body`);
   const seg = (name, opts, cur) => `<div class="cp-ch-ranges cp-in-seg" data-seg="${name}" role="group">${opts.map(([v, t]) => `<button data-v="${esc(v)}" class="${v === cur ? 'on' : ''}">${esc(t)}</button>`).join('')}</div>`;
+  // Numbers in the mono font; names (a company) in the text font
   const kpi = (label, value, unit = '', note = '') =>
-    `<div class="cp-in-kpi"><div class="cp-kpi-eyebrow">${esc(label)}</div><div class="cp-in-kpi-v">${esc(value)}${unit ? `<small>${esc(unit)}</small>` : ''}</div>${note ? `<div class="cp-in-kpi-n">${note}</div>` : ''}</div>`;
+    `<div class="cp-in-kpi"><div class="cp-kpi-eyebrow">${esc(label)}</div><div class="cp-in-kpi-v${/[a-z]{3}/i.test(value) ? ' cp-in-kpi-v--text' : ''}">${esc(value)}${unit ? `<small>${esc(unit)}</small>` : ''}</div>${note ? `<div class="cp-in-kpi-n">${note}</div>` : ''}</div>`;
+  const msg = t => `<div class="cp-card cp-pr-msg">${esc(t)}</div>`;
   const short = f => new Date(f + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
   const long = f => new Date(f + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  const monthName = m => new Date(m + '-15T12:00:00Z').toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
   const mean = a => { const v = a.filter(x => x != null && isFinite(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+  const hourSel = (hrs) => `<label class="cp-pr-f cp-in-hour"><select id="in-hour" aria-label="Hour">${hrs.map(x => `<option value="${x}" ${x === S.hora ? 'selected' : ''}>H${x}</option>`).join('')}</select></label>`;
+  // Small trend line for tables
+  const spark = (vals, color) => {
+    const v = vals.filter(x => x != null); if (v.length < 2) return '';
+    const lo = Math.min(...v), hi = Math.max(...v), w = 64, h = 18, x = i => (i / (vals.length - 1)) * w, y = s => h - 2 - ((s - lo) / ((hi - lo) || 1)) * (h - 4);
+    return `<svg class="cp-in-spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"><polyline points="${vals.map((s, i) => s == null ? '' : `${x(i)},${y(s)}`).join(' ')}" fill="none" stroke="${color}" stroke-width="1.6"/></svg>`;
+  };
 
   async function show() {
     const host = document.getElementById('insights-root');
-    if (!Market.ready()) { host.innerHTML = `<div class="cp-card cp-pr-msg">Market data is not enabled for your account yet. Please contact Sentinels.</div>`; return; }
+    if (!Market.ready()) { host.innerHTML = msg('MEM Insights is not enabled for your account yet. Please contact your Sentinels advisor.'); return; }
     if (!S.year) S.year = new Date().getUTCFullYear();
     render();
   }
@@ -65,102 +89,200 @@ const InsightsPage = (() => {
     host.classList.remove('cp-pr-loading');
     const days = serie ? Object.keys(serie.dias).sort() : [];
     if (!S.fecha || !days.includes(S.fecha)) S.fecha = days.at(-1) || null;
+    const day = DAY_VIEWS.includes(S.view);
     host.innerHTML = `
-      <div class="cp-card cp-pr-bar">
+      <div class="cp-card cp-pr-bar cp-in-bar">
         <div class="cp-pr-row">
           <label class="cp-pr-f"><span>System</span><select id="in-sys">${['SIN', 'BCA', 'BCS'].map(s => `<option ${s === S.sys ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
-          <label class="cp-pr-f"><span>Operating day</span><input type="date" id="in-date" value="${S.fecha || ''}" min="${days[0] || ''}" max="${days.at(-1) || ''}"></label>
+          ${day ? `<label class="cp-pr-f"><span>Operating day</span><input type="date" id="in-date" value="${S.fecha || ''}" min="${days[0] || ''}" max="${days.at(-1) || ''}"></label>` : ''}
           <div class="cp-in-views" role="tablist">${VIEWS.map(([v, t]) => `<button class="cp-doc-filter ${v === S.view ? 'active' : ''}" data-view="${v}" role="tab" aria-selected="${v === S.view}">${t}</button>`).join('')}</div>
         </div>
-        <div class="cp-pr-note">${days.length ? `<b>${days.length} days</b> · ${long(days[0])} – ${long(days.at(-1))}. ` : ''}Offers are published by CENACE about 60 days after the operating day. Source: CENACE (SIM), Sentinels model.</div>
       </div>
-      <div id="in-view"></div>`;
-    host.querySelector('#in-sys').onchange = e => { S.sys = e.target.value; S.short = S.ce = S.buyer = ''; render(); };
-    host.querySelector('#in-date').onchange = e => { if (days.includes(e.target.value)) { S.fecha = e.target.value; view(); } else e.target.value = S.fecha; };
+      <div id="in-view"></div>
+      <p class="cp-in-sign">Sentinels analytics${days.length ? ` · Data through ${esc(long(days.at(-1)))}` : ''}. Estimates from Sentinels market models; for information purposes only.</p>`;
+    host.querySelector('#in-sys').onchange = e => { S.sys = e.target.value; S.company = S.plant = S.zone = S.focus = ''; render(); };
+    const dateIn = host.querySelector('#in-date');
+    if (dateIn) dateIn.onchange = e => { if (days.includes(e.target.value)) { S.fecha = e.target.value; view(); } else e.target.value = S.fecha; };
     host.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { S.view = b.dataset.view; render(); });
-    if (err || !serie) {
-      host.querySelector('#in-view').innerHTML = `<div class="cp-card cp-pr-msg">${err ? esc(err.message) : 'MEM Insights has no data for this system yet.'}</div>`;
-      return;
-    }
+    if (err) { host.querySelector('#in-view').innerHTML = msg(err.message || 'MEM Insights is not available right now.'); return; }
+    if (!serie) { host.querySelector('#in-view').innerHTML = msg('There is no information for this system yet.'); return; }
     view(serie);
   }
 
-  // Renders the current view below the bar; segmented buttons change S and re-render the view
+  // Renders the current section below the bar; segmented buttons change S and re-render it
   async function view(serie) {
     const host = document.querySelector('#in-view'), my = seq;
     host.innerHTML = '<div class="cp-card cp-pr-msg">Loading…</div>';
     try {
       serie = serie || await get(`curva/serie_${S.year}_${S.sys}.json`);
-      const html = await ({ curve, deviation, costs, hydro, purchases, reserves })[S.view](host, serie);
+      const html = await ({ overview, share, price, dispatch, costs, hydro, reserves })[S.view](host, serie);
       if (my !== seq) return;
       if (html) host.innerHTML = html;
     } catch (e) {
-      if (my === seq) host.innerHTML = `<div class="cp-card cp-pr-msg">This view could not be loaded${e.message ? ': ' + esc(e.message) : ''}. Please try again later.</div>`;
+      if (my === seq) host.innerHTML = msg('This section could not be loaded. Please try again later.');
+      console.error(e);
     }
     host.querySelectorAll('.cp-in-seg').forEach(g => g.querySelectorAll('button').forEach(b => b.onclick = () => {
-      const k = g.dataset.seg;
-      S[k] = /^\d+$/.test(b.dataset.v) ? +b.dataset.v : b.dataset.v;
+      S[g.dataset.seg] = /^\d+$/.test(b.dataset.v) ? +b.dataset.v : b.dataset.v;
       view();
     }));
   }
 
-  /* ── Supply curve ─────────────────────────────── */
-  async function curve(host, serie) {
-    const [dia, fit] = await Promise.all([get(`curva/${S.year}/${S.fecha}_${S.sys}.json`), get(`ajuste/${S.year}.json`)]);
-    if (!dia) return `<div class="cp-card cp-pr-msg">No supply curve for ${esc(long(S.fecha))}.</div>`;
-    const hrs = dia.horas.map(h => h.hora);
-    if (!hrs.includes(S.hora)) S.hora = hrs.includes(20) ? 20 : hrs[0];
-    const h = dia.horas.find(x => x.hora === S.hora), mtr = S.mkt === 'MTR';
-    const c = mtr ? h.mtr : h, pml = mtr ? h.pml.energia_mtr : h.pml.energia_mda;
-    const dem = mtr ? h.real.generacion : h.demanda.total;
-    const m = (fit && fit.sistemas[S.sys] && fit.sistemas[S.sys][mtr ? 'mtr' : 'mda']) || {}, mes = S.fecha.slice(0, 7);
-    const fm = m[mes] || m.total || {};
-    const marg = c && c.marginal ? `${(TYPE[c.marginal.tipo] || [c.marginal.tipo])[0]}${c.marginal.ce ? ' · ' + c.marginal.ce : ''}` : '—';
+  /* ── Shared helpers ───────────────────────────── */
+  const lastTwo = p => [p.meses.at(-1), p.meses.at(-2)];
+  function movers(p) {
+    const [m, prev] = lastTwo(p);
+    if (!prev) return [];
+    return p.empresas.map(e => ({ nombre: e.nombre, d: (e.meses[m] || 0) - (e.meses[prev] || 0), now: e.meses[m] || 0 })).sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
+  }
+  const dailyMean = (serie, col) => { const i = serie.columnas.indexOf(col); return d => mean(serie.dias[d].map(r => r[i])); };
+
+  /* ── Overview ─────────────────────────────────── */
+  async function overview(host, serie) {
+    const p = await get(`participacion/${S.year}_${S.sys}.json`);
+    const ds = Object.keys(serie.dias).sort(), last30 = ds.slice(-30);
+    const pml = dailyMean(serie, 'energia_pml_mda'), est = dailyMean(serie, 'precio_mda');
+    const pml30 = mean(last30.map(pml)), est30 = mean(last30.map(est)), pmlPrev = mean(ds.slice(-60, -30).map(pml));
+    const sup = p && p.suministro.empresas.length ? p.suministro : null, gen = p && p.generacion.empresas.length ? p.generacion : null;
+    if (sup) seedColors(sup.empresas);
+    if (gen) seedColors(gen.empresas);
+    const [m, prev] = sup ? lastTwo(sup) : [];
+    const lead = sup && sup.empresas.slice().sort((a, b) => (b.meses[m] || 0) - (a.meses[m] || 0))[0];
+    const conc = sup && sup.concentracion.meses[m], concPrev = sup && prev && sup.concentracion.meses[prev];
+    const mv = sup ? movers(sup) : [];
+    const up = mv.filter(x => x.d > 0)[0], down = mv.filter(x => x.d < 0)[0];
+    const findings = [];
+    if (pml30 != null) findings.push(`The energy component of the PML averaged <b>${fx(pml30, 0)} MXN/MWh</b> in the last 30 days${pmlPrev != null ? `, ${pml30 >= pmlPrev ? 'up' : 'down'} <b>${fx(Math.abs(100 * (pml30 / pmlPrev - 1)), 1)}%</b> from the previous 30` : ''}.`);
+    if (lead) findings.push(`<b>${esc(lead.nombre)}</b> leads qualified supply with <b>${pct(lead.meses[m])}</b> in ${monthName(m)}; the three largest hold <b>${pct(conc.cr3)}</b> (HHI ${fx(conc.hhi)}${concPrev ? `, ${conc.hhi >= concPrev.hhi ? '+' : ''}${fx(conc.hhi - concPrev.hhi)} vs ${monthName(prev)}` : ''}).`);
+    if (up) findings.push(`Largest gain: <b>${esc(up.nombre)}</b> ${pp(up.d)} to ${pct(up.now)}.${down ? ` Largest loss: <b>${esc(down.nombre)}</b> ${pp(down.d)} to ${pct(down.now)}.` : ''}`);
+    if (gen) { const g = gen.empresas[0]; findings.push(`In generation, <b>${esc(g.nombre)}</b> has the largest share of the year (${pct(g.ytd)}); the top three hold ${pct(gen.concentracion.ytd.cr3)}.`); }
     host.innerHTML = `
       <div class="cp-card cp-in-kpis">
-        ${kpi(`Estimated price · ${S.mkt}`, fx(c && c.precio, 2), 'MXN/MWh', esc('Marginal offer: ' + marg))}
-        ${kpi(`PML energy component · ${S.mkt}`, fx(pml, 2), 'MXN/MWh', 'Same in every node of the system')}
-        ${kpi('Difference', c && c.precio != null && pml != null ? (c.precio >= pml ? '+' : '') + fx(c.precio - pml, 2) : '—', 'MXN/MWh', pml ? esc(`${fx(100 * (c.precio - pml) / pml, 1)}% of the PML energy component`) : '')}
-        ${kpi(mtr ? 'Actual generation' : 'Demand (bids)', fx(dem), 'MW', mtr ? 'Real demand estimate (balance)' : `Real demand estimate: ${fx(h.real.balance)} MW`)}
+        ${kpi('PML energy component · 30 days', fx(pml30, 0), 'MXN/MWh', est30 != null ? `Sentinels estimate ${fx(est30, 0)} MXN/MWh` : '')}
+        ${kpi('Qualified supply concentration', conc ? fx(conc.hhi) : '—', 'HHI', conc ? `CR3 ${pct(conc.cr3)} · ${conc.activos} active suppliers` : 'No qualified supply in this system')}
+        ${kpi('Largest supplier', lead ? lead.nombre : '—', '', lead ? `${pct(lead.meses[m])} in ${monthName(m)}` : '')}
+        ${kpi('Biggest move', up ? up.nombre : '—', '', up ? `${pp(up.d)} vs ${monthName(prev)}` : '')}
       </div>
+      <div class="cp-card cp-in-findings"><div class="cp-kpi-eyebrow">Key findings</div><ul>${findings.map(f => `<li>${f}</li>`).join('') || '<li>Not enough history yet.</li>'}</ul></div>
       <div class="cp-board cp-pr-board">
-        ${widget('in-curve', `Supply curve · ${long(S.fecha)} · hour ${S.hora}`, 'cp-w-l', seg('mkt', [['MDA', 'MDA'], ['MTR', 'MTR ex post']], S.mkt) +
-          `<label class="cp-pr-f cp-in-hour"><select id="in-hour" aria-label="Hour">${hrs.map(x => `<option value="${x}" ${x === S.hora ? 'selected' : ''}>H${x}</option>`).join('')}</select></label>`)}
-        ${widget('in-day', `Estimated price vs PML energy component · ${long(S.fecha)}`, 'cp-w-m')}
-        ${widget('in-year', `Daily average · ${S.year}`, 'cp-w-m')}
-        ${widget('in-fit', `Model fit · ${S.mkt}${m[mes] ? ' · ' + new Date(mes + '-15').toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : ''}`, 'cp-w-l')}
+        ${widget('in-ov-price', 'PML energy component vs Sentinels estimate · daily average', 'cp-w-m')}
+        ${widget('in-ov-share', sup ? 'Qualified supply · market share of the five largest' : 'Generation · market share of the five largest', 'cp-w-m')}
       </div>`;
-    host.querySelector('#in-hour').onchange = e => { S.hora = +e.target.value; view(); };
-    stepChart(body(host, 'in-curve'), c ? c.curva : [], dia.tipos, dem, pml, c && c.precio);
-    const est = dia.horas.map(x => mtr ? x.mtr && x.mtr.precio : x.precio), ene = dia.horas.map(x => mtr ? x.pml.energia_mtr : x.pml.energia_mda);
-    const pf = v => fx(v, 2) + ' MXN/MWh', ax = v => fx(v);
-    Board.charts.lineChart(body(host, 'in-day'), { labels: hrs.map(x => 'H' + x), series: [{ name: 'PML energy component', color: C.ink, values: ene }, { name: 'Estimated price', color: C.gold, values: est }], fmt: pf, axis: ax, band: false, ranges: false });
-    const ds = Object.keys(serie.dias).sort(), col = n => serie.columnas.indexOf(n);
-    const [iE, iP] = mtr ? [col('precio_mtr'), col('energia_pml_mtr')] : [col('precio_mda'), col('energia_pml_mda')];
-    Board.charts.lineChart(body(host, 'in-year'), { labels: ds.map(short), series: [
-      { name: 'PML energy component', color: C.ink, values: ds.map(d => mean(serie.dias[d].map(r => r[iP]))) },
-      { name: 'Estimated price', color: C.gold, values: ds.map(d => mean(serie.dias[d].map(r => r[iE]))) }], fmt: pf, axis: ax, band: false, ranges: [[30, '30D'], [90, '90D']] });
-    body(host, 'in-fit').innerHTML = fm.horas ? `<div class="cp-in-fit">
-        ${kpi('Hours within ±10%', fx(fm.pct_dentro_10, 1), '%', `${fx(fm.horas)} hours compared`)}
-        ${kpi('Average absolute error', fx(fm.error_abs_prom, 2), 'MXN/MWh')}
-        ${kpi('Bias', (fm.sesgo >= 0 ? '+' : '') + fx(fm.sesgo, 2), 'MXN/MWh', fm.sesgo < 0 ? 'Estimate below the PML on average' : 'Estimate above the PML on average')}
-        ${kpi('Hourly correlation', fx(fm.correlacion, 2))}
-      </div><p class="cp-in-foot">The model stacks the published offers in merit order: must-run units, wind/solar, legacy (GI) and non-dispatchable programs first; hydro at its actual generation; thermal units committed by a priority list with their minimum as must-run and their blocks at their incremental cost${mtr ? '' : '; spinning reserve held on committed units'}. CENACE also solves start-ups, ramps, reserves and the network, so hours differ.</p>`
-      : '<div class="cp-widget-empty">No fit statistics for this period yet.</div>';
+    const pf = v => fx(v, 2) + ' MXN/MWh';
+    Board.charts.lineChart(body(host, 'in-ov-price'), { labels: ds.map(short), series: [{ name: 'PML energy component', color: C.ink, values: ds.map(pml) }, { name: 'Sentinels estimate', color: C.gold, values: ds.map(est) }], fmt: pf, axis: v => fx(v), band: false, ranges: [[30, '30D'], [90, '90D']] });
+    const src = sup || gen;
+    if (src) Board.charts.lineChart(body(host, 'in-ov-share'), { labels: src.meses.map(monthName), series: src.empresas.slice(0, 5).map(e => ({ name: e.nombre, color: colorOf(e.nombre), values: src.meses.map(x => e.meses[x]) })), fmt: v => pct(v), axis: v => fx(v) + '%', band: false, ranges: false });
+    else body(host, 'in-ov-share').innerHTML = '<div class="cp-widget-empty">No market share data yet.</div>';
     return null;
   }
 
-  // Step chart of the merit order: x = cumulative MW, y = MXN/MWh, colored by offer type
+  /* ── Market share ─────────────────────────────── */
+  async function share(host) {
+    const p = await get(`participacion/${S.year}_${S.sys}.json`);
+    if (!p) return msg('There is no market share information for this system yet.');
+    const kinds = Object.keys(SHARE).filter(k => p[k] && p[k].empresas.length);
+    if (!kinds.includes(S.shareKind)) S.shareKind = kinds[0];
+    if (!S.shareKind) return msg('There is no market share information for this system yet.');
+    const d = p[S.shareKind], [m, prev] = lastTwo(d), cm = d.concentracion.meses[m], cp = prev && d.concentracion.meses[prev];
+    const dl = (a, b, f = fx) => a == null || b == null ? '' : `<span class="${a - b >= 0 ? 'cp-in-pos' : 'cp-in-neg'}">${a - b >= 0 ? '+' : ''}${f(a - b)}</span> vs ${monthName(prev)}`;
+    const ranked = d.empresas.slice().sort((a, b) => (b.meses[m] || 0) - (a.meses[m] || 0));
+    seedColors(p.suministro.empresas); seedColors(ranked);
+    if (!d.empresas.some(e => e.nombre === S.focus)) S.focus = ranked[0].nombre;
+    const sup = S.shareKind === 'suministro';
+    host.innerHTML = `
+      <div class="cp-card cp-pr-bar"><div class="cp-pr-row">${seg('shareKind', kinds.map(k => [k, SHARE[k]]), S.shareKind)}
+        <div class="cp-pr-note">${sup ? 'Qualified suppliers and qualified users that are market participants; basic service and generators are not included.' : S.shareKind === 'generacion' ? 'Energy dispatched by company.' : 'Reserves assigned by company (all products).'} Shares only; volumes are not shown.</div></div></div>
+      <div class="cp-card cp-in-kpis">
+        ${kpi(`HHI · ${monthName(m)}`, fx(cm.hhi), '', dl(cm.hhi, cp && cp.hhi) || concLabel(cm.hhi))}
+        ${kpi('Top 3 (CR3)', pct(cm.cr3), '', dl(cm.cr3, cp && cp.cr3, v => fx(v, 1) + ' pp'))}
+        ${kpi('Top 5 (CR5)', pct(cm.cr5), '', dl(cm.cr5, cp && cp.cr5, v => fx(v, 1) + ' pp'))}
+        ${kpi('Active companies', fx(cm.activos), '', dl(cm.activos, cp && cp.activos))}
+      </div>
+      <div class="cp-board cp-pr-board">
+        ${widget('in-sh-trend', `${SHARE[S.shareKind]} · monthly market share`, 'cp-w-l')}
+        ${widget('in-sh-rank', `Ranking · ${monthName(m)}`, 'cp-w-l')}
+        ${sup ? widget('in-sh-profile', `Share by hour of day · ${S.focus}`, 'cp-w-m') + widget('in-sh-zones', 'Load zones · leaders', 'cp-w-m') : ''}
+        ${sup && S.zone ? widget('in-sh-zone', `${S.zone} · market share`, 'cp-w-l') : ''}
+      </div>`;
+    const top = ranked.slice(0, 8);
+    Board.charts.lineChart(body(host, 'in-sh-trend'), { labels: d.meses.map(monthName), series: top.map(e => ({ name: e.nombre, color: colorOf(e.nombre), values: d.meses.map(x => e.meses[x]) })), fmt: v => pct(v), axis: v => fx(v) + '%', band: false, off: top.map((_, i) => i).filter(i => i > 4), ranges: false });
+    body(host, 'in-sh-rank').innerHTML = `<div class="cp-pr-scroll cp-in-scroll cp-in-scroll--tall"><table class="cp-mini-table cp-in-table"><thead><tr><th>#</th><th class="cp-in-name">Company</th><th class="cp-in-name">Segment</th><th>${esc(monthName(m))}</th><th>Change</th><th>Year to date</th>${sup ? '<th>Peak hours<small>H19–H22</small></th>' : ''}<th>Trend</th></tr></thead><tbody>
+      ${ranked.map((e, i) => { const now = e.meses[m] || 0, ch = prev ? now - (e.meses[prev] || 0) : null, peak = sup && e.perfil ? mean(e.perfil.slice(18, 22)) : null;
+        return `<tr class="${e.nombre === S.focus ? 'cp-in-on' : ''}" data-co="${esc(e.nombre)}"><td>${i + 1}</td><td class="cp-in-name"><span class="cp-in-dot" style="background:${colorOf(e.nombre)}"></span>${esc(e.nombre)}</td><td class="cp-in-seg-t cp-in-name">${esc(SEGMENT[e.tipo] || (S.shareKind === 'suministro' ? '' : SEGMENT[e.nombre === 'Legacy contracts' ? 'I' : 'G']))}</td>
+        <td><b>${pct(now, 2)}</b></td><td class="${ch > 0 ? 'cp-in-pos' : ch < 0 ? 'cp-in-neg' : ''}">${ch == null ? '—' : pp(ch)}</td><td>${pct(e.ytd, 2)}</td>${sup ? `<td>${pct(peak, 1)}</td>` : ''}<td>${spark(d.meses.map(x => e.meses[x]), colorOf(e.nombre))}</td></tr>`; }).join('')}
+      </tbody></table></div>`;
+    body(host, 'in-sh-rank').querySelectorAll('[data-co]').forEach(tr => tr.onclick = () => { S.focus = tr.dataset.co; view(); });
+    if (!sup) return null;
+    const f = d.empresas.find(e => e.nombre === S.focus);
+    Board.charts.barChart(body(host, 'in-sh-profile'), { labels: Array.from({ length: 24 }, (_, i) => 'H' + (i + 1)), values: f.perfil, color: colorOf(f.nombre), fmt: v => pct(v, 2), axis: v => fx(v, 1) + '%' });
+    body(host, 'in-sh-profile').querySelector('.cp-ch-ranges')?.remove();  // month ranges don't apply to hours of the day
+    body(host, 'in-sh-zones').innerHTML = `<div class="cp-pr-scroll cp-in-scroll"><table class="cp-mini-table cp-in-table"><thead><tr><th>Load zone</th><th>Weight</th><th class="cp-in-name">Leader</th><th>Share</th><th>HHI</th></tr></thead><tbody>
+      ${p.zonas.map(z => `<tr class="${z.zona === S.zone ? 'cp-in-on' : ''}" data-zone="${esc(z.zona)}"><td>${esc(z.zona)}</td><td>${pct(z.peso)}</td><td class="cp-in-name">${esc(z.empresas[0].nombre)}</td><td>${pct(z.empresas[0].ytd)}</td><td>${fx(z.concentracion.hhi)}</td></tr>`).join('')}
+      </tbody></table></div><p class="cp-in-foot">Weight: the zone's part of qualified supply in the year. Select a zone to see every company in it.</p>`;
+    body(host, 'in-sh-zones').querySelectorAll('[data-zone]').forEach(tr => tr.onclick = () => { S.zone = S.zone === tr.dataset.zone ? '' : tr.dataset.zone; view(); });
+    const z = S.zone && p.zonas.find(x => x.zona === S.zone);
+    if (z) {
+      const zm = z.empresas[0] && Object.keys(z.empresas[0].meses).sort(), lm = zm && zm.at(-1);
+      body(host, 'in-sh-zone').innerHTML = `<div class="cp-in-zone"><div class="cp-in-zone-k">${kpi('Zone weight', pct(z.peso))}${kpi('HHI', fx(z.concentracion.hhi), '', concLabel(z.concentracion.hhi))}${kpi('Companies', fx(z.concentracion.activos))}</div>
+        <div class="cp-pr-scroll cp-in-scroll"><table class="cp-mini-table cp-in-table"><thead><tr><th>Company</th><th>Year to date</th><th>${esc(lm ? monthName(lm) : '')}</th><th>Trend</th></tr></thead><tbody>
+        ${z.empresas.map(e => `<tr><td><span class="cp-in-dot" style="background:${colorOf(e.nombre)}"></span>${esc(e.nombre)}</td><td><b>${pct(e.ytd, 2)}</b></td><td>${pct(lm && e.meses[lm], 2)}</td><td>${spark(zm.map(x => e.meses[x]), colorOf(e.nombre))}</td></tr>`).join('')}
+        </tbody></table></div></div>`;
+    }
+    return null;
+  }
+  const concLabel = h => h == null ? '' : h < 1500 ? 'Unconcentrated' : h < 2500 ? 'Moderately concentrated' : 'Highly concentrated';
+
+  /* ── Price formation ──────────────────────────── */
+  async function price(host, serie) {
+    const [dia, fit] = await Promise.all([get(`curva/${S.year}/${S.fecha}_${S.sys}.json`), get(`ajuste/${S.year}.json`)]);
+    if (!dia) return msg(`There is no information for ${long(S.fecha)}.`);
+    const hrs = dia.horas.map(h => h.hora);
+    if (!hrs.includes(S.hora)) S.hora = hrs.includes(20) ? 20 : hrs[0];
+    const h = dia.horas.find(x => x.hora === S.hora), rt = S.mkt === 'MTR';
+    const c = rt ? h.mtr : h, pml = rt ? h.pml.energia_mtr : h.pml.energia_mda, dem = rt ? h.real.generacion : h.demanda.total;
+    const m = (fit && fit.sistemas[S.sys] && fit.sistemas[S.sys][rt ? 'mtr' : 'mda']) || {}, fm = m[S.fecha.slice(0, 7)] || m.total || {};
+    const marg = c && c.marginal ? `${(TYPE[c.marginal.tipo] || [c.marginal.tipo])[0]}${c.marginal.empresa ? ' · ' + c.marginal.empresa : ''}` : '—';
+    host.innerHTML = `
+      <div class="cp-card cp-in-kpis">
+        ${kpi(`Sentinels estimate · ${rt ? 'real time' : 'day ahead'}`, fx(c && c.precio, 2), 'MXN/MWh', esc('Price-setting unit: ' + marg))}
+        ${kpi(`PML energy component · ${rt ? 'MTR' : 'MDA'}`, fx(pml, 2), 'MXN/MWh', 'Same in every node of the system')}
+        ${kpi('Difference', c && c.precio != null && pml != null ? (c.precio >= pml ? '+' : '') + fx(c.precio - pml, 2) : '—', 'MXN/MWh', pml ? esc(`${fx(100 * (c.precio - pml) / pml, 1)}% of the energy component`) : '')}
+        ${kpi(rt ? 'Generation' : 'Demand', fx(dem), 'MW', rt ? '' : `Load estimate ${fx(h.real.balance)} MW`)}
+      </div>
+      <div class="cp-board cp-pr-board">
+        ${widget('in-curve', `Merit-order curve · ${long(S.fecha)} · hour ${S.hora}`, 'cp-w-l', seg('mkt', [['MDA', 'Day ahead'], ['MTR', 'Real time']], S.mkt) + hourSel(hrs))}
+        ${widget('in-day', `Hourly price · ${long(S.fecha)}`, 'cp-w-m')}
+        ${widget('in-year', `Daily average · ${S.year}`, 'cp-w-m')}
+        ${widget('in-fit', 'Model accuracy', 'cp-w-l')}
+      </div>`;
+    host.querySelector('#in-hour').onchange = e => { S.hora = +e.target.value; view(); };
+    stepChart(body(host, 'in-curve'), c ? c.curva : [], dia.tipos, dem, pml, c && c.precio);
+    const est = dia.horas.map(x => rt ? x.mtr && x.mtr.precio : x.precio), ene = dia.horas.map(x => rt ? x.pml.energia_mtr : x.pml.energia_mda);
+    const pf = v => fx(v, 2) + ' MXN/MWh', ax = v => fx(v);
+    Board.charts.lineChart(body(host, 'in-day'), { labels: hrs.map(x => 'H' + x), series: [{ name: 'PML energy component', color: C.ink, values: ene }, { name: 'Sentinels estimate', color: C.gold, values: est }], fmt: pf, axis: ax, band: false, ranges: false });
+    const ds = Object.keys(serie.dias).sort(), e1 = dailyMean(serie, rt ? 'precio_mtr' : 'precio_mda'), p1 = dailyMean(serie, rt ? 'energia_pml_mtr' : 'energia_pml_mda');
+    Board.charts.lineChart(body(host, 'in-year'), { labels: ds.map(short), series: [{ name: 'PML energy component', color: C.ink, values: ds.map(p1) }, { name: 'Sentinels estimate', color: C.gold, values: ds.map(e1) }], fmt: pf, axis: ax, band: false, ranges: [[30, '30D'], [90, '90D']] });
+    body(host, 'in-fit').innerHTML = fm.horas ? `<div class="cp-in-fit">
+        ${kpi('Hours within ±10%', fx(fm.pct_dentro_10, 1), '%', esc(monthName(S.fecha.slice(0, 7))))}
+        ${kpi('Average absolute error', fx(fm.error_abs_prom, 2), 'MXN/MWh')}
+        ${kpi('Bias', (fm.sesgo >= 0 ? '+' : '') + fx(fm.sesgo, 2), 'MXN/MWh', fm.sesgo < 0 ? 'Estimate below the PML on average' : 'Estimate above the PML on average')}
+        ${kpi('Hourly correlation', fx(fm.correlacion, 2))}
+      </div><p class="cp-in-foot">Sentinels' dispatch model: units in merit order, unit commitment with minimum generation, hydro at its dispatched energy, losses and spinning reserve. The system operator also optimizes start-ups, ramps and the transmission network across the 24 hours, so the evening hours carry the largest differences.</p>`
+      : '<div class="cp-widget-empty">No accuracy statistics for this period yet.</div>';
+    return null;
+  }
+
+  // Step chart of the merit order: x = cumulative MW, y = MXN/MWh, colored by unit type
   function stepChart(el, pts, tipos, demand, pml, price) {
-    const used = [...new Set(pts.map(p => tipos[p[2]]))];
-    el.innerHTML = `<div class="cp-ch-bar"><div class="cp-ch-legend">${used.map(t => `<span class="cp-ch-key"><span style="background:${(TYPE[t] || ['', C.steel])[1]}"></span>${esc((TYPE[t] || [t])[0])}</span>`).join('')}
+    const used = [...new Set(pts.map(p => (TYPE[tipos[p[2]]] || [tipos[p[2]]])[0]))];
+    const colorFor = name => (Object.values(TYPE).find(t => t[0] === name) || ['', C.steel])[1];
+    el.innerHTML = `<div class="cp-ch-bar"><div class="cp-ch-legend">${used.map(t => `<span class="cp-ch-key"><span style="background:${colorFor(t)}"></span>${esc(t)}</span>`).join('')}
       <span class="cp-ch-key"><span class="cp-in-dash"></span>Demand</span><span class="cp-ch-key"><span style="background:${C.ink}"></span>PML energy</span></div></div><div class="cp-ch-plot"><div class="cp-ch-tip" hidden></div></div>`;
     const plot = el.querySelector('.cp-ch-plot'), tip = el.querySelector('.cp-ch-tip');
-    if (!pts.length) { plot.insertAdjacentHTML('beforeend', '<div class="cp-widget-empty">No offers for this hour.</div>'); return; }
+    if (!pts.length) { plot.insertAdjacentHTML('beforeend', '<div class="cp-widget-empty">No information for this hour.</div>'); return; }
     // Y axis up to a bit above the price that matters, so a few very expensive blocks don't flatten the chart
     const prices = pts.map(p => p[1]).sort((a, b) => a - b), top = Math.max(prices[Math.floor(prices.length * 0.95)], (pml || 0) * 1.4, (price || 0) * 1.4) || 1;
-    // Zoom to where the curve crosses demand: most of the supply comes in at zero price (must-run,
-    // wind/solar, legacy, hydro), so the axis starts a little before the first priced block
+    // Zoom to where the curve crosses demand: most of the supply comes in at zero price
     const X = pts.at(-1)[0], cero = (pts.find(p => p[1] > 0) ? pts[pts.findIndex(p => p[1] > 0) - 1] || [0] : pts.at(-1))[0];
     const x0 = Math.max(0, Math.min(cero, (demand || X) * 0.75) - X * 0.03), x1 = Math.min(X, Math.max((demand || 0) * 1.15, cero * 1.08, x0 + X * 0.2));
     const draw = () => {
@@ -205,175 +327,143 @@ const InsightsPage = (() => {
     new ResizeObserver(() => { const w = Math.round(plot.clientWidth); if (w && w !== last) { last = w; draw(); } }).observe(plot);
   }
 
-  /* ── MDA vs MTR ───────────────────────────────── */
-  async function deviation(host) {
-    const [ser, dia] = await Promise.all([get(`desvio/serie_${S.year}_${S.sys}.json`), get(`desvio/${S.year}/${S.fecha}_${S.sys}.json`)]);
-    if (!ser) return '<div class="cp-card cp-pr-msg">No MDA vs MTR data for this system yet.</div>';
-    const types = Object.keys(DEV).filter(t => Object.values(ser.dias).some(d => d[t]));
+  /* ── Dispatch ─────────────────────────────────── */
+  async function dispatch(host) {
+    const [dia, ser, dev] = await Promise.all([get(`curva/${S.year}/${S.fecha}_${S.sys}.json`), get(`desvio/serie_${S.year}_${S.sys}.json`), get(`desvio/${S.year}/${S.fecha}_${S.sys}.json`)]);
+    const types = ser ? Object.keys(DEV).filter(t => Object.values(ser.dias).some(d => d[t])) : [];
     if (!types.includes(S.devType)) S.devType = types[0];
-    const ds = Object.keys(ser.dias).sort(), t = S.devType;
-    const tot = dia && dia.tipos[t];
+    const t = S.devType, tot = dev && dev.tipos[t];
+    const mix = dia && dia.horas.some(h => h.real.tecnologias_sen);
     host.innerHTML = `
-      <div class="cp-card cp-in-kpis">
-        ${kpi(`MDA · ${DEV[t]}`, fx(tot && tot.mwh_mda), 'MWh', esc(long(S.fecha)))}
-        ${kpi(`MTR · ${DEV[t]}`, fx(tot && tot.mwh_mtr), 'MWh')}
-        ${kpi('MTR − MDA', tot ? (tot.mwh_mtr >= tot.mwh_mda ? '+' : '') + fx(tot.mwh_mtr - tot.mwh_mda) : '—', 'MWh', tot && tot.mwh_mda ? esc(fx(100 * (tot.mwh_mtr / tot.mwh_mda - 1), 1) + '%') : '')}
-        ${kpi('Status changes', tot && tot.cambios_estatus ? `${tot.cambios_estatus.nd_a_eco} / ${tot.cambios_estatus.eco_a_nd}` : '—', '', tot && tot.cambios_estatus ? 'Unit-hours unavailable → available / available → unavailable' : 'Not applicable')}
-      </div>
       <div class="cp-board cp-pr-board">
-        ${widget('in-dev-year', `Daily MWh · ${DEV[t]}`, 'cp-w-l', seg('devType', types.map(x => [x, DEV[x].replace(' available capacity', '').replace(' forecast', '')]), t))}
+        ${widget('in-mix', `National generation by technology · ${long(S.fecha)}`, 'cp-w-l')}
+        ${widget('in-dev-year', `Day ahead vs real time · ${DEV[t] || ''}`, 'cp-w-l', types.length ? seg('devType', types.map(x => [x, DEV[x]]), t) : '')}
         ${widget('in-dev-hours', `Hourly MW · ${long(S.fecha)}`, 'cp-w-m')}
-        ${widget('in-dev-ce', `Largest changes by Short CE · ${long(S.fecha)}`, 'cp-w-m')}
+        ${widget('in-dev-co', `Largest changes by company · ${long(S.fecha)}`, 'cp-w-m')}
       </div>`;
-    const mw = v => fx(v) + ' MWh';
+    if (mix) {
+      const hrs = dia.horas.map(h => 'H' + h.hora);
+      Board.charts.stackedChart(body(host, 'in-mix'), { labels: hrs, series: TECH.map(([k, n, col]) => ({ name: n, color: col, values: dia.horas.map(h => h.real.tecnologias_sen ? h.real.tecnologias_sen[k] || 0 : 0) })).filter(s => s.values.some(v => v > 0)), fmt: v => fx(v) + ' MWh', axis: v => fx(v / 1000) + 'k' });
+    } else body(host, 'in-mix').innerHTML = '<div class="cp-widget-empty">The technology mix of this day is not available yet.</div>';
+    if (!ser || !types.length) { ['in-dev-year', 'in-dev-hours', 'in-dev-co'].forEach(id => body(host, id).innerHTML = '<div class="cp-widget-empty">No information yet.</div>'); return null; }
+    const ds = Object.keys(ser.dias).sort();
     Board.charts.lineChart(body(host, 'in-dev-year'), { labels: ds.map(short), series: [
-      { name: 'MDA', color: C.ink, values: ds.map(d => ser.dias[d][t] ? ser.dias[d][t].mda : null) },
-      { name: 'MTR', color: C.gold, values: ds.map(d => ser.dias[d][t] ? ser.dias[d][t].mtr : null) }], fmt: mw, axis: v => fx(v / 1000) + 'k', band: false, ranges: [[30, '30D'], [90, '90D']] });
-    if (!tot) { body(host, 'in-dev-hours').innerHTML = body(host, 'in-dev-ce').innerHTML = '<div class="cp-widget-empty">No data for this day.</div>'; return null; }
-    const ces = Object.entries(tot.short_ce), sumH = lado => Array.from({ length: 24 }, (_, i) => ces.reduce((s, [, e]) => s + e[lado][i], 0));
-    Board.charts.lineChart(body(host, 'in-dev-hours'), { labels: Array.from({ length: 24 }, (_, i) => 'H' + (i + 1)), series: [{ name: 'MDA', color: C.ink, values: sumH('mda') }, { name: 'MTR', color: C.gold, values: sumH('mtr') }], fmt: v => fx(v) + ' MW', axis: v => fx(v), band: false, ranges: false });
-    const rows = ces.map(([k, e]) => { const a = e.mda.reduce((s, v) => s + v, 0), b = e.mtr.reduce((s, v) => s + v, 0); return [k, e.short, a, b, b - a]; })
-      .filter(r => Math.abs(r[4]) > 0.05).sort((x, y) => Math.abs(y[4]) - Math.abs(x[4])).slice(0, 25);
-    body(host, 'in-dev-ce').innerHTML = rows.length ? `<div class="cp-pr-scroll cp-in-scroll"><table class="cp-mini-table cp-in-table"><thead><tr><th>Short CE</th><th>MDA MWh</th><th>MTR MWh</th><th>Change</th></tr></thead><tbody>
-      ${rows.map(r => `<tr><td>${esc(r[0])}</td><td>${fx(r[2])}</td><td>${fx(r[3])}</td><td class="${r[4] < 0 ? 'cp-in-neg' : 'cp-in-pos'}">${r[4] >= 0 ? '+' : ''}${fx(r[4])}</td></tr>`).join('')}</tbody></table></div>`
-      : '<div class="cp-widget-empty">No changes between MDA and MTR this day.</div>';
+      { name: 'Day ahead', color: C.ink, values: ds.map(d => ser.dias[d][t] ? ser.dias[d][t].mda : null) },
+      { name: 'Real time', color: C.gold, values: ds.map(d => ser.dias[d][t] ? ser.dias[d][t].mtr : null) }], fmt: v => fx(v) + ' MWh', axis: v => fx(v / 1000) + 'k', band: false, ranges: [[30, '30D'], [90, '90D']] });
+    if (!tot) { body(host, 'in-dev-hours').innerHTML = body(host, 'in-dev-co').innerHTML = '<div class="cp-widget-empty">No information for this day.</div>'; return null; }
+    const cos = Object.entries(tot.empresas), sumH = lado => Array.from({ length: 24 }, (_, i) => cos.reduce((s, [, e]) => s + e[lado][i], 0));
+    Board.charts.lineChart(body(host, 'in-dev-hours'), { labels: Array.from({ length: 24 }, (_, i) => 'H' + (i + 1)), series: [{ name: 'Day ahead', color: C.ink, values: sumH('mda') }, { name: 'Real time', color: C.gold, values: sumH('mtr') }], fmt: v => fx(v) + ' MW', axis: v => fx(v), band: false, ranges: false });
+    const rows = cos.map(([k, e]) => { const a = e.mda.reduce((s, v) => s + v, 0), b = e.mtr.reduce((s, v) => s + v, 0); return [k, a, b, b - a]; })
+      .filter(r => Math.abs(r[3]) > 0.05).sort((x, y) => Math.abs(y[3]) - Math.abs(x[3])).slice(0, 25);
+    body(host, 'in-dev-co').innerHTML = rows.length ? `<div class="cp-pr-scroll cp-in-scroll"><table class="cp-mini-table cp-in-table"><thead><tr><th>Company</th><th>Day ahead<small>MWh</small></th><th>Real time<small>MWh</small></th><th>Change</th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td><span class="cp-in-dot" style="background:${colorOf(r[0])}"></span>${esc(r[0])}</td><td>${fx(r[1])}</td><td>${fx(r[2])}</td><td class="${r[3] < 0 ? 'cp-in-neg' : 'cp-in-pos'}">${r[3] >= 0 ? '+' : ''}${fx(r[3])}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="cp-widget-empty">No changes between day ahead and real time this day.</div>';
     return null;
   }
 
-  /* ── Thermal costs by Short CE ────────────────── */
+  /* ── Thermal costs by company and plant ───────── */
   async function costs(host) {
     const d = await get(`costos/${S.year}_${S.sys}_${S.costMkt}.json`);
-    if (!d) return '<div class="cp-card cp-pr-msg">No thermal cost data for this system yet.</div>';
-    const ces = Object.entries(d.short_ce), shorts = [...new Set(ces.map(([, e]) => e.short))].sort();
-    if (S.short && !shorts.includes(S.short)) S.short = '';
-    const list = ces.filter(([, e]) => !S.short || e.short === S.short).map(([k]) => k).sort();
-    if (!list.includes(S.ce)) S.ce = list[0] || '';
-    const e = d.short_ce[S.ce], ds = d.dias.filter(f => e && e.dias[f]);
+    if (!d) return msg('There is no thermal cost information for this system yet.');
+    const plants = Object.entries(d.plantas), companies = [...new Set(plants.map(([, e]) => e.empresa))].sort();
+    if (!companies.includes(S.company)) S.company = companies[0] || '';
+    const list = plants.filter(([, e]) => e.empresa === S.company).map(([k, e]) => [k, e.planta]).sort((a, b) => a[1].localeCompare(b[1], 'en', { numeric: true }));
+    if (!list.some(([k]) => k === S.plant)) S.plant = list[0] ? list[0][0] : '';
+    const e = d.plantas[S.plant], ds = d.dias.filter(f => e && e.dias[f]);
     host.innerHTML = `
       <div class="cp-card cp-pr-bar">
         <div class="cp-pr-row">
-          <label class="cp-pr-f"><span>Short (optional)</span><select id="in-short"><option value="">All</option>${shorts.map(s => `<option ${s === S.short ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
-          <label class="cp-pr-f"><span>Short CE</span><select id="in-ce">${list.map(s => `<option ${s === S.ce ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
-          ${seg('costMkt', [['MDA', 'MDA'], ['MTR', 'MTR']], S.costMkt)}
+          <label class="cp-pr-f"><span>Company</span><select id="in-co">${companies.map(s => `<option ${s === S.company ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
+          <label class="cp-pr-f"><span>Plant</span><select id="in-plant">${list.map(([k, n]) => `<option value="${esc(k)}" ${k === S.plant ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+          ${seg('costMkt', [['MDA', 'Day ahead'], ['MTR', 'Real time']], S.costMkt)}
         </div>
-        <div class="cp-pr-note">MW-weighted average of the units of the Short CE that are available each day (unavailable units and empty blocks excluded). Short = first 4 characters of the unit code; Short CE = first 6.</div>
+        <div class="cp-pr-note">Capacity-weighted average of the plant's available units each day.</div>
       </div>
       <div class="cp-board cp-pr-board">
-        ${widget('in-cost-unit', `Unit cost at minimum · ${S.ce}`, 'cp-w-l')}
-        ${widget('in-cost-blocks', `Incremental cost by block · ${S.ce}`, 'cp-w-l')}
+        ${widget('in-cost-unit', `Average cost at minimum generation · ${S.company}, ${e ? e.planta : ''}`, 'cp-w-l')}
+        ${widget('in-cost-blocks', `Incremental cost by block · ${S.company}, ${e ? e.planta : ''}`, 'cp-w-l')}
       </div>`;
-    host.querySelector('#in-short').onchange = ev => { S.short = ev.target.value; S.ce = ''; view(); };
-    host.querySelector('#in-ce').onchange = ev => { S.ce = ev.target.value; view(); };
-    if (!ds.length) { body(host, 'in-cost-unit').innerHTML = body(host, 'in-cost-blocks').innerHTML = '<div class="cp-widget-empty">No offers for this Short CE.</div>'; return null; }
+    host.querySelector('#in-co').onchange = ev => { S.company = ev.target.value; S.plant = ''; view(); };
+    host.querySelector('#in-plant').onchange = ev => { S.plant = ev.target.value; view(); };
+    if (!ds.length) { body(host, 'in-cost-unit').innerHTML = body(host, 'in-cost-blocks').innerHTML = '<div class="cp-widget-empty">No information for this plant.</div>'; return null; }
     const pf = v => fx(v, 2) + ' MXN/MWh', ax = v => fx(v), L = ds.map(short), U = ds.map(f => e.dias[f].u);
     Board.charts.lineChart(body(host, 'in-cost-unit'), { labels: L, series: [
       { name: 'Average', color: C.gold, values: U.map(u => u && u[0]) }, { name: 'Lowest unit', color: C.silver, values: U.map(u => u && u[1]) }, { name: 'Highest unit', color: C.steel, values: U.map(u => u && u[2]) }],
     fmt: pf, axis: ax, band: false, ranges: [[30, '30D'], [90, '90D']] });
     const pal = ['#9B3B2E', '#B5562F', '#C89D2A', '#8A9A3A', '#3E6B53', '#2F7A73', '#2F5D8A', '#4F4F9A', '#7C6A9E', '#9A5A86', '#646C75'];
-    const blocks = d.bloques.map((b, i) => ({ name: 'Block ' + b, color: pal[i], values: ds.map(f => e.dias[f].b[i]) })).filter(s => s.values.some(v => v != null));
+    const blocks = d.bloques.map((b, i) => ({ name: 'Block ' + Number(b), color: pal[i], values: ds.map(f => e.dias[f].b[i]) })).filter(s => s.values.some(v => v != null));
     Board.charts.lineChart(body(host, 'in-cost-blocks'), { labels: L, series: blocks, fmt: pf, axis: ax, band: false, off: blocks.map((_, i) => i).filter(i => i > 2), ranges: [[30, '30D'], [90, '90D']] });
     return null;
   }
 
   /* ── Hydro ────────────────────────────────────── */
   async function hydro(host) {
+    if (S.sys !== 'SIN') return msg('There is no hydro generation in this system.');
     const d = await get(`hidro/${S.year}.json`);
-    if (S.sys !== 'SIN') return '<div class="cp-card cp-pr-msg">There are no hydro plants in this system; hydro opportunity costs are published for the SIN only.</div>';
-    if (!d) return '<div class="cp-card cp-pr-msg">No hydro data yet.</div>';
-    const ds = d.dias.slice().sort(), by = Object.fromEntries(ds.map(f => [f, []]));
-    for (const v of Object.values(d.codigos)) for (const [f, x] of Object.entries(v)) if (by[f]) by[f].push(x);
+    if (!d) return msg('There is no hydro information yet.');
+    const ds = Object.keys(d.dias).sort(), lastDay = ds.at(-1), today = d.dias[lastDay] || [];
     const q = (a, p) => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * (s.length - 1) + 0.5))] : null; };
-    const co = f => by[f].map(x => x[0]), ps = f => by[f].map(x => x[1]);
-    const today = by[S.fecha] || [];
+    const co = f => d.dias[f].map(x => x[0]), ps = f => d.dias[f].map(x => x[1]);
     host.innerHTML = `
       <div class="cp-card cp-in-kpis">
-        ${kpi('Median opportunity cost', fx(q(today.map(x => x[0]), 0.5), 2), 'MXN/MWh', esc(long(S.fecha)))}
-        ${kpi('Range', today.length ? `${fx(q(today.map(x => x[0]), 0))} – ${fx(q(today.map(x => x[0]), 1))}` : '—', 'MXN/MWh', `${today.length} plants (one code per state)`)}
-        ${kpi('Binding shadow prices', today.length ? String(today.filter(x => x[1] > 0).length) : '—', '', 'Codes with a shadow price above 0')}
-        ${kpi('Highest shadow price', fx(q(today.map(x => x[1]), 1), 3), '')}
+        ${kpi('Median value of water', fx(q(today.map(x => x[0]), 0.5), 2), 'MXN/MWh', esc(long(lastDay)))}
+        ${kpi('Range across regions', today.length ? `${fx(q(today.map(x => x[0]), 0))} – ${fx(q(today.map(x => x[0]), 1))}` : '—', 'MXN/MWh')}
+        ${kpi('Binding energy limits', today.length ? String(today.filter(x => x[1] > 0).length) : '—', '', 'Regions where more water would have been used')}
+        ${kpi('Highest shadow price', fx(q(today.map(x => x[1]), 1), 3))}
       </div>
       <div class="cp-board cp-pr-board">
-        ${widget('in-hy-co', 'Hydro opportunity cost (value of water)', 'cp-w-l')}
+        ${widget('in-hy-co', 'Value of water (opportunity cost)', 'cp-w-l')}
         ${widget('in-hy-ps', 'Shadow price of the daily energy limit', 'cp-w-l')}
       </div>
-      <p class="cp-in-foot">CENACE assigns hydro plants an opportunity cost instead of an energy bid. Codes are anonymized again every day, so a code can't be followed over time; the charts show the daily distribution of the codes.</p>`;
+      <p class="cp-in-foot">Hydro plants are dispatched against the value of the water they hold rather than a fuel cost. The charts show the daily distribution across regions.</p>`;
     const L = ds.map(short), pf = v => fx(v, 2) + ' MXN/MWh';
     Board.charts.lineChart(body(host, 'in-hy-co'), { labels: L, series: [
       { name: 'Highest', color: C.red, values: ds.map(f => q(co(f), 1)) }, { name: 'Median', color: C.blue, values: ds.map(f => q(co(f), 0.5)) }, { name: 'Lowest', color: C.green, values: ds.map(f => q(co(f), 0)) }],
     fmt: pf, axis: v => fx(v), band: false, ranges: [[30, '30D'], [90, '90D']] });
     Board.charts.lineChart(body(host, 'in-hy-ps'), { labels: L, series: [
-      { name: 'Highest shadow price', color: C.gold, values: ds.map(f => q(ps(f), 1)) }, { name: 'Codes above 0', color: C.steel, values: ds.map(f => ps(f).filter(v => v > 0).length) }],
+      { name: 'Highest shadow price', color: C.gold, values: ds.map(f => q(ps(f), 1)) }, { name: 'Regions above 0', color: C.steel, values: ds.map(f => ps(f).filter(v => v > 0).length) }],
     fmt: v => fx(v, 3), axis: v => fx(v, 1), band: false, off: [1], ranges: [[30, '30D'], [90, '90D']] });
-    return null;
-  }
-
-  /* ── Purchases by Short ───────────────────────── */
-  async function purchases(host) {
-    const d = await get(`compras/${S.year}_${S.sys}.json`);
-    if (!d) return '<div class="cp-card cp-pr-msg">No purchase data for this system yet.</div>';
-    const total = Object.entries(d.short).filter(([k]) => k !== 'GI').reduce((s, [, v]) => s + Object.values(v.dias).reduce((x, y) => x + y, 0), 0);
-    const rows = Object.entries(d.short).map(([k, v]) => {
-      const mwh = Object.values(v.dias).reduce((x, y) => x + y, 0), nd = Object.keys(v.dias).length;
-      return { k, mwh, share: k === 'GI' ? null : 100 * mwh / total, daily: mwh / Math.max(1, nd), hourly: mean(v.suma_hora.map((s, i) => v.dias_hora[i] ? s / v.dias_hora[i] : null)), max: v.max, min: v.min, nodes: v.nodos.length };
-    }).sort((a, b) => b.mwh - a.mwh);
-    if (!rows.some(r => r.k === S.buyer)) S.buyer = rows[0] ? rows[0].k : '';
-    const sel = d.short[S.buyer], ds = d.dias.filter(f => sel && sel.dias[f] != null);
-    const lab = k => k === 'GI' ? 'GI (legacy load)' : k;
-    host.innerHTML = `
-      <div class="cp-board cp-pr-board">
-        ${widget('in-buy-rank', `Purchase bids by Short · ${S.year} to date (${d.dias.length} days)`, 'cp-w-l')}
-        ${widget('in-buy-profile', `Average hourly profile · ${lab(S.buyer)}`, 'cp-w-m')}
-        ${widget('in-buy-daily', `Daily MWh · ${lab(S.buyer)}`, 'cp-w-m')}
-      </div>`;
-    body(host, 'in-buy-rank').innerHTML = `<div class="cp-pr-scroll cp-in-scroll cp-in-scroll--tall"><table class="cp-mini-table cp-in-table"><thead><tr><th>Short</th><th>MWh</th><th>Share</th><th>Daily avg MWh</th><th>Hourly avg MW</th><th>Peak hour<small>MW · date</small></th><th>Lowest hour<small>MW · date</small></th><th>Nodes</th></tr></thead><tbody>
-      ${rows.map(r => `<tr class="${r.k === S.buyer ? 'cp-in-on' : ''}" data-buyer="${esc(r.k)}"><td>${esc(lab(r.k))}</td><td>${fx(r.mwh)}</td><td>${r.share == null ? '—' : fx(r.share, 1) + '%'}</td><td>${fx(r.daily)}</td><td>${fx(r.hourly, 1)}</td>
-        <td>${r.max ? `${fx(r.max.mw, 1)} · ${esc(short(r.max.fecha))} H${r.max.hora}` : '—'}</td><td>${r.min ? `${fx(r.min.mw, 1)} · ${esc(short(r.min.fecha))} H${r.min.hora}` : '—'}</td><td>${r.nodes || '—'}</td></tr>`).join('')}
-      </tbody></table></div><p class="cp-in-foot">Fixed purchase bids of the MDA. GI = load of the legacy contracts represented by CFE Intermediación (not counted in the shares). Select a row to see its profile.</p>`;
-    body(host, 'in-buy-rank').querySelectorAll('[data-buyer]').forEach(tr => tr.onclick = () => { S.buyer = tr.dataset.buyer; view(); });
-    if (!sel) return null;
-    Board.charts.barChart(body(host, 'in-buy-profile'), { labels: Array.from({ length: 24 }, (_, i) => 'H' + (i + 1)), values: sel.suma_hora.map((s, i) => sel.dias_hora[i] ? s / sel.dias_hora[i] : 0), color: C.gold, fmt: v => fx(v, 1) + ' MW', axis: v => fx(v) });
-    Board.charts.lineChart(body(host, 'in-buy-daily'), { labels: ds.map(short), series: [{ name: 'MWh', color: C.ink, values: ds.map(f => sel.dias[f]), area: true }], fmt: v => fx(v) + ' MWh', axis: v => fx(v), band: false, ranges: [[30, '30D'], [90, '90D']] });
     return null;
   }
 
   /* ── Reserves ─────────────────────────────────── */
   async function reserves(host) {
     const d = await get(`reservas/${S.year}/${S.fecha}_${S.sys}.json`);
-    if (!d) return `<div class="cp-card cp-pr-msg">No reserve data for ${esc(long(S.fecha))}.</div>`;
+    if (!d) return msg(`There is no reserve information for ${long(S.fecha)}.`);
     const hrs = d.horas.map(h => h.hora);
     if (!hrs.includes(S.hora)) S.hora = hrs[0];
     const h = d.horas.find(x => x.hora === S.hora), t = h.termica, a = h.asignado_menos_requerido || {};
     const sign = v => v == null ? '—' : (v > 0 ? '+' : '') + fx(v, 1);
-    const units = Object.entries(d.unidades).filter(([, u]) => u.horas[S.hora]).map(([k, u]) => [k, u, u.horas[S.hora]])
-      .sort((x, y) => (x[2].max[1] - x[2].max[0]) - (y[2].max[1] - y[2].max[0]));
+    const units = Object.values(d.unidades).filter(u => u.horas[S.hora]).map(u => [u, u.horas[S.hora]])
+      .sort((x, y) => (x[1].max[1] - x[1].max[0]) - (y[1].max[1] - y[1].max[0]));
     host.innerHTML = `
       <div class="cp-card cp-in-kpis">
-        ${kpi('Thermal max limit MDA → MTR', `${sign(t.mw_bajan)} / ${sign(t.mw_suben)}`, 'MW', `${t.unidades_bajan} units down · ${t.unidades_suben} up · ${t.eco_a_nd} out · ${t.nd_a_eco} back`)}
-        ${kpi('Thermal headroom (max − min)', `${fx(t.holgura_mda)} → ${fx(t.holgura_mtr)}`, 'MW', esc(sign(t.holgura_mtr - t.holgura_mda) + ' MW'))}
-        ${kpi('Assigned − required (MDA)', `${sign(a.nr10)}`, 'MW', esc(`Non-spinning 10 min · supplemental ${sign(a.sup)} · spinning ${sign(a.rod10)}`))}
-        ${kpi('Required MTR − MDA', sign(h.requerido_mtr_menos_mda && h.requerido_mtr_menos_mda.total), 'MW', 'Total reserve requirement')}
+        ${kpi('Thermal capacity, day ahead → real time', `${sign(t.mw_bajan)} / ${sign(t.mw_suben)}`, 'MW', `${t.unidades_bajan} units down · ${t.unidades_suben} up · ${t.eco_a_nd} out · ${t.nd_a_eco} back`)}
+        ${kpi('Thermal headroom', `${fx(t.holgura_mda)} → ${fx(t.holgura_mtr)}`, 'MW', esc(sign(t.holgura_mtr - t.holgura_mda) + ' MW'))}
+        ${kpi('Assigned − required', `${sign(a.nr10)}`, 'MW', esc(`Non-spinning 10 min · supplemental ${sign(a.sup)} · spinning ${sign(a.rod10)}`))}
+        ${kpi('Requirement, real time − day ahead', sign(h.requerido_mtr_menos_mda && h.requerido_mtr_menos_mda.total), 'MW', 'Total reserve requirement')}
       </div>
       <div class="cp-board cp-pr-board">
-        ${widget('in-res-hours', `Hourly reserves · ${long(S.fecha)}`, 'cp-w-l', `<label class="cp-pr-f cp-in-hour"><select id="in-hour" aria-label="Hour">${hrs.map(x => `<option value="${x}" ${x === S.hora ? 'selected' : ''}>H${x}</option>`).join('')}</select></label>`)}
-        ${widget('in-res-offer', `Reserve offered MDA → MTR · hour ${S.hora}`, 'cp-w-m')}
+        ${widget('in-res-hours', `Hourly reserves · ${long(S.fecha)}`, 'cp-w-l', hourSel(hrs))}
+        ${widget('in-res-cap', `Reserve capability, day ahead → real time · hour ${S.hora}`, 'cp-w-m')}
         ${widget('in-res-units', `Units that changed · hour ${S.hora}`, 'cp-w-m')}
       </div>`;
     host.querySelector('#in-hour').onchange = e => { S.hora = +e.target.value; view(); };
-    body(host, 'in-res-hours').innerHTML = `<div class="cp-pr-scroll cp-in-scroll"><table class="cp-mini-table cp-in-table"><thead><tr><th>Hour</th><th>Thermal max<small>MW down / up</small></th><th>Headroom<small>MTR − MDA</small></th>
+    body(host, 'in-res-hours').innerHTML = `<div class="cp-pr-scroll cp-in-scroll"><table class="cp-mini-table cp-in-table"><thead><tr><th>Hour</th><th>Thermal capacity<small>MW down / up</small></th><th>Headroom<small>change</small></th>
       <th>Required<small>reg · spin · non-spin · supp</small></th><th>Assigned − required<small>non-spin 10 · supp</small></th></tr></thead><tbody>
       ${d.horas.map(x => { const r = x.requerido_mda || {}, s = x.asignado_menos_requerido || {}; return `<tr class="${x.hora === S.hora ? 'cp-in-on' : ''}" data-h="${x.hora}"><td>H${x.hora}</td>
         <td>${sign(x.termica.mw_bajan)} / ${sign(x.termica.mw_suben)}</td><td>${sign(x.termica.holgura_mtr - x.termica.holgura_mda)}</td>
         <td>${fx(r.reg)} · ${fx(r.rod10)} · ${fx(r.nr10)} · ${fx(r.sup)}</td><td class="${s.nr10 ? 'cp-in-flag' : ''}">${sign(s.nr10)} · ${sign(s.sup)}</td></tr>`; }).join('')}
-      </tbody></table></div><p class="cp-in-foot">"Real" reserves: each requirement minus the one it contains (CENACE publishes cumulative totals). A positive non-spinning 10 min with a negative supplemental means the MDA covered part of the supplemental requirement with 10-minute capacity.</p>`;
+      </tbody></table></div><p class="cp-in-foot">Each reserve product is shown on its own (regulation, spinning 10 min, non-spinning 10 min, supplemental). A positive non-spinning 10 min with a negative supplemental means part of the supplemental requirement was covered with faster 10-minute capacity.</p>`;
     body(host, 'in-res-hours').querySelectorAll('[data-h]').forEach(tr => tr.onclick = () => { S.hora = +tr.dataset.h; view(); });
-    const off = ['termica', 'hidro'].filter(k => h[k]);
-    body(host, 'in-res-offer').innerHTML = `<div class="cp-pr-scroll cp-in-scroll"><table class="cp-mini-table cp-in-table"><thead><tr><th>Reserve</th>${off.map(k => `<th>${k === 'termica' ? 'Thermal' : 'Hydro'}<small>MDA → MTR (MW)</small></th>`).join('')}</tr></thead><tbody>
-      ${Object.entries(RES).map(([k, n]) => `<tr><td>${esc(n)}</td>${off.map(o => { const [x, y] = h[o].ofrecida[k]; return `<td class="${y < x ? 'cp-in-neg' : y > x ? 'cp-in-pos' : ''}">${fx(x)} → ${fx(y)}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
-    body(host, 'in-res-units').innerHTML = units.length ? `<div class="cp-pr-scroll cp-in-scroll"><table class="cp-mini-table cp-in-table"><thead><tr><th>Unit</th><th>Status</th><th>Max MW</th><th>Min MW</th><th>Reserve offered<small>MW, all types</small></th></tr></thead><tbody>
-      ${units.map(([k, u, x]) => { const ro = l => Object.values(x.reserva).reduce((s, v) => s + v[l], 0), dm = x.max[1] - x.max[0];
-        return `<tr><td>${esc(k)}<small class="cp-in-sub">${u.tipo === 'hidro' ? 'Hydro' : 'Thermal'} · ${esc(u.short_ce)}</small></td><td>${esc(x.estatus[0])}${x.estatus[0] !== x.estatus[1] ? ' → ' + esc(x.estatus[1]) : ''}</td>
+    const kinds = ['termica', 'hidro'].filter(k => h[k]);
+    body(host, 'in-res-cap').innerHTML = `<div class="cp-pr-scroll cp-in-scroll"><table class="cp-mini-table cp-in-table"><thead><tr><th>Reserve</th>${kinds.map(k => `<th>${k === 'termica' ? 'Thermal' : 'Hydro'}<small>MW</small></th>`).join('')}</tr></thead><tbody>
+      ${Object.entries(RES).map(([k, n]) => `<tr><td>${esc(n)}</td>${kinds.map(o => { const [x, y] = h[o].ofrecida[k]; return `<td class="${y < x ? 'cp-in-neg' : y > x ? 'cp-in-pos' : ''}">${fx(x)} → ${fx(y)}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
+    body(host, 'in-res-units').innerHTML = units.length ? `<div class="cp-pr-scroll cp-in-scroll"><table class="cp-mini-table cp-in-table"><thead><tr><th>Unit</th><th>Status</th><th>Max MW</th><th>Min MW</th><th>Reserve<small>MW, all products</small></th></tr></thead><tbody>
+      ${units.map(([u, x]) => { const ro = l => Object.values(x.reserva).reduce((s, v) => s + v[l], 0), dm = x.max[1] - x.max[0], st = s => s === 'ND' ? 'Unavailable' : 'Available';
+        return `<tr><td>${esc(u.empresa)}<small class="cp-in-sub">${u.tipo === 'hidro' ? 'Hydro' : 'Thermal'} · ${esc(u.unidad)}</small></td><td>${esc(st(x.estatus[0]))}${x.estatus[0] !== x.estatus[1] ? ' → ' + esc(st(x.estatus[1])) : ''}</td>
         <td class="${dm < 0 ? 'cp-in-neg' : dm > 0 ? 'cp-in-pos' : ''}">${fx(x.max[0], 1)} → ${fx(x.max[1], 1)}</td><td>${fx(x.min[0], 1)} → ${fx(x.min[1], 1)}</td><td>${fx(ro(0), 1)} → ${fx(ro(1), 1)}</td></tr>`; }).join('')}
-      </tbody></table></div>` : '<div class="cp-widget-empty">No unit changed its offer between MDA and MTR in this hour.</div>';
+      </tbody></table></div>` : '<div class="cp-widget-empty">No unit changed between day ahead and real time in this hour.</div>';
     return null;
   }
 
