@@ -16,7 +16,10 @@
    to the three widgets and the Excel. The annual summary is computed here from
    the months in the range (hour-weighted); the hourly profile is per whole year.
    "Excel + hourly" also adds every hour of the range, fetched month by month from
-   CENACE through the PML Worker (/pml or /pend), with progress and cancel.
+   CENACE through the PML Worker (/pml or /pend), with progress and cancel, and the
+   daily averages computed from those hours (Daily and Hourly sheets name the NodoP
+   or load zone). Both Excel files bring only the markets left on in the legend of
+   the monthly chart (MDA, MTR or both).
    Used by prices.js: PriceHistory.mount(el, { node, priceName }).
    Uses Market (market.js), Board.charts (board.js), Xlsx (xlsx.js) and _esc (index.html). */
 const PriceHistory = (() => {
@@ -35,6 +38,8 @@ const PriceHistory = (() => {
   const get = path => cache[path] || (cache[path] = Market.file(path).catch(e => { delete cache[path]; return { error: e.status ? e.message : 'The history is not available right now. Please try again later.' }; }));
   const fileOf = n => `${DATA}${n.kind === 'zone' ? 'zona' : 'nodo'}/${encodeURIComponent(n.sistema)}/${encodeURIComponent(n.nodo.replace(/ /g, '-'))}.json`;
   let range = { from: null, to: null };  // chosen months (kept while the client switches NodoP)
+  const MARKETS = ['MDA', 'MTR'];
+  let shown = MARKETS;  // markets left on in the monthly chart's legend = markets of the Excel
 
   // Month rows → objects, oldest first
   const months = (doc, p) => ((doc[p] && doc[p].meses) || []).map(([mes, horas, avg, ene, per, cng, max, maxF, maxH, min, minF, minH]) =>
@@ -99,8 +104,8 @@ const PriceHistory = (() => {
     const W = (id, title, cls, tools = '') => `<div class="cp-widget ${cls}" id="${id}"><div class="cp-widget-head"><div class="cp-widget-title">${esc(title)}</div>${tools}</div><div class="cp-widget-body"></div></div>`;
     const seg = `<div class="cp-ch-ranges cp-pr-seg" role="group" aria-label="Market">${['MDA', 'MTR'].map((p, i) => `<button data-p="${p}" class="${i ? '' : 'on'}">${p}</button>`).join('')}</div>`;
     const icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>';
-    const dl = `<button class="cp-pr-dl" id="hi-xlsx" title="Monthly, annual and hourly-profile sheets">${icon}Excel</button>` +
-      `<button class="cp-pr-dl" id="hi-xlsx-h" title="Also every hour of the range, fetched from CENACE">${icon}Excel + hourly</button>`;
+    const dl = `<button class="cp-pr-dl" id="hi-xlsx" title="Monthly, annual and hourly-profile sheets of the markets shown in the chart">${icon}Excel</button>` +
+      `<button class="cp-pr-dl" id="hi-xlsx-h" title="Also daily averages and every hour of the range, fetched from CENACE">${icon}Excel + hourly</button>`;
     body.innerHTML = `<div class="cp-hi-dlmsg" hidden></div><div class="cp-board cp-pr-board cp-hi-board">
       ${W('hi-month', `Monthly average ${P} · MDA vs MTR`, 'cp-w-l', dl)}
       ${W('hi-year', `Annual summary ${P}`, 'cp-w-l')}
@@ -117,7 +122,12 @@ const PriceHistory = (() => {
     const monthEl = body.querySelector('#hi-month .cp-widget-body');
     Board.charts.lineChart(monthEl, {
       labels: keys.map(mlabel), fmt, axis, band: false, ranges: false,
-      series: [{ name: 'MDA', color: C.MDA, values: keys.map(k => mda.get(k) ?? null) }, { name: 'MTR', color: C.MTR, values: keys.map(k => mtr.get(k) ?? null) }]
+      series: [{ name: 'MDA', color: C.MDA, values: keys.map(k => mda.get(k) ?? null) }, { name: 'MTR', color: C.MTR, values: keys.map(k => mtr.get(k) ?? null) }],
+      off: MARKETS.map((p, i) => i).filter(i => !shown.includes(MARKETS[i]))
+    });
+    // The legend picks the markets of the Excel (kept while the client changes the range or NodoP)
+    monthEl.querySelector('.cp-ch-legend').addEventListener('click', () => {
+      shown = MARKETS.filter((p, i) => !monthEl.querySelector(`.cp-ch-key[data-i="${i}"]`).classList.contains('off'));
     });
     monthEl.insertAdjacentHTML('beforeend', `<div class="cp-ch-foot">Hour-weighted monthly averages · ${esc(mlong(keys[0]))} – ${esc(mlong(keys.at(-1)))} · ${keys.length} month${keys.length === 1 ? '' : 's'}</div>`);
 
@@ -148,30 +158,31 @@ const PriceHistory = (() => {
       body.querySelectorAll('#hi-profile .cp-pr-seg button').forEach(o => o.classList.toggle('on', o === bt)); profile(bt.dataset.p);
     });
 
-    // Excel: monthly, annual and hourly profile of the range (+ every hour, on request)
+    // Excel: monthly, annual and hourly profile of the range (+ daily and every hour, on request),
+    // only for the markets left on in the monthly chart's legend
     const n2 = { width: 14, fmt: '0.00' };
     const ext = t => [{ title: `${P} max`, ...n2 }, { title: `${t} max date`, width: 12 }, { title: 'Max hour', width: 9, fmt: '0' }, { title: `${P} min`, ...n2 }, { title: `${t} min date`, width: 12 }, { title: 'Min hour', width: 9, fmt: '0' }];
-    const sheets = () => [
+    const sheets = ps => [
       { name: 'Monthly', columns: [{ title: 'Market', width: 8 }, { title: 'Month', width: 9 }, { title: `${P} avg`, ...n2 }, { title: 'Energy avg', ...n2 }, { title: 'Losses avg', ...n2 }, { title: 'Congestion avg', ...n2 }, ...ext('Hour'), { title: 'Hours', width: 8, fmt: '0' }],
-        rows: ['MDA', 'MTR'].flatMap(p => m[p].map(r => [p, r.mes, r.avg, r.ene, r.per, r.cng, r.max.v, r.max.f, r.max.h, r.min.v, r.min.f, r.min.h, r.horas])) },
+        rows: ps.flatMap(p => m[p].map(r => [p, r.mes, r.avg, r.ene, r.per, r.cng, r.max.v, r.max.f, r.max.h, r.min.v, r.min.f, r.min.h, r.horas])) },
       { name: 'Annual', columns: [{ title: 'Market', width: 8 }, { title: 'Year', width: 7 }, { title: `${P} avg`, ...n2 }, ...ext('Hour'), { title: 'Hours', width: 8, fmt: '0' }],
-        rows: ['MDA', 'MTR'].flatMap(p => [...y[p].values()].sort((a, b) => a.y < b.y ? -1 : 1).map(r => [p, r.y, r.avg, r.max.v, r.max.f, r.max.h, r.min.v, r.min.f, r.min.h, r.horas])) },
+        rows: ps.flatMap(p => [...y[p].values()].sort((a, b) => a.y < b.y ? -1 : 1).map(r => [p, r.y, r.avg, r.max.v, r.max.f, r.max.h, r.min.v, r.min.f, r.min.h, r.horas])) },
       { name: 'Hourly profile', columns: [{ title: 'Market', width: 8 }, { title: 'Year', width: 7 }, ...Array.from({ length: 24 }, (_, i) => ({ title: 'H' + (i + 1), width: 9, fmt: '0.00' }))],
-        rows: ['MDA', 'MTR'].flatMap(p => Object.entries((doc[p] && doc[p].perfil) || {}).filter(([yr]) => yr >= yFrom && yr <= yTo).sort().map(([yr, v]) => [p, yr, ...v])) }
+        rows: ps.flatMap(p => Object.entries((doc[p] && doc[p].perfil) || {}).filter(([yr]) => yr >= yFrom && yr <= yTo).sort().map(([yr, v]) => [p, yr, ...v])) }
     ];
-    const fname = extra => `${P}_history_${doc.sistema}_${doc.clave.replace(/ /g, '-')}_${from}_${to}${extra}.xlsx`;
-    body.querySelector('#hi-xlsx').onclick = () => Xlsx.download(fname(''), sheets());
+    const fname = (ps, extra) => `${P}_history_${doc.sistema}_${doc.clave.replace(/ /g, '-')}_${from}_${to}${ps.length === 1 ? '_' + ps[0] : ''}${extra}.xlsx`;
+    body.querySelector('#hi-xlsx').onclick = () => Xlsx.download(fname(shown, ''), sheets(shown));
     const hb = body.querySelector('#hi-xlsx-h');
-    if (hb) hb.onclick = () => hourly(body, sheets, fname, P, from, to, ctx);
+    if (hb) hb.onclick = () => hourly(body, sheets, fname, P, from, to, ctx, shown);
   }
 
   /* ── Hourly sheet: every hour of the range, month by month through the PML Worker ── */
   let job = null;  // the download in progress (one at a time)
-  async function hourly(body, sheets, fname, P, from, to, ctx) {
+  async function hourly(body, sheets, fname, P, from, to, ctx, ps) {
     const msg = body.querySelector('.cp-hi-dlmsg'), btns = body.querySelectorAll('.cp-pr-dl');
     if (job) return;
     const list = []; for (let mo = from; mo <= to; mo = addMonths(mo, 1)) list.push(mo);
-    const est = Math.max(1, Math.round(list.length * 2.5 / 60));
+    const est = Math.max(1, Math.round(list.length * ps.length * 1.25 / 60));
     const my = job = { cancel: false };
     const zone = ctx.node.kind === 'zone';
     btns.forEach(b => b.disabled = true);
@@ -181,7 +192,7 @@ const PriceHistory = (() => {
         ${my.cancel || !total || done === total ? '' : '<button class="cp-btn-ghost cp-btn-sm" id="hi-cancel">Cancel</button>'}`;
       const c = msg.querySelector('#hi-cancel'); if (c) c.onclick = () => { my.cancel = true; };
     };
-    const tasks = list.flatMap(mo => ['MDA', 'MTR'].map(p => ({ mo, p })));
+    const tasks = list.flatMap(mo => ps.map(p => ({ mo, p })));
     const rows = [];
     let done = 0, error = null;
     show(`Downloading every hour from ${mlong(from)} to ${mlong(to)} from CENACE (about ${est} min)…`, 0, tasks.length);
@@ -193,7 +204,7 @@ const PriceHistory = (() => {
           if (r.status === 422) return;  // not published for those dates
           if (!r.ok) throw await Market.errorOf(r);
           const b = await r.json();
-          for (const h of ((zone ? b.zonas : b.nodos) || {})[ctx.node.nodo] || []) rows.push([p, h.fecha, h.hora, h.pml, h.pml_ene, h.pml_per, h.pml_cng]);
+          for (const h of ((zone ? b.zonas : b.nodos) || {})[ctx.node.nodo] || []) rows.push([p, ctx.node.nodo, h.fecha, h.hora, h.pml, h.pml_ene, h.pml_per, h.pml_cng]);
           return;
         } catch (e) {
           // Access or request-limit answers don't change by asking again
@@ -216,14 +227,29 @@ const PriceHistory = (() => {
     const finish = t => { if (body.isConnected) { msg.innerHTML = `<div class="cp-hi-dltxt">${t}</div>`; btns.forEach(b => b.disabled = false); } };
     if (my.cancel) return finish('Hourly download cancelled.');
     if (error) return finish(`The hourly data could not be downloaded (${esc(error.message)}). Please try again later.`);
-    rows.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2] - b[2]);
+    rows.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : a[3] - b[3]);
+    // Daily: average of the day's hours by market (rows are already sorted by market and date)
+    const avg = (hs, k) => { const v = hs.map(h => h[k]).filter(x => x != null && isFinite(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+    const days = [];
+    for (const r of rows) { const d = days.at(-1); if (d && d[0][0] === r[0] && d[0][2] === r[2]) d.push(r); else days.push([r]); }
+    const daily = days.map(hs => {
+      const ok = hs.filter(h => h[4] != null && isFinite(h[4]));
+      const max = ok.reduce((a, h) => !a || h[4] > a[4] ? h : a, null), min = ok.reduce((a, h) => !a || h[4] < a[4] ? h : a, null);
+      return [hs[0][0], hs[0][1], hs[0][2], avg(hs, 4), avg(hs, 5), avg(hs, 6), avg(hs, 7), max && max[4], max && max[3], min && min[4], min && min[3], hs.length];
+    });
+    const where = { title: zone ? 'Load zone' : 'NodoP', width: zone ? 22 : 13 };
+    const n2 = { width: 14, fmt: '0.00' };
     show(`Building the Excel file (${rows.length.toLocaleString('en-US')} hours)…`, 0, 0);
-    await Xlsx.download(fname('_hourly'), [...sheets(), {
-      name: 'Hourly', columns: [{ title: 'Market', width: 8 }, { title: 'Date', width: 11 }, { title: 'Hour', width: 6, fmt: '0' },
+    await Xlsx.download(fname(ps, '_hourly'), [...sheets(ps), {
+      name: 'Daily', columns: [{ title: 'Market', width: 8 }, where, { title: 'Date', width: 11 }, { title: `${P} avg`, ...n2 }, { title: 'Energy avg', ...n2 }, { title: 'Losses avg', ...n2 }, { title: 'Congestion avg', ...n2 },
+        { title: `${P} max`, ...n2 }, { title: 'Max hour', width: 9, fmt: '0' }, { title: `${P} min`, ...n2 }, { title: 'Min hour', width: 9, fmt: '0' }, { title: 'Hours', width: 8, fmt: '0' }],
+      rows: daily
+    }, {
+      name: 'Hourly', columns: [{ title: 'Market', width: 8 }, where, { title: 'Date', width: 11 }, { title: 'Hour', width: 6, fmt: '0' },
         { title: `${P} (MXN/MWh)`, width: 16, fmt: '0.00' }, { title: 'Energy', width: 12, fmt: '0.00' }, { title: 'Losses', width: 12, fmt: '0.00' }, { title: 'Congestion', width: 12, fmt: '0.00' }],
       rows
     }]);
-    finish(`Excel ready: ${rows.length.toLocaleString('en-US')} hours from ${mlong(from)} to ${mlong(to)}.`);
+    finish(`Excel ready: ${ps.join(' and ')}, ${daily.length.toLocaleString('en-US')} days and ${rows.length.toLocaleString('en-US')} hours from ${mlong(from)} to ${mlong(to)}.`);
   }
 
   return { mount };

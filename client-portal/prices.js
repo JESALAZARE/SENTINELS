@@ -10,8 +10,8 @@
      (SW-PEND, the zone's weighted average of its NodosP PML) is shown in the
      same widgets.
    fx/usd-mxn.json holds the Banxico FIX for payments for the USD switch.
-   The client picks a NodoP and a date range; every widget is computed from
-   the hourly rows in that range.
+   The page opens with no NodoP chosen; the client picks a NodoP (or load zone)
+   and a date range, and every widget is computed from the hourly rows in that range.
    Below the widgets, PriceHistory (history.js) shows the monthly history since 2020
    of the NodoP / load zone (Azure SQL data warehouse summaries).
    Uses Market (market.js), Board.charts (board.js), NodosCatalog (nodos.js), PriceHistory, Xlsx (xlsx.js) and _esc. */
@@ -61,7 +61,8 @@ const PricesPage = (() => {
           live() ? NodosCatalog.list().catch(() => null) : null]);
         S.index = index; S.fx = fxData; S.catalog = catalog;
         if (!(index.nodos || []).length) throw new Error('no nodes');
-        pickNode(index.nodos[0]);
+        // No NodoP chosen at first: the client picks one (the system starts on SIN)
+        pickNode({ sistema: index.nodos.some(x => x.sistema === 'SIN') ? 'SIN' : index.nodos[0].sistema, nodo: '' });
       } catch (e) {
         // Missing pass, paused access or request limit: say so; anything else is a generic outage
         S.error = e.status ? e.message : 'Market prices are not available right now. Please try again later.';
@@ -90,13 +91,17 @@ const PricesPage = (() => {
   // first published day to tomorrow (MDA), at most 31 days per query.
   const bounds = n => {
     if (anyNode()) return { min: FIRST[n.sistema] || FIRST.SIN, max: addDays(todayMX(), 1) };
-    const r = [n.MDA, n.MTR].filter(Boolean);
+    // No NodoP chosen yet: the dates of every stored NodoP of the system
+    const r = (n.nodo ? [n] : S.index.nodos.filter(x => x.sistema === n.sistema)).flatMap(x => [x.MDA, x.MTR]).filter(Boolean);
     return { min: r.map(x => x.desde).sort()[0], max: r.map(x => x.hasta).sort().at(-1) };
   };
-  // Default view is the last 14 days, so both MDA and MTR show data
+  // Default view is the last 14 days, so both MDA and MTR show data; dates chosen before
+  // the first NodoP are kept. nodo '' = nothing chosen yet (the page asks for one).
   function pickNode(n) {
+    const keep = S.node && !S.node.nodo && S.from;
     S.node = n.kind === 'zone' ? { sistema: n.sistema, nodo: n.nodo, kind: 'zone' } : stored(n.sistema, n.nodo) || { sistema: n.sistema, nodo: n.nodo };
     const b = bounds(S.node);
+    if (keep) { [S.from, S.to] = fitRange(S.from, S.to, 'to', b, ndays(S.from, S.to)); return; }
     S.to = b.max; S.from = [addDays(b.max, -13), b.min].sort().at(-1);
   }
 
@@ -203,12 +208,14 @@ const PricesPage = (() => {
   /* ── Page ─────────────────────────────────────── */
   let seq = 0;
   async function render() {
-    const host = document.getElementById('prices-root'), my = ++seq;
-    host.dataset.loading = `Loading ${isZone(S.node) ? 'load zone ' : ''}${S.node.nodo} prices from CENACE…`;
-    host.classList.add('cp-pr-loading');
+    const host = document.getElementById('prices-root'), my = ++seq, none = !S.node.nodo;
     let d, err = null;
-    try { d = await nodeData(); } catch (e) { err = e; }
-    if (my !== seq) return;  // a newer query started while this one loaded
+    if (!none) {
+      host.dataset.loading = `Loading ${isZone(S.node) ? 'load zone ' : ''}${S.node.nodo} prices from CENACE…`;
+      host.classList.add('cp-pr-loading');
+      try { d = await nodeData(); } catch (e) { err = e; }
+      if (my !== seq) return;  // a newer query started while this one loaded
+    }
     host.classList.remove('cp-pr-loading');
     const b = bounds(S.node), nodes = S.index.nodos, n = S.node;
     const systems = anyNode() ? ['SIN', 'BCA', 'BCS'] : [...new Set(nodes.map(x => x.sistema))];
@@ -221,14 +228,16 @@ const PricesPage = (() => {
       ? `Distributed node price (PEND): CENACE's weighted average of the PML of the zone's NodosP, by its load distribution. Up to ${MAX_DAYS} days per query; MTR prices are published 7 days after the operating day. Source: CENACE.`
       : anyNode()
       ? `Any NodoP of the CENACE catalog, up to ${MAX_DAYS} days per query. MDA prices are published the day before the operating day; MTR prices 7 days after it. Source: CENACE.`
+      : none ? 'NodosP with a stored 60-day history. MTR prices are published 7 days after the operating day. Source: CENACE.'
       : `${avail('MDA')} · ${avail('MTR')}. MTR prices are published 7 days after the operating day. Source: CENACE.`;
-    const title = zone ? `Load zone ${n.nodo} · ${n.sistema}${zoneCount ? ` · ${zoneCount} NodosP` : ''}` : nameOf(n) ? `${n.nodo} · ${nameOf(n)}` : '';
+    const title = none ? '' : zone ? `Load zone ${n.nodo} · ${n.sistema}${zoneCount ? ` · ${zoneCount} NodosP` : ''}` : nameOf(n) ? `${n.nodo} · ${nameOf(n)}` : '';
+    const pick = none ? `<option value="" selected disabled>Choose ${zone ? 'a load zone' : 'a NodoP'}</option>` : '';
     const nodeField = zone
-      ? `<select id="pr-node">${zonesOf(n.sistema).map(([z, c]) => `<option value="${esc(z)}" ${z === n.nodo ? 'selected' : ''}>${esc(z)} (${c})</option>`).join('')}</select>`
+      ? `<select id="pr-node">${pick}${zonesOf(n.sistema).map(([z, c]) => `<option value="${esc(z)}" ${z === n.nodo ? 'selected' : ''}>${esc(z)} (${c})</option>`).join('')}</select>`
       : anyNode()
-      ? `<input id="pr-node" list="pr-nodes" value="${esc(n.nodo)}" autocomplete="off" spellcheck="false" aria-describedby="pr-node-name">
+      ? `<input id="pr-node" list="pr-nodes" value="${esc(n.nodo)}" placeholder="Pick a NodoP" autocomplete="off" spellcheck="false" aria-describedby="pr-node-name">
          <datalist id="pr-nodes">${S.catalog.filter(r => r.sistema === n.sistema).map(r => `<option value="${esc(r.clave)}">${esc(r.nombre)}</option>`).join('')}</datalist>`
-      : `<select id="pr-node">${nodes.filter(x => x.sistema === n.sistema).map(x => `<option ${x.nodo === n.nodo ? 'selected' : ''}>${esc(x.nodo)}</option>`).join('')}</select>`;
+      : `<select id="pr-node">${pick}${nodes.filter(x => x.sistema === n.sistema).map(x => `<option ${x.nodo === n.nodo ? 'selected' : ''}>${esc(x.nodo)}</option>`).join('')}</select>`;
     host.innerHTML = `
       <div class="cp-card cp-pr-bar">
         <div class="cp-pr-row cp-pr-row--what">
@@ -246,7 +255,8 @@ const PricesPage = (() => {
         </div>
         <div class="cp-pr-note">${title ? `<b id="pr-node-name">${esc(title)}</b> · ` : ''}${esc(note)}</div>
       </div>
-      ${err ? `<div class="cp-card cp-pr-msg">The prices for ${zone ? 'load zone ' : ''}${esc(n.nodo)} could not be loaded${err.message ? ': ' + esc(err.message) : ''}. Please try again later.</div>` : `<div class="cp-board cp-pr-board">
+      ${none ? `<div class="cp-card cp-pr-msg">Choose ${zone ? 'a load zone' : 'a NodoP'} above${anyNode() && !zone ? ' (type its key or use the NodoP catalog)' : ''} to see its MDA and MTR prices and its long-term history.</div>`
+        : err ? `<div class="cp-card cp-pr-msg">The prices for ${zone ? 'load zone ' : ''}${esc(n.nodo)} could not be loaded${err.message ? ': ' + esc(err.message) : ''}. Please try again later.</div>` : `<div class="cp-board cp-pr-board">
         ${['MDA', 'MTR'].map(p => widget('pr-daily-' + p, `${p} · Daily average ${P}`, 'cp-w-m')).join('')}
         ${['MDA', 'MTR'].map(p => widget('pr-hourly-' + p, `${p} · Hourly average ${P}`, 'cp-w-m')).join('')}
         ${widget('pr-max', 'Maximum price', 'cp-w-m cp-pr-ext', seg('max'))}
@@ -258,15 +268,12 @@ const PricesPage = (() => {
 
     // Query controls
     const choose = (sistema, nodo, kind) => { pickNode({ sistema, nodo, kind }); render(); };
-    host.querySelector('#pr-sys').onchange = e => {
-      const s = e.target.value, st = nodes.find(x => x.sistema === s);
-      if (zone) { const z = zonesOf(s)[0]; return z && choose(s, z[0], 'zone'); }
-      const first = st ? st.nodo : anyNode() ? (S.catalog.filter(r => r.sistema === s).map(r => r.clave).sort()[0]) : null;
-      if (first) choose(s, first);
-    };
+    // Another system: its NodosP / zones are others, so the client picks one again
+    host.querySelector('#pr-sys').onchange = e => choose(e.target.value, '', zone ? 'zone' : undefined);
     const nodeInput = host.querySelector('#pr-node');
     nodeInput.onchange = () => {
       const v = nodeInput.value.trim().toUpperCase();
+      if (!v) return;
       if (zone) return choose(n.sistema, v, 'zone');
       if (!anyNode()) return choose(n.sistema, v);
       const hit = S.catalog.find(r => r.sistema === n.sistema && r.clave === v);
@@ -277,14 +284,14 @@ const PricesPage = (() => {
     // Distributed nodes on: the selected NodoP's load zone. Off: a NodoP of the selected zone.
     const zc = host.querySelector('#pr-zone');
     if (zc) zc.onchange = () => {
+      if (none) return choose(n.sistema, '', zc.checked ? 'zone' : undefined);
       if (zc.checked) {
         const own = (S.catalog.find(r => r.sistema === n.sistema && r.clave === n.nodo) || {}).zona_carga;
-        const z = own && own !== 'No Aplica' ? own : (zonesOf(n.sistema)[0] || [])[0];
-        if (z) choose(n.sistema, z, 'zone');
+        choose(n.sistema, own && own !== 'No Aplica' ? own : '', 'zone');
       } else {
         const inZone = S.catalog.filter(r => r.sistema === n.sistema && r.zona_carga === n.nodo).map(r => r.clave).sort();
         const st = nodes.find(x => x.sistema === n.sistema && inZone.includes(x.nodo));
-        choose(n.sistema, st ? st.nodo : inZone[0] || (nodes.find(x => x.sistema === n.sistema) || nodes[0]).nodo);
+        choose(n.sistema, st ? st.nodo : inZone[0] || '');
       }
     };
     // Keep the range inside the bounds and, with the Worker, at most 31 days: the date the client
@@ -303,6 +310,7 @@ const PricesPage = (() => {
     host.querySelectorAll('.cp-pr-presets button').forEach(bt => bt.onclick = () => {
       const k = +bt.dataset.n; setRange(k ? addDays(b.max, 1 - k) : b.min, b.max);
     });
+    if (none) return;
     // Long-term history (history.js) for this NodoP / load zone, below the query widgets
     PriceHistory.mount(host.querySelector('#pr-history'), { node: n, priceName: P });
     if (err) return;
