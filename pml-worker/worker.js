@@ -46,8 +46,8 @@ const MAX_DAYS = 31;
 // An "Excel + hourly" of the whole history is ~170 requests; the SEN demand widget makes 30 an hour.
 const LIMITS = { hour: 400, day: 2000, historyDay: 150 };
 const DATA_PATH = /^(pml|resumen|nodos|fx|demanda)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*\.json$/;
-// MEM Insights summaries: /ofertas/<curva|desvio|costos|hidro|compras|reservas|ajuste>/….json
-const OFFERS_PATH = /^(curva|desvio|costos|hidro|compras|reservas|ajuste)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*\.json$/;
+// MEM Insights summaries: /ofertas/<curva|desvio|costos|hidro|participacion|reservas|ajuste>/….json
+const OFFERS_PATH = /^(curva|desvio|costos|hidro|participacion|reservas|ajuste)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*\.json$/;
 // SW-PML: NodosP by key (06CDU-400). SW-PEND: load zones by name; spaces go as "-" in the URL.
 const SERVICES = {
   pml: { url: 'https://ws01.cenace.gob.mx:8082/SWPML/SIM', label: 'SW-PML', param: 'nodos', max: 20, key: 'clv_nodo', what: 'NodoP keys',

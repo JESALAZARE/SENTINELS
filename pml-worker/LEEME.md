@@ -123,7 +123,7 @@ volver a cargar el histórico.
   - `demanda/…`: demanda del SEN por día.
 - `GET /ofertas/<ruta>.json`: un resumen de la pestaña MEM Insights, del bucket `OFERTAS`
   (`resumen/<ruta>.json.gz`, descomprimido por el Worker). Solo resúmenes, nunca las ofertas
-  crudas: `curva/…`, `desvio/…`, `costos/…`, `hidro/…`, `compras/…`, `reservas/…`, `ajuste/…`.
+  crudas: `curva/…`, `desvio/…`, `costos/…`, `hidro/…`, `participacion/…`, `reservas/…`, `ajuste/…`.
 - `GET /pml?…` y `GET /pend?…`: consultas al CENACE (SW-PML, SW-PEND).
 - `GET /demanda?gerencia=10`: la demanda, generación y pronóstico de hoy, hora por hora, de la
   página "Operación del SEN" del CENACE.

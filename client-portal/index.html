@@ -804,6 +804,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-in-kpi .cp-kpi-eyebrow{margin-bottom:6px;font-size:10px}
 .cp-in-kpi-v{font-family:var(--font-mono);font-size:22px;font-weight:500;color:var(--ink-900);display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;line-height:1.15}
 .cp-in-kpi-v small{font-size:11px;color:var(--silver-300);font-weight:400}
+.cp-in-kpi-v--text{font-family:var(--font-sans);font-size:17px;font-weight:600;line-height:1.3}
 .cp-in-kpi-n{font-size:11px;color:var(--steel-400);margin-top:4px;line-height:1.4}
 .cp-in-fit{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .cp-in-foot{font-size:11px;color:var(--steel-400);line-height:1.5;margin:12px 0 0}
@@ -821,12 +822,25 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-in-pos{color:var(--signal-positive)}
 .cp-in-flag{font-weight:600;color:var(--ink-900)}
 .cp-in-dash{background:none!important;border-top:2px dashed var(--ink-900);height:0!important;width:14px!important;margin-top:1px}
+.cp-in-findings{padding:16px 18px;margin-bottom:16px}
+.cp-in-findings ul{margin:6px 0 0;padding-left:18px;display:grid;gap:6px}
+.cp-in-findings li{font-size:13px;line-height:1.55;color:var(--graphite-500)}
+.cp-in-findings b{color:var(--ink-900);font-weight:600}
+.cp-in-sign{font-size:11px;color:var(--silver-300);margin:4px 2px 0;line-height:1.5}
+.cp-in-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:middle}
+.cp-in-spark{display:block;margin-left:auto}
+.cp-in-table td.cp-in-seg-t{font-family:var(--font-sans);font-size:11px;color:var(--steel-400)}
+.cp-in-table th.cp-in-name,.cp-in-table td.cp-in-name{text-align:left;font-family:var(--font-sans)}
+.cp-in-table tr[data-co],.cp-in-table tr[data-zone]{cursor:pointer}
+.cp-in-zone{display:grid;gap:14px}
+.cp-in-zone-k{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cp-in-bar .cp-pr-row{align-items:flex-end}
 @media (max-width:900px){
   .cp-in-kpis,.cp-in-fit{grid-template-columns:repeat(2,minmax(0,1fr))}
   .cp-in-views{margin-left:0}
 }
 @media (max-width:600px){
-  .cp-in-kpis,.cp-in-fit{grid-template-columns:1fr}
+  .cp-in-kpis,.cp-in-fit,.cp-in-zone-k{grid-template-columns:1fr}
   .cp-in-views{flex-wrap:nowrap;overflow-x:auto;width:100%;flex:1 1 100%;grid-column:1 / -1;padding-bottom:4px}
   .cp-in-views .cp-doc-filter{flex:none;min-height:44px}
   .cp-in-hour select{height:44px;font-size:16px}
@@ -1222,7 +1236,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
         <div class="cp-page-head">
           <div>
             <h1 class="cp-page-title">MEM Insights</h1>
-            <p class="cp-page-sub">Supply and bids of the wholesale electricity market (MDA and MTR): merit-order curve against the PML energy component, day-ahead vs real-time changes, thermal costs, hydro opportunity costs, purchases and reserves</p>
+            <p class="cp-page-sub">Market structure, price formation and dispatch analytics of Mexico's wholesale electricity market</p>
           </div>
         </div>
         <div id="insights-root"></div>

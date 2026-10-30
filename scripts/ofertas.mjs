@@ -53,6 +53,9 @@ const REPORTES = [
   { mercado: 'MDA', tipo: 'precios_sombra', pagina: 'PreciosSombra.aspx',      reporte: '385',     periodicidad: null, sistemas: ['SIN'] },
   { mercado: 'MDA', tipo: 'servicios_conexos', pagina: 'Reportes/ReqServConexosMDA.aspx', reporte: '358', periodicidad: null, sistemas: TODOS },
   { mercado: 'MDA', tipo: 'servicios_conexos_asignados', pagina: 'Reportes/ResultadosMDA.aspx', reporte: '349', periodicidad: null, sistemas: TODOS },
+  { mercado: 'MDA', tipo: 'asignacion_participantes', pagina: 'Reportes/ResultadosMDA.aspx', reporte: '348', periodicidad: null, sistemas: TODOS },
+  { mercado: 'MDA', tipo: 'carga_asignada_zona', pagina: 'Reportes/ResultadosMDA.aspx', reporte: '350', periodicidad: null, sistemas: TODOS },
+  { mercado: 'MDA', tipo: 'intercambios_asignados', pagina: 'Reportes/ResultadosMDA.aspx', reporte: '347', periodicidad: null, sistemas: ['SIN', 'BCA'] },
   { mercado: 'MTR', tipo: 'termica',       pagina: 'Reportes/OfertasMTR.aspx', reporte: '376,377', periodicidad: 'H', sistemas: TODOS },
   { mercado: 'MTR', tipo: 'hidro',         pagina: 'Reportes/OfertasMTR.aspx', reporte: '378,379', periodicidad: 'H', sistemas: ['SIN'] },
   { mercado: 'MTR', tipo: 'nodespachable', pagina: 'Reportes/OfertasMTR.aspx', reporte: '380',     periodicidad: 'H', sistemas: TODOS },
@@ -100,6 +103,14 @@ const TIPOS = {
   // reserva por diferencia.
   servicios_conexos: reservasReales(RT_REG, RT_ROD, RT_10, RT_SUP),
   servicios_conexos_asignados: reservasReales('Reserva de Regulacion Secundaria (MW)', 'Reserva Rodante de 10 minutos (MW)', 'Reserva de 10 minutos (MW)', 'Reserva Suplementaria (MW)'),
+  // Resultados del MDA: energía y reservas asignadas por participante (clave de PM, p. ej. C001),
+  // carga asignada por zona de carga e importación / exportación asignadas por enlace
+  asignacion_participantes: { clave: 'Participante', columnas: ['Hora', 'Cantidad total de energia asignada (MWh)', 'Reserva de Regulacion (MW)', 'Reserva Rodante de 10 minutos (MW)',
+    'Reserva No Rodante de 10 minutos (MW)', 'Reserva Rodante Suplementaria (MW)', 'Reserva No Rodante Suplementaria (MW)'] },
+  carga_asignada_zona: { clave: 'Zona de carga', columnas: ['Hora', 'Cantidad total de energia asignada por Carga Directamente Modelada(MWh)',
+    'Cantidad total de energia asignada por Carga Indirectamente Modelada(MWh)', 'Cantidad total de energia asignada (MWh)'] },
+  intercambios_asignados: { clave: 'Enlace Internacional', columnas: ['Hora', ...['Comercial', 'Asignada por pago de Energia Inadvertida', 'Asignada por Confiabilidad', 'Asignada al programa de los CIL', 'Total'].map((x) => `Importacion ${x}${x === 'Comercial' || x === 'Total' ? ' Asignada' : ''} (MWh)`),
+    ...['Comercial', 'Asignada por cobro de Energia Inadvertida', 'Asignada por Confiabilidad', 'Asignada al programa de los CIL', 'Total'].map((x) => `Exportacion ${x}${x === 'Comercial' || x === 'Total' ? ' Asignada' : ''} (MWh)`)] },
 };
 function reservasReales(reg, rod, r10, sup) {
   const n = (f, c) => Number(f[c]);
