@@ -238,15 +238,17 @@ const InsightsPage = (() => {
     if (!dia) return msg(`There is no information for ${long(S.fecha)}.`);
     const hrs = dia.horas.map(h => h.hora), rt = S.mkt === 'MTR';
     if (!hrs.includes(S.hora)) S.hora = hrs.includes(20) ? 20 : hrs[0];
-    // One hour of the chosen market: curve, estimated price, PML energy component and demand
+    // One hour of the chosen market: curve, estimated price (energy + reserve scarcity), PML energy component and demand
     const at = hora => {
-      const h = dia.horas.find(x => x.hora === hora), c = rt ? h.mtr : h;
-      return { h, c, pts: c ? c.curva : [], price: c ? c.precio : null, pml: rt ? h.pml.energia_mtr : h.pml.energia_mda, dem: rt ? h.real.generacion : h.demanda.total };
+      const h = dia.horas.find(x => x.hora === hora), c = rt ? h.mtr : h, f = c && c.formacion;
+      return { h, c, pts: c ? c.curva : [], price: c ? c.precio : null, energy: f ? f.energia : c ? c.precio : null, adder: f && f.reserva || 0,
+        pml: rt ? h.pml.energia_mtr : h.pml.energia_mda, dem: rt ? h.real.generacion : h.demanda.total };
     };
     const m = (fit && fit.sistemas[S.sys] && fit.sistemas[S.sys][rt ? 'mtr' : 'mda']) || {}, fm = m[S.fecha.slice(0, 7)] || m.total || {};
-    const kpis = ({ h, c, price: p, pml, dem }) => {
+    const kpis = ({ h, c, price: p, energy, adder, pml, dem }) => {
       const marg = c && c.marginal ? `${(TYPE[c.marginal.tipo] || [c.marginal.tipo])[0]}${c.marginal.empresa ? ' · ' + c.marginal.empresa : ''}` : '—';
-      return `${kpi(`Sentinels estimate · ${rt ? 'real time' : 'day ahead'}`, fx(p, 2), 'MXN/MWh', esc('Price-setting unit: ' + marg))}
+      const split = adder >= 0.5 ? `<br>Energy ${fx(energy, 2)} + reserve scarcity ${fx(adder, 2)}` : '';
+      return `${kpi(`Sentinels estimate · ${rt ? 'real time' : 'day ahead'}`, fx(p, 2), 'MXN/MWh', esc('Price-setting unit: ' + marg) + split)}
         ${kpi(`PML energy component · ${rt ? 'MTR' : 'MDA'}`, fx(pml, 2), 'MXN/MWh', 'Same in every node of the system')}
         ${kpi('Difference', p != null && pml != null ? (p >= pml ? '+' : '') + fx(p - pml, 2) : '—', 'MXN/MWh', p != null && pml ? esc(`${fx(100 * (p - pml) / pml, 1)}% of the energy component`) : '')}
         ${kpi(rt ? 'Generation' : 'Demand', fx(dem), 'MW', rt ? '' : `Load estimate ${fx(h.real.balance)} MW`)}`;
@@ -271,9 +273,11 @@ const InsightsPage = (() => {
       title.textContent = curveTitle();
       chart.set(d, true);
     });
-    const est = dia.horas.map(x => rt ? x.mtr && x.mtr.precio : x.precio), ene = dia.horas.map(x => rt ? x.pml.energia_mtr : x.pml.energia_mda);
+    const day = hrs.map(at), est = day.map(d => d.price), ene = day.map(d => d.pml);
     const pf = v => fx(v, 2) + ' MXN/MWh', ax = v => fx(v);
-    Board.charts.lineChart(body(host, 'in-day'), { labels: hrs.map(x => 'H' + x), series: [{ name: 'PML energy component', color: C.ink, values: ene }, { name: 'Sentinels estimate', color: C.gold, values: est }], fmt: pf, axis: ax, band: false, ranges: false });
+    // The energy-only line shows up when part of the day's price came from reserve scarcity
+    const only = day.some(d => d.adder >= 0.5) ? [{ name: 'Energy only (no reserve scarcity)', color: C.silver, values: day.map(d => d.energy) }] : [];
+    Board.charts.lineChart(body(host, 'in-day'), { labels: hrs.map(x => 'H' + x), series: [{ name: 'PML energy component', color: C.ink, values: ene }, { name: 'Sentinels estimate', color: C.gold, values: est }, ...only], fmt: pf, axis: ax, band: false, ranges: false });
     const ds = Object.keys(serie.dias).sort(), e1 = dailyMean(serie, rt ? 'precio_mtr' : 'precio_mda'), p1 = dailyMean(serie, rt ? 'energia_pml_mtr' : 'energia_pml_mda');
     Board.charts.lineChart(body(host, 'in-year'), { labels: ds.map(short), series: [{ name: 'PML energy component', color: C.ink, values: ds.map(p1) }, { name: 'Sentinels estimate', color: C.gold, values: ds.map(e1) }], fmt: pf, axis: ax, band: false, ranges: [[30, '30D'], [90, '90D']] });
     body(host, 'in-fit').innerHTML = fm.horas ? `<div class="cp-in-fit">
@@ -281,7 +285,7 @@ const InsightsPage = (() => {
         ${kpi('Average absolute error', fx(fm.error_abs_prom, 2), 'MXN/MWh')}
         ${kpi('Bias', (fm.sesgo >= 0 ? '+' : '') + fx(fm.sesgo, 2), 'MXN/MWh', fm.sesgo < 0 ? 'Estimate below the PML on average' : 'Estimate above the PML on average')}
         ${kpi('Hourly correlation', fx(fm.correlacion, 2))}
-      </div><p class="cp-in-foot">Sentinels' dispatch model: units in merit order, unit commitment with minimum generation, hydro at its dispatched energy, losses and spinning reserve. The system operator also optimizes start-ups, ramps and the transmission network across the 24 hours, so the evening hours carry the largest differences.</p>`
+      </div><p class="cp-in-foot">Sentinels' dispatch model: units in merit order, unit commitment with minimum generation, hydro at its dispatched energy and losses. When reserves run short, mostly in the evening once solar fades and hydro is already generating, the cost of the reserve passes into the energy price; the estimate adds it as reserve scarcity. The system operator also optimizes start-ups, ramps and the transmission network across the 24 hours.</p>`
       : '<div class="cp-widget-empty">No accuracy statistics for this period yet.</div>';
     return null;
   }
@@ -320,17 +324,20 @@ const InsightsPage = (() => {
     const used = [...new Set(hours.flatMap(d => d.pts.map(p => (TYPE[tipos[p[2]]] || [tipos[p[2]]])[0])))];
     const colorFor = name => (Object.values(TYPE).find(t => t[0] === name) || ['', C.steel])[1];
     el.innerHTML = `<div class="cp-ch-bar"><div class="cp-ch-legend">${used.map(t => `<span class="cp-ch-key"><span style="background:${colorFor(t)}"></span>${esc(t)}</span>`).join('')}
-      <span class="cp-ch-key"><span class="cp-in-dash"></span>Demand</span><span class="cp-ch-key"><span style="background:${C.ink}"></span>PML energy</span></div></div><div class="cp-ch-plot"><div class="cp-ch-tip" hidden></div></div>`;
+      <span class="cp-ch-key"><span class="cp-in-dash"></span>Demand</span><span class="cp-ch-key"><span style="background:${C.ink}"></span>PML energy</span>${all.some(d => d.adder >= 0.5) ? `<span class="cp-ch-key"><span style="background:${C.gold}"></span>Reserve scarcity</span>` : ''}</div></div><div class="cp-ch-plot"><div class="cp-ch-tip" hidden></div></div>`;
     const plot = el.querySelector('.cp-ch-plot'), tip = el.querySelector('.cp-ch-tip');
     if (!hours.length) { plot.insertAdjacentHTML('beforeend', '<div class="cp-widget-empty">No information for this day.</div>'); return { set() {} }; }
     // MW offered at zero price in an hour
     const ceroOf = pts => { const i = pts.findIndex(p => p[1] > 0); return i < 0 ? pts.at(-1)[0] : i ? pts[i - 1][0] : 0; };
     // Zoom to where the curves cross demand (most of the supply comes in at zero price), and the Y axis up to a bit
-    // above the prices that matter, so a few very expensive blocks don't flatten the chart
+    // above the prices that matter, so a few very expensive blocks don't flatten the chart. Scarcity hours can reach
+    // several times the energy price: the axis grows for them only up to 2.5× and taller lines stop at the top
     const X = Math.max(...hours.map(d => d.pts.at(-1)[0]));
     const x0 = Math.max(0, Math.min(...hours.map(d => Math.min(ceroOf(d.pts), (d.dem || X) * 0.75))) - X * 0.03);
     const x1 = Math.min(X, Math.max(x0 + X * 0.2, ...hours.map(d => Math.max((d.dem || 0) * 1.15, ceroOf(d.pts) * 1.08))));
-    const top = Math.max(...hours.map(d => Math.max((d.pml || 0) * 1.4, (d.price || 0) * 1.4))) || (() => { const p = hours[0].pts.map(q => q[1]).sort((a, b) => a - b); return p[Math.floor(p.length * 0.95)] || 1; })();
+    const base = Math.max(...hours.map(d => Math.max((d.energy || 0) * 1.4, Math.min(d.pml || 0, (d.energy || 0) * 2) * 1.1)))
+      || (() => { const p = hours[0].pts.map(q => q[1]).sort((a, b) => a - b); return p[Math.floor(p.length * 0.95)] || 1; })();
+    const top = Math.max(base, Math.min(Math.max(...hours.map(d => Math.max(d.pml || 0, d.price || 0))) * 1.1, base * 2.5));
     const NS = 'http://www.w3.org/2000/svg', still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     let R = null, cur = null, shown = null, raf = 0, done = 0;
 
@@ -348,6 +355,7 @@ const InsightsPage = (() => {
       g += `<g class="cp-in-curves"></g><text data-k="zero" x="${pL + 4}" y="${y(0) - 6}" class="cp-ch-ax"></text>
         <line data-k="pml" x1="${pL}" x2="${W - pR}" stroke="${C.ink}" stroke-width="1.5"/><text data-k="pmlt" x="${pL + 4}" class="cp-ch-ax"></text>
         <line data-k="dem" y1="${pT}" y2="${H - pB}" stroke="${C.ink}" stroke-dasharray="5 4" stroke-width="1.5"/><text data-k="demt" y="${pT + 10}" class="cp-ch-ax"></text>
+        <line data-k="add" stroke="${C.gold}" stroke-width="3" stroke-linecap="round"/><circle data-k="tot" r="4" fill="${C.gold}"/><text data-k="addt" class="cp-ch-ax cp-in-adder"></text>
         <circle data-k="dot" r="5" fill="#fff" stroke="${C.gold}" stroke-width="2.5"/>
         <text x="${W - pR}" y="${H - 8}" text-anchor="end" class="cp-ch-ax">MW</text>`;
       plot.querySelector('svg')?.remove();
@@ -389,19 +397,27 @@ const InsightsPage = (() => {
       g.style.opacity = 0; box.append(g); g.getBoundingClientRect(); g.style.opacity = 1;
     };
     const attr = (n, a) => Object.entries(a).forEach(([key, v]) => n.setAttribute(key, v));
-    // Demand line, PML line and the crossing point at some values (in between two hours while they move)
+    // Demand line, PML line, the crossing point (energy price) and, in scarcity hours, the reserve scarcity
+    // adder rising from it to the estimated price; at some values (in between two hours while they move)
     const lines = v => {
-      const { x, y, k, pL } = R, onP = v.pml != null, onD = v.dem != null;
+      const { x, y, k, pL } = R, onP = v.pml != null, onD = v.dem != null, onE = onD && v.energy != null, onA = onE && v.price - v.energy >= 0.5;
       k.pml.style.display = k.pmlt.style.display = onP ? '' : 'none';
       k.dem.style.display = k.demt.style.display = onD ? '' : 'none';
-      k.dot.style.display = onD && v.price != null ? '' : 'none';
+      k.dot.style.display = onE ? '' : 'none';
+      k.add.style.display = k.tot.style.display = k.addt.style.display = onA ? '' : 'none';
       if (onP) { attr(k.pml, { y1: y(v.pml), y2: y(v.pml) }); attr(k.pmlt, { y: y(v.pml) - 5 }); k.pmlt.textContent = `PML energy ${fx(v.pml)}`; }
       if (onD) {
         const left = x(v.dem) - pL < 160;
         attr(k.dem, { x1: x(v.dem), x2: x(v.dem) }); attr(k.demt, { x: x(v.dem) + (left ? 4 : -4), 'text-anchor': left ? 'start' : 'end' });
         k.demt.textContent = `Demand ${fx(v.dem)} MW`;
       }
-      if (onD && v.price != null) attr(k.dot, { cx: x(v.dem), cy: y(v.price) });
+      if (onE) attr(k.dot, { cx: x(v.dem), cy: y(v.energy) });
+      if (onA) {
+        attr(k.add, { x1: x(v.dem), x2: x(v.dem), y1: y(v.energy), y2: y(v.price) }); attr(k.tot, { cx: x(v.dem), cy: y(v.price) });
+        const left = x(v.dem) - pL < 160;
+        attr(k.addt, { x: x(v.dem) + (left ? 10 : -10), y: (y(v.energy) + y(v.price)) / 2 + 4, 'text-anchor': left ? 'start' : 'end' });
+        k.addt.textContent = `+${fx(v.price - v.energy)} reserve scarcity`;
+      }
     };
     let last = 0;
     new ResizeObserver(() => { const w = Math.round(plot.clientWidth); if (w && w !== last && cur) { last = w; if (build()) { swap(cur.pts, false); lines(shown || cur); } } }).observe(plot);
@@ -413,14 +429,14 @@ const InsightsPage = (() => {
         if (!R && !build()) return;
         cancelAnimationFrame(raf); clearTimeout(done);
         swap(d.pts, animate && from && !still);
-        const end = () => { cancelAnimationFrame(raf); shown = { dem: d.dem, pml: d.pml, price: d.price }; lines(shown); };
+        const end = () => { cancelAnimationFrame(raf); shown = { dem: d.dem, pml: d.pml, price: d.price, energy: d.energy }; lines(shown); };
         if (!animate || !from || still) return end();
         // Frames don't run in a hidden tab; the lines still land on the new hour
         done = setTimeout(end, 400);
         const t0 = performance.now(), mix = (a, b, e) => a == null || b == null ? b : a + (b - a) * e;
         const tick = now => {
           const t = Math.min(1, (now - t0) / 350), e = 1 - (1 - t) ** 3;
-          shown = { dem: mix(from.dem, d.dem, e), pml: mix(from.pml, d.pml, e), price: mix(from.price, d.price, e) };
+          shown = { dem: mix(from.dem, d.dem, e), pml: mix(from.pml, d.pml, e), price: mix(from.price, d.price, e), energy: mix(from.energy, d.energy, e) };
           lines(shown);
           if (t < 1) raf = requestAnimationFrame(tick);
         };
