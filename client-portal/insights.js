@@ -236,27 +236,41 @@ const InsightsPage = (() => {
   async function price(host, serie) {
     const [dia, fit] = await Promise.all([get(`curva/${S.year}/${S.fecha}_${S.sys}.json`), get(`ajuste/${S.year}.json`)]);
     if (!dia) return msg(`There is no information for ${long(S.fecha)}.`);
-    const hrs = dia.horas.map(h => h.hora);
+    const hrs = dia.horas.map(h => h.hora), rt = S.mkt === 'MTR';
     if (!hrs.includes(S.hora)) S.hora = hrs.includes(20) ? 20 : hrs[0];
-    const h = dia.horas.find(x => x.hora === S.hora), rt = S.mkt === 'MTR';
-    const c = rt ? h.mtr : h, pml = rt ? h.pml.energia_mtr : h.pml.energia_mda, dem = rt ? h.real.generacion : h.demanda.total;
+    // One hour of the chosen market: curve, estimated price, PML energy component and demand
+    const at = hora => {
+      const h = dia.horas.find(x => x.hora === hora), c = rt ? h.mtr : h;
+      return { h, c, pts: c ? c.curva : [], price: c ? c.precio : null, pml: rt ? h.pml.energia_mtr : h.pml.energia_mda, dem: rt ? h.real.generacion : h.demanda.total };
+    };
     const m = (fit && fit.sistemas[S.sys] && fit.sistemas[S.sys][rt ? 'mtr' : 'mda']) || {}, fm = m[S.fecha.slice(0, 7)] || m.total || {};
-    const marg = c && c.marginal ? `${(TYPE[c.marginal.tipo] || [c.marginal.tipo])[0]}${c.marginal.empresa ? ' · ' + c.marginal.empresa : ''}` : '—';
-    host.innerHTML = `
-      <div class="cp-card cp-in-kpis">
-        ${kpi(`Sentinels estimate · ${rt ? 'real time' : 'day ahead'}`, fx(c && c.precio, 2), 'MXN/MWh', esc('Price-setting unit: ' + marg))}
+    const kpis = ({ h, c, price: p, pml, dem }) => {
+      const marg = c && c.marginal ? `${(TYPE[c.marginal.tipo] || [c.marginal.tipo])[0]}${c.marginal.empresa ? ' · ' + c.marginal.empresa : ''}` : '—';
+      return `${kpi(`Sentinels estimate · ${rt ? 'real time' : 'day ahead'}`, fx(p, 2), 'MXN/MWh', esc('Price-setting unit: ' + marg))}
         ${kpi(`PML energy component · ${rt ? 'MTR' : 'MDA'}`, fx(pml, 2), 'MXN/MWh', 'Same in every node of the system')}
-        ${kpi('Difference', c && c.precio != null && pml != null ? (c.precio >= pml ? '+' : '') + fx(c.precio - pml, 2) : '—', 'MXN/MWh', pml ? esc(`${fx(100 * (c.precio - pml) / pml, 1)}% of the energy component`) : '')}
-        ${kpi(rt ? 'Generation' : 'Demand', fx(dem), 'MW', rt ? '' : `Load estimate ${fx(h.real.balance)} MW`)}
-      </div>
+        ${kpi('Difference', p != null && pml != null ? (p >= pml ? '+' : '') + fx(p - pml, 2) : '—', 'MXN/MWh', p != null && pml ? esc(`${fx(100 * (p - pml) / pml, 1)}% of the energy component`) : '')}
+        ${kpi(rt ? 'Generation' : 'Demand', fx(dem), 'MW', rt ? '' : `Load estimate ${fx(h.real.balance)} MW`)}`;
+    };
+    const curveTitle = () => `Merit-order curve · ${long(S.fecha)} · hour ${S.hora}`;
+    host.innerHTML = `
+      <div class="cp-card cp-in-kpis" id="in-pr-kpis">${kpis(at(S.hora))}</div>
       <div class="cp-board cp-pr-board">
-        ${widget('in-curve', `Merit-order curve · ${long(S.fecha)} · hour ${S.hora}`, 'cp-w-l', seg('mkt', [['MDA', 'Day ahead'], ['MTR', 'Real time']], S.mkt) + hourSel(hrs))}
+        ${widget('in-curve', curveTitle(), 'cp-w-l', seg('mkt', [['MDA', 'Day ahead'], ['MTR', 'Real time']], S.mkt))}
         ${widget('in-day', `Hourly price · ${long(S.fecha)}`, 'cp-w-m')}
         ${widget('in-year', `Daily average · ${S.year}`, 'cp-w-m')}
         ${widget('in-fit', 'Model accuracy', 'cp-w-l')}
       </div>`;
-    host.querySelector('#in-hour').onchange = e => { S.hora = +e.target.value; view(); };
-    stepChart(body(host, 'in-curve'), c ? c.curva : [], dia.tipos, dem, pml, c && c.precio);
+    const curve = body(host, 'in-curve'), title = host.querySelector('#in-curve .cp-widget-title');
+    const chart = stepChart(curve, dia.tipos, hrs.map(at));
+    chart.set(at(S.hora), false);
+    // Moving the slider redraws only the curve and the indicators of the hour
+    hourSlider(curve, hrs, hora => {
+      S.hora = hora;
+      const d = at(hora);
+      host.querySelector('#in-pr-kpis').innerHTML = kpis(d);
+      title.textContent = curveTitle();
+      chart.set(d, true);
+    });
     const est = dia.horas.map(x => rt ? x.mtr && x.mtr.precio : x.precio), ene = dia.horas.map(x => rt ? x.pml.energia_mtr : x.pml.energia_mda);
     const pf = v => fx(v, 2) + ' MXN/MWh', ax = v => fx(v);
     Board.charts.lineChart(body(host, 'in-day'), { labels: hrs.map(x => 'H' + x), series: [{ name: 'PML energy component', color: C.ink, values: ene }, { name: 'Sentinels estimate', color: C.gold, values: est }], fmt: pf, axis: ax, band: false, ranges: false });
@@ -272,21 +286,57 @@ const InsightsPage = (() => {
     return null;
   }
 
-  // Step chart of the merit order: x = cumulative MW, y = MXN/MWh, colored by unit type
-  function stepChart(el, pts, tipos, demand, pml, price) {
-    const used = [...new Set(pts.map(p => (TYPE[tipos[p[2]]] || [tipos[p[2]]])[0]))];
+  // Hour slider under a chart: drag it or use the arrow keys, one hour at a time; ▶ plays the day
+  function hourSlider(el, hrs, onChange) {
+    const ico = { play: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>',
+      pause: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor"/></svg>' };
+    el.insertAdjacentHTML('beforeend', `<div class="cp-in-slider">
+      <button type="button" class="cp-in-play" aria-label="Play the day hour by hour">${ico.play}</button>
+      <div class="cp-in-sl"><input type="range" min="0" max="${hrs.length - 1}" step="1" value="${Math.max(0, hrs.indexOf(S.hora))}" aria-label="Hour" aria-valuetext="Hour ${S.hora}">
+        <div class="cp-in-sl-ticks" aria-hidden="true">${hrs.map(h => `<span class="${h === 1 || h % 6 === 0 ? 'cp-in-sl-major' : ''}${h === S.hora ? ' on' : ''}">${h}</span>`).join('')}</div></div>
+      <div class="cp-in-sl-v">H${S.hora}</div></div>`);
+    const box = el.querySelector('.cp-in-slider'), input = box.querySelector('input'), out = box.querySelector('.cp-in-sl-v'), play = box.querySelector('.cp-in-play'), ticks = box.querySelectorAll('.cp-in-sl-ticks span');
+    let timer = 0;
+    const go = i => {
+      const h = hrs[i];
+      input.value = i; input.setAttribute('aria-valuetext', `Hour ${h}`); out.textContent = 'H' + h;
+      ticks.forEach((t, j) => t.classList.toggle('on', j === i));
+      if (h !== S.hora) onChange(h);
+    };
+    const stop = () => { clearInterval(timer); timer = 0; play.innerHTML = ico.play; play.setAttribute('aria-label', 'Play the day hour by hour'); };
+    input.oninput = () => { stop(); go(+input.value); };
+    play.onclick = () => {
+      if (timer) return stop();
+      if (+input.value >= hrs.length - 1) go(0);
+      play.innerHTML = ico.pause; play.setAttribute('aria-label', 'Pause');
+      timer = setInterval(() => { const i = +input.value + 1; if (!box.isConnected || i >= hrs.length) return stop(); go(i); }, 900);
+    };
+  }
+
+  // Step chart of the merit order: x = cumulative MW, y = MXN/MWh, colored by unit type.
+  // The axes fit every hour of the day (all), so moving between hours shows the curve, demand and PML shift.
+  function stepChart(el, tipos, all) {
+    const hours = all.filter(d => d.pts.length);
+    const used = [...new Set(hours.flatMap(d => d.pts.map(p => (TYPE[tipos[p[2]]] || [tipos[p[2]]])[0])))];
     const colorFor = name => (Object.values(TYPE).find(t => t[0] === name) || ['', C.steel])[1];
     el.innerHTML = `<div class="cp-ch-bar"><div class="cp-ch-legend">${used.map(t => `<span class="cp-ch-key"><span style="background:${colorFor(t)}"></span>${esc(t)}</span>`).join('')}
       <span class="cp-ch-key"><span class="cp-in-dash"></span>Demand</span><span class="cp-ch-key"><span style="background:${C.ink}"></span>PML energy</span></div></div><div class="cp-ch-plot"><div class="cp-ch-tip" hidden></div></div>`;
     const plot = el.querySelector('.cp-ch-plot'), tip = el.querySelector('.cp-ch-tip');
-    if (!pts.length) { plot.insertAdjacentHTML('beforeend', '<div class="cp-widget-empty">No information for this hour.</div>'); return; }
-    // Y axis up to a bit above the price that matters, so a few very expensive blocks don't flatten the chart
-    const prices = pts.map(p => p[1]).sort((a, b) => a - b), top = Math.max(prices[Math.floor(prices.length * 0.95)], (pml || 0) * 1.4, (price || 0) * 1.4) || 1;
-    // Zoom to where the curve crosses demand: most of the supply comes in at zero price
-    const X = pts.at(-1)[0], cero = (pts.find(p => p[1] > 0) ? pts[pts.findIndex(p => p[1] > 0) - 1] || [0] : pts.at(-1))[0];
-    const x0 = Math.max(0, Math.min(cero, (demand || X) * 0.75) - X * 0.03), x1 = Math.min(X, Math.max((demand || 0) * 1.15, cero * 1.08, x0 + X * 0.2));
-    const draw = () => {
-      const W = plot.clientWidth; if (!W) return;
+    if (!hours.length) { plot.insertAdjacentHTML('beforeend', '<div class="cp-widget-empty">No information for this day.</div>'); return { set() {} }; }
+    // MW offered at zero price in an hour
+    const ceroOf = pts => { const i = pts.findIndex(p => p[1] > 0); return i < 0 ? pts.at(-1)[0] : i ? pts[i - 1][0] : 0; };
+    // Zoom to where the curves cross demand (most of the supply comes in at zero price), and the Y axis up to a bit
+    // above the prices that matter, so a few very expensive blocks don't flatten the chart
+    const X = Math.max(...hours.map(d => d.pts.at(-1)[0]));
+    const x0 = Math.max(0, Math.min(...hours.map(d => Math.min(ceroOf(d.pts), (d.dem || X) * 0.75))) - X * 0.03);
+    const x1 = Math.min(X, Math.max(x0 + X * 0.2, ...hours.map(d => Math.max((d.dem || 0) * 1.15, ceroOf(d.pts) * 1.08))));
+    const top = Math.max(...hours.map(d => Math.max((d.pml || 0) * 1.4, (d.price || 0) * 1.4))) || (() => { const p = hours[0].pts.map(q => q[1]).sort((a, b) => a - b); return p[Math.floor(p.length * 0.95)] || 1; })();
+    const NS = 'http://www.w3.org/2000/svg', still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let R = null, cur = null, shown = null, raf = 0, done = 0;
+
+    // Axes and the elements that move; the curve of each hour goes in its own group
+    const build = () => {
+      const W = plot.clientWidth; if (!W) return false;
       const H = matchMedia('(max-width:600px)').matches ? 240 : 300, pL = 52, pR = 14, pT = 12, pB = 28;
       plot.style.height = H + 'px';
       const x = v => pL + (Math.min(Math.max(v, x0), x1) - x0) / (x1 - x0) * (W - pL - pR), y = v => pT + (1 - Math.min(Math.max(v, 0), top) / top) * (H - pT - pB);
@@ -295,25 +345,19 @@ const InsightsPage = (() => {
       for (let v = 0; v <= top; v += step) g += `<line x1="${pL}" x2="${W - pR}" y1="${y(v)}" y2="${y(v)}" stroke="${C.grid}"/><text x="${pL - 6}" y="${y(v) + 3.5}" text-anchor="end" class="cp-ch-ax">${fx(v)}</text>`;
       const span = x1 - x0, xs = [1, 2, 2.5, 5, 10].map(k => k * 10 ** Math.floor(Math.log10(span / 4))).find(s => s >= span / Math.max(3, Math.floor((W - pL - pR) / 80)));
       for (let v = Math.ceil(x0 / xs) * xs; v <= x1; v += xs) g += `<text x="${x(v)}" y="${H - 8}" text-anchor="middle" class="cp-ch-ax">${fx(v / 1000, v % 1000 ? 1 : 0)}k</text>`;
-      if (x0 > 0) g += `<text x="${pL + 4}" y="${y(0) - 6}" class="cp-ch-ax">← ${fx(cero)} MW at zero price</text>`;
-      let prev = 0;
-      pts.forEach(([mw, p, t]) => {
-        if (mw <= x0 || prev >= x1) { prev = mw; return; }
-        const col = (TYPE[tipos[t]] || ['', C.steel])[1];
-        g += `<rect x="${x(prev)}" y="${y(p)}" width="${Math.max(0.5, x(mw) - x(prev))}" height="${Math.max(0, y(0) - y(p))}" fill="${col}" opacity="0.28"/>`;
-        g += `<line x1="${x(prev)}" x2="${x(mw)}" y1="${y(p)}" y2="${y(p)}" stroke="${col}" stroke-width="2"/>`;
-        prev = mw;
-      });
-      if (pml != null) g += `<line x1="${pL}" x2="${W - pR}" y1="${y(pml)}" y2="${y(pml)}" stroke="${C.ink}" stroke-width="1.5"/><text x="${pL + 4}" y="${y(pml) - 5}" class="cp-ch-ax">PML energy ${fx(pml)}</text>`;
-      if (demand != null) g += `<line x1="${x(demand)}" x2="${x(demand)}" y1="${pT}" y2="${H - pB}" stroke="${C.ink}" stroke-dasharray="5 4" stroke-width="1.5"/><text x="${x(demand) - 4}" y="${pT + 10}" text-anchor="end" class="cp-ch-ax">Demand ${fx(demand)} MW</text>`;
-      if (price != null && demand != null) g += `<circle cx="${x(demand)}" cy="${y(price)}" r="5" fill="#fff" stroke="${C.gold}" stroke-width="2.5"/>`;
-      g += `<text x="${W - pR}" y="${H - 8}" text-anchor="end" class="cp-ch-ax">MW</text>`;
+      g += `<g class="cp-in-curves"></g><text data-k="zero" x="${pL + 4}" y="${y(0) - 6}" class="cp-ch-ax"></text>
+        <line data-k="pml" x1="${pL}" x2="${W - pR}" stroke="${C.ink}" stroke-width="1.5"/><text data-k="pmlt" x="${pL + 4}" class="cp-ch-ax"></text>
+        <line data-k="dem" y1="${pT}" y2="${H - pB}" stroke="${C.ink}" stroke-dasharray="5 4" stroke-width="1.5"/><text data-k="demt" y="${pT + 10}" class="cp-ch-ax"></text>
+        <circle data-k="dot" r="5" fill="#fff" stroke="${C.gold}" stroke-width="2.5"/>
+        <text x="${W - pR}" y="${H - 8}" text-anchor="end" class="cp-ch-ax">MW</text>`;
       plot.querySelector('svg')?.remove();
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const svg = document.createElementNS(NS, 'svg');
       svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
       svg.innerHTML = g; plot.prepend(svg);
+      const k = {}; svg.querySelectorAll('[data-k]').forEach(n => (k[n.dataset.k] = n));
+      R = { svg, pL, x, y, k };
       svg.onpointermove = ev => {
-        const mwAt = x0 + (ev.clientX - svg.getBoundingClientRect().left - pL) / (W - pL - pR) * (x1 - x0);
+        const pts = cur ? cur.pts : [], mwAt = x0 + (ev.clientX - svg.getBoundingClientRect().left - pL) / (W - pL - pR) * (x1 - x0);
         const i = pts.findIndex(p => p[0] >= mwAt), p = pts[Math.max(0, i)];
         if (!p || mwAt < 0) return (tip.hidden = true);
         tip.innerHTML = `<div class="cp-ch-tip-t">${esc((TYPE[tipos[p[2]]] || [tipos[p[2]]])[0])}</div><div>Up to <b>${fx(p[0])} MW</b></div><div>Price <b>${fx(p[1], 2)} MXN/MWh</b></div>`;
@@ -322,9 +366,67 @@ const InsightsPage = (() => {
         tip.style.left = (px + 14 + tip.offsetWidth <= W ? px + 14 : Math.max(4, px - 14 - tip.offsetWidth)) + 'px';
       };
       svg.onpointerleave = () => (tip.hidden = true);
+      return true;
+    };
+    const curveOf = pts => {
+      let g = '', prev = 0;
+      pts.forEach(([mw, p, t]) => {
+        if (mw <= x0 || prev >= x1) { prev = mw; return; }
+        const col = (TYPE[tipos[t]] || ['', C.steel])[1];
+        g += `<rect x="${R.x(prev)}" y="${R.y(p)}" width="${Math.max(0.5, R.x(mw) - R.x(prev))}" height="${Math.max(0, R.y(0) - R.y(p))}" fill="${col}" opacity="0.28"/>`;
+        g += `<line x1="${R.x(prev)}" x2="${R.x(mw)}" y1="${R.y(p)}" y2="${R.y(p)}" stroke="${col}" stroke-width="2"/>`;
+        prev = mw;
+      });
+      return g;
+    };
+    // The new hour's curve fades in over the old one
+    const swap = (pts, fade) => {
+      const box = R.svg.querySelector('.cp-in-curves'), g = document.createElementNS(NS, 'g');
+      g.innerHTML = curveOf(pts);
+      R.k.zero.textContent = x0 > 0 && pts.length ? `← ${fx(ceroOf(pts))} MW at zero price` : '';
+      if (!fade) return box.replaceChildren(g);
+      [...box.children].forEach(o => { o.style.opacity = 0; setTimeout(() => o.remove(), 320); });
+      g.style.opacity = 0; box.append(g); g.getBoundingClientRect(); g.style.opacity = 1;
+    };
+    const attr = (n, a) => Object.entries(a).forEach(([key, v]) => n.setAttribute(key, v));
+    // Demand line, PML line and the crossing point at some values (in between two hours while they move)
+    const lines = v => {
+      const { x, y, k, pL } = R, onP = v.pml != null, onD = v.dem != null;
+      k.pml.style.display = k.pmlt.style.display = onP ? '' : 'none';
+      k.dem.style.display = k.demt.style.display = onD ? '' : 'none';
+      k.dot.style.display = onD && v.price != null ? '' : 'none';
+      if (onP) { attr(k.pml, { y1: y(v.pml), y2: y(v.pml) }); attr(k.pmlt, { y: y(v.pml) - 5 }); k.pmlt.textContent = `PML energy ${fx(v.pml)}`; }
+      if (onD) {
+        const left = x(v.dem) - pL < 160;
+        attr(k.dem, { x1: x(v.dem), x2: x(v.dem) }); attr(k.demt, { x: x(v.dem) + (left ? 4 : -4), 'text-anchor': left ? 'start' : 'end' });
+        k.demt.textContent = `Demand ${fx(v.dem)} MW`;
+      }
+      if (onD && v.price != null) attr(k.dot, { cx: x(v.dem), cy: y(v.price) });
     };
     let last = 0;
-    new ResizeObserver(() => { const w = Math.round(plot.clientWidth); if (w && w !== last) { last = w; draw(); } }).observe(plot);
+    new ResizeObserver(() => { const w = Math.round(plot.clientWidth); if (w && w !== last && cur) { last = w; if (build()) { swap(cur.pts, false); lines(shown || cur); } } }).observe(plot);
+
+    return {
+      set(d, animate) {
+        const from = shown;
+        cur = d;
+        if (!R && !build()) return;
+        cancelAnimationFrame(raf); clearTimeout(done);
+        swap(d.pts, animate && from && !still);
+        const end = () => { cancelAnimationFrame(raf); shown = { dem: d.dem, pml: d.pml, price: d.price }; lines(shown); };
+        if (!animate || !from || still) return end();
+        // Frames don't run in a hidden tab; the lines still land on the new hour
+        done = setTimeout(end, 400);
+        const t0 = performance.now(), mix = (a, b, e) => a == null || b == null ? b : a + (b - a) * e;
+        const tick = now => {
+          const t = Math.min(1, (now - t0) / 350), e = 1 - (1 - t) ** 3;
+          shown = { dem: mix(from.dem, d.dem, e), pml: mix(from.pml, d.pml, e), price: mix(from.price, d.price, e) };
+          lines(shown);
+          if (t < 1) raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      }
+    };
   }
 
   /* ── Dispatch ─────────────────────────────────── */
