@@ -796,6 +796,41 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-nd-btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .cp-pr-cat{display:inline-flex;align-items:center;gap:8px;height:36px;margin-left:auto}
 .cp-pr-cat svg{width:15px;height:15px}
+/* MEM Insights (insights.js) */
+.cp-in-views{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.cp-in-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px 18px;margin-bottom:16px}
+.cp-in-kpi{min-width:0;padding-left:12px;border-left:2px solid var(--border-subtle)}
+.cp-in-kpi .cp-kpi-eyebrow{margin-bottom:6px;font-size:10px}
+.cp-in-kpi-v{font-family:var(--font-mono);font-size:22px;font-weight:500;color:var(--ink-900);display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;line-height:1.15}
+.cp-in-kpi-v small{font-size:11px;color:var(--silver-300);font-weight:400}
+.cp-in-kpi-n{font-size:11px;color:var(--steel-400);margin-top:4px;line-height:1.4}
+.cp-in-fit{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.cp-in-foot{font-size:11px;color:var(--steel-400);line-height:1.5;margin:12px 0 0}
+.cp-in-hour select{height:30px;font-size:12px}
+.cp-widget-head .cp-in-seg{margin-left:auto}
+.cp-in-scroll{max-height:360px;overflow:auto}
+.cp-in-scroll--tall{max-height:480px}
+.cp-in-table th{position:sticky;top:0;background:var(--white);z-index:1;text-align:right;white-space:nowrap}
+.cp-in-table th small,.cp-in-sub{display:block;font-size:9px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--silver-300)}
+.cp-in-table th:first-child,.cp-in-table td:first-child{text-align:left}
+.cp-in-table td{text-align:right;white-space:nowrap;font-family:var(--font-mono);font-size:12px}
+.cp-in-table tr[data-buyer],.cp-in-table tr[data-h]{cursor:pointer}
+.cp-in-table tr.cp-in-on td{background:rgba(200,157,42,.10)}
+.cp-in-neg{color:var(--signal-notice)}
+.cp-in-pos{color:var(--signal-positive)}
+.cp-in-flag{font-weight:600;color:var(--ink-900)}
+.cp-in-dash{background:none!important;border-top:2px dashed var(--ink-900);height:0!important;width:14px!important;margin-top:1px}
+@media (max-width:900px){
+  .cp-in-kpis,.cp-in-fit{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cp-in-views{margin-left:0}
+}
+@media (max-width:600px){
+  .cp-in-kpis,.cp-in-fit{grid-template-columns:1fr}
+  .cp-in-views{flex-wrap:nowrap;overflow-x:auto;width:100%;flex:1 1 100%;grid-column:1 / -1;padding-bottom:4px}
+  .cp-in-views .cp-doc-filter{flex:none;min-height:44px}
+  .cp-in-hour select{height:44px;font-size:16px}
+}
+
 /* Long-term history (history.js) */
 .cp-hi{margin-top:16px;padding:18px 20px}
 .cp-hi-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
@@ -1004,6 +1039,10 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/><circle cx="19" cy="6" r="1.2"/></svg>
         Market Prices
       </button>
+      <button class="cp-nav-item" data-section="insights">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21v-4h3v4"/><path d="M10.5 21v-8h3v8"/><path d="M16 21V9h3v12"/><path d="M4 11l5-5 4 3 7-6"/></svg>
+        MEM Insights
+      </button>
       <button class="cp-nav-item" data-section="contract">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
         My Contract
@@ -1173,6 +1212,19 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
           </div>
         </div>
         <div id="prices-root"></div>
+      </section>
+
+      <!-- ╔══════════════════════════════════════════╗
+           ║  MEM INSIGHTS                            ║
+           ╚══════════════════════════════════════════╝ -->
+      <section id="sec-insights" class="cp-section">
+        <div class="cp-page-head">
+          <div>
+            <h1 class="cp-page-title">MEM Insights</h1>
+            <p class="cp-page-sub">Supply and bids of the wholesale electricity market (MDA and MTR): merit-order curve against the PML energy component, day-ahead vs real-time changes, thermal costs, hydro opportunity costs, purchases and reserves</p>
+          </div>
+        </div>
+        <div id="insights-root"></div>
       </section>
 
       <!-- ╔══════════════════════════════════════════╗
@@ -1609,6 +1661,7 @@ const SECTION_TITLES = {
   dashboard: 'Dashboard',
   intelligence: 'Market Intelligence',
   prices: 'Market Prices',
+  insights: 'MEM Insights',
   assistant: 'Sentinel One',
   sites: 'My Sites',
   contract: 'My Contract',
@@ -1638,6 +1691,7 @@ function goTo(id) {
   if (id === 'assistant') S1.onShow();
   if (id === 'sites') SitesPage.render();
   if (id === 'prices') PricesPage.show();
+  if (id === 'insights') InsightsPage.show();
 }
 
 // Nav button clicks
@@ -1796,6 +1850,7 @@ function filterDocs(btn, type) {
 <script src="nodos.js"></script>
 <script src="history.js"></script>
 <script src="prices.js"></script>
+<script src="insights.js"></script>
 <script src="sentinel-one.js"></script>
 <!-- ═══════════════════════════════════════════════════
      BECOME A CLIENT MODAL

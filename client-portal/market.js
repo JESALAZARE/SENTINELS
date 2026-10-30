@@ -30,10 +30,18 @@ const Market = (() => {
     return r.json();
   }
 
+  // MEM Insights summary of the private offers bucket ('curva/serie_2026_SIN.json'): same contract as file()
+  async function offers(path) {
+    const r = await get('/ofertas/' + path);
+    if (r.status === 404) return null;
+    if (!r.ok) throw await errorOf(r);
+    return r.json();
+  }
+
   async function errorOf(r) {
     const b = await r.json().catch(() => ({}));
     return fail(r.status, b.message || (r.status === 401 ? NO_PASS : 'Market data is not available right now. Please try again later.'));
   }
 
-  return { ready: () => !!pass(), get, file, errorOf };
+  return { ready: () => !!pass(), get, file, offers, errorOf };
 })();
