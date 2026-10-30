@@ -56,12 +56,14 @@ const REPORTES = [
   { mercado: 'MDA', tipo: 'asignacion_participantes', pagina: 'Reportes/ResultadosMDA.aspx', reporte: '348', periodicidad: null, sistemas: TODOS },
   { mercado: 'MDA', tipo: 'carga_asignada_zona', pagina: 'Reportes/ResultadosMDA.aspx', reporte: '350', periodicidad: null, sistemas: TODOS },
   { mercado: 'MDA', tipo: 'intercambios_asignados', pagina: 'Reportes/ResultadosMDA.aspx', reporte: '347', periodicidad: null, sistemas: ['SIN', 'BCA'] },
+  { mercado: 'MDA', tipo: 'precios_reservas', pagina: 'Reportes/PreEnerServConMDA.aspx', reporte: '361,324', periodicidad: 'D', sistemas: TODOS },
   { mercado: 'MTR', tipo: 'termica',       pagina: 'Reportes/OfertasMTR.aspx', reporte: '376,377', periodicidad: 'H', sistemas: TODOS },
   { mercado: 'MTR', tipo: 'hidro',         pagina: 'Reportes/OfertasMTR.aspx', reporte: '378,379', periodicidad: 'H', sistemas: ['SIN'] },
   { mercado: 'MTR', tipo: 'nodespachable', pagina: 'Reportes/OfertasMTR.aspx', reporte: '380',     periodicidad: 'H', sistemas: TODOS },
   { mercado: 'MTR', tipo: 'intermitente',  pagina: 'Reportes/OfertasMTR.aspx', reporte: '381',     periodicidad: 'H', sistemas: TODOS },
   { mercado: 'MTR', tipo: 'gi_generacion', pagina: 'Reportes/OfertasMTR.aspx', reporte: '382',     periodicidad: 'D', sistemas: TODOS },
   { mercado: 'MTR', tipo: 'servicios_conexos', pagina: 'Reportes/ReqServConexosMTR.aspx', reporte: '357', periodicidad: null, sistemas: TODOS },
+  { mercado: 'MTR', tipo: 'precios_reservas', pagina: 'Reportes/PreEnerServConMTR.aspx', reporte: '364,327', periodicidad: 'D', sistemas: TODOS },
 ];
 
 /* ── Columnas por tipo ──────────────────────────────────────────────── */
@@ -111,6 +113,8 @@ const TIPOS = {
     'Cantidad total de energia asignada por Carga Indirectamente Modelada(MWh)', 'Cantidad total de energia asignada (MWh)'] },
   intercambios_asignados: { clave: 'Enlace Internacional', columnas: ['Hora', ...['Comercial', 'Asignada por pago de Energia Inadvertida', 'Asignada por Confiabilidad', 'Asignada al programa de los CIL', 'Total'].map((x) => `Importacion ${x}${x === 'Comercial' || x === 'Total' ? ' Asignada' : ''} (MWh)`),
     ...['Comercial', 'Asignada por cobro de Energia Inadvertida', 'Asignada por Confiabilidad', 'Asignada al programa de los CIL', 'Total'].map((x) => `Exportacion ${x}${x === 'Comercial' || x === 'Total' ? ' Asignada' : ''} (MWh)`)] },
+  // Precio de cada reserva por hora y zona de reserva (formato largo: una fila por tipo de reserva)
+  precios_reservas: { clave: 'Hora', columnas: ['Zona de reserva', 'Tipo de reserva', 'Precio de la reserva ($/MW por hora)'] },
 };
 function reservasReales(reg, rod, r10, sup) {
   const n = (f, c) => Number(f[c]);

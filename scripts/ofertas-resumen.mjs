@@ -20,6 +20,8 @@
 //      tecnología, liquidado); sin ese dato, su capacidad a la mediana de los costos de oportunidad.
 //    - Térmicas encendidas: bloques 1..11 a su costo incremental; ND no entra.
 //    - Intermitentes: pronóstico × % de cada bloque a su costo. Importación con bloques a su precio.
+//    - SIN: el precio es el cruce de la energía más el precio publicado de la reserva suplementaria
+//      (escasez de reservas al anochecer); cada hora guarda las dos partes en "formacion".
 //    resumen/ajuste/<año>.json.gz mide el error contra el PML por sistema, mes y versión.
 //    Aproximación: el MDA real también resuelve arranques, rampas, reservas y la red.
 // 2. Desvío MDA vs MTR (resumen/desvio/…): intermitentes (pronóstico), no despachables
@@ -37,6 +39,7 @@
 
 import { gunzipSync, gzipSync, inflateRawSync } from 'node:zlib';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { bucketR2, carpetaLocal, celdas, hoyMx, INICIO, ESTADO } from './ofertas.mjs';
 
 const SISTEMAS = ['SIN', 'BCA', 'BCS'];
@@ -224,12 +227,18 @@ function bloquesHora(H, t, { precioHidro, hidroReal, conImportacion, encendidas 
 // - ventana: una unidad encendida para la hora más exigente de ±ventana horas sigue encendida.
 // - perdidas: la demanda del MDA suma las pérdidas reales de la hora (balance / retiros − 1).
 // Para probar otros valores sin tocar el código: variables de entorno MODO_MINIMO, MARGEN,
-// RESERVA_MODO, VENTANA y PERDIDAS (aplican a los tres sistemas).
+// RESERVA_MODO, VENTANA, PERDIDAS (aplican a los tres sistemas) y PRECIO_RESERVA_MDA / _MTR (1 o 0).
 // Las reservas solo se aplican al MDA (donde el CENACE las co-optimiza con la energía); la curva
 // del MTR ex post ya cruza contra la generación real y apartarlas la desvía (BCA junio: 31% → 12%).
+// - precio_reserva: el precio es el cruce de la energía sin apartar reserva más el precio publicado de
+//   la reserva suplementaria de ese mercado. El CENACE co-optimiza energía y reservas: cuando la
+//   reserva escasea (sobre todo al anochecer, cuando la hidro ya genera y se va la solar) una unidad
+//   que deja de dar reserva para generar cobra ese costo, y pasa al componente de energía del PML
+//   (SIN mayo–junio 2026, MDA: 65% → 76% de horas dentro de ±10%, H21: 26% → 87%; MTR: error medio
+//   92 → 66 MXN/MWh). En BCA y BCS no mejora.
 const SIN_RESERVA = { minimo: 'compromiso', margen: 0.05, reserva: 'ninguna', ventana: 0 };
 const PARAMETROS = {
-  SIN: { MDA: { minimo: 'compromiso', margen: 0, reserva: 'rodante_ofertada', ventana: 0, perdidas: true }, MTR: SIN_RESERVA },
+  SIN: { MDA: { minimo: 'compromiso', margen: 0, reserva: 'rodante_ofertada', ventana: 0, perdidas: true, precio_reserva: true }, MTR: { ...SIN_RESERVA, precio_reserva: true } },
   BCA: { MDA: { minimo: 'compromiso', margen: 0, reserva: 'rodante_hidro', ventana: 0, perdidas: true }, MTR: SIN_RESERVA },
   BCS: { MDA: SIN_RESERVA, MTR: SIN_RESERVA },
 };
@@ -239,6 +248,7 @@ function parametros(sistema, mercado) {
     minimo: e.MODO_MINIMO || p.minimo, margen: e.MARGEN != null ? Number(e.MARGEN) : p.margen,
     reserva: e.RESERVA_MODO || p.reserva, ventana: e.VENTANA != null ? Number(e.VENTANA) : p.ventana,
     perdidas: e.PERDIDAS != null ? e.PERDIDAS === '1' : !!p.perdidas,
+    precio_reserva: e[`PRECIO_RESERVA_${mercado}`] != null ? e[`PRECIO_RESERVA_${mercado}`] === '1' : !!p.precio_reserva,
   };
 }
 
@@ -267,6 +277,14 @@ const noTermica = (H, t, opciones) => bloquesHora(H, { ...t, termica: null }, { 
 function ofertaHora(H, t, opciones, residual, p) {
   if (p.minimo !== 'compromiso') return bloquesHora(H, t, { ...opciones, minimo: p.minimo });
   return bloquesHora(H, t, { ...opciones, encendidas: encender(t.termica, H, residual, p.margen) });
+}
+
+// Precio = cruce de la energía + precio de la reserva (pi, si el parámetro precio_reserva lo pide);
+// deja las dos partes en formacion para el portal
+function formacion(c, pi) {
+  const f = { energia: c.precio, reserva: pi == null ? null : r2(pi) };
+  if (pi != null && c.precio != null) c.precio = r2(c.precio + pi);
+  return f;
 }
 
 // Residual de cada hora → el mayor de su ventana de ±v horas
@@ -333,6 +351,10 @@ async function curvaDia(a, fecha, sistema, estado) {
   // Reserva rodante (regulación + rodante 10 "Real") que debe estar en unidades encendidas
   const rodante = (sc) => Object.fromEntries((sc || []).map((f) => [f.Hora, num(f['RT Reserva Regulacion (MW)']) + num(f['Reserva Rodante 10 Real'])]));
   const rodMda = rodante(scMda), rodMtr = rodante(scMtr);
+  // Precio publicado de la reserva suplementaria por hora (parámetro precio_reserva)
+  const precioSup = async (mercado) => Object.fromEntries(((await oferta(a, mercado, 'precios_reservas', fecha, sistema)) || [])
+    .filter((f) => f['Tipo de reserva'] === 'Reserva rodante suplementaria').map((f) => [f.Hora, num(f['Precio de la reserva ($/MW por hora)'])]));
+  const [piMda, piMtr] = await Promise.all([precioSup('MDA'), precioSup('MTR')]);
 
   // Demanda real: la liquidación más reciente del día (balance trae también la generación del sistema)
   const ultimaLiq = (metodo) => (estado.reportes[`demanda_real|${metodo}`] || []).filter((k) => k.startsWith(fecha + '_L')).sort((x, y) => Number(x.split('_L')[1]) - Number(y.split('_L')[1])).at(-1);
@@ -406,13 +428,17 @@ async function curvaDia(a, fecha, sistema, estado) {
   for (const [i, { h, H, g, hidroReal, expFija, d0, demandaA, genSis, opMda, opMtr, resvMda, resvMtr, perdidas }] of ctx.entries()) {
     // La reserva apartada y las pérdidas se suman a la demanda que cruza con la energía
     const conReserva = (precio) => demandaA(precio) + perdidas + resvMda.apartar;
-    const cMda = cruzar(ofertaHora(H, mda, opMda, vMda[i], parMda), conReserva);
+    // Con precio_reserva la reserva no se aparta de la energía: su costo llega con el precio de la reserva
+    const cMda = cruzar(ofertaHora(H, mda, opMda, vMda[i], parMda), parMda.precio_reserva ? (p) => demandaA(p) + perdidas : conReserva);
+    const fMda = formacion(cMda, parMda.precio_reserva ? piMda[H] : null);
     // Versión anterior (hidro con la mediana del costo de oportunidad), solo para comparar
     const cMed = sistema === 'SIN' ? cruzar(ofertaHora(H, mda, { precioHidro: medianaCO, conImportacion: true }, vMed[i], parMda), conReserva) : cMda;
-    const cMtr = genSis == null ? null : cruzar(ofertaHora(H, mtr, opMtr, vMtr[i], parMtr), () => genSis + resvMtr.apartar);
+    const cMtr = genSis == null ? null : cruzar(ofertaHora(H, mtr, opMtr, vMtr[i], parMtr), () => genSis + (parMtr.precio_reserva ? 0 : resvMtr.apartar));
+    const fMtr = cMtr && formacion(cMtr, parMtr.precio_reserva ? piMtr[H] : null);
 
     const bal = real.balance.demanda[H], ret = real.retiros.demanda[H];
-    const { demanda: dConReserva, ...mdaResto } = cMda, demanda = dConReserva - resvMda.apartar - perdidas;
+    const apartada = parMda.precio_reserva ? 0 : resvMda.apartar;
+    const { demanda: dCruce, ...mdaResto } = cMda, demanda = dCruce - apartada - perdidas;
     out.push({
       hora: h,
       demanda: { compras: r1(compras[H] || 0), gi: r1(gi[H] || 0), exportacion_fija: r1(expFija), exportacion_bloques: r1(demanda - d0), total: r1(demanda) },
@@ -423,9 +449,10 @@ async function curvaDia(a, fecha, sistema, estado) {
       },
       pml: { energia_mda: pMda[H] ? num(pMda[H].Energia) : null, energia_mtr: pMtr[H] ? num(pMtr[H].Energia) : null, pml_mda: pMda[H] ? num(pMda[H].PML) : null },
       ...mdaResto,
+      formacion: fMda,
       precio_hidro_mediana: cMed.precio,
-      reserva: { rodante_mda: r1(resvMda.rodante), apartada_mda: r1(resvMda.apartar), rodante_mtr: r1(resvMtr.rodante), apartada_mtr: r1(resvMtr.apartar) },
-      mtr: cMtr && (({ demanda: _d, ...r }) => r)(cMtr),
+      reserva: { rodante_mda: r1(resvMda.rodante), apartada_mda: r1(apartada), rodante_mtr: r1(resvMtr.rodante), apartada_mtr: r1(parMtr.precio_reserva ? 0 : resvMtr.apartar) },
+      mtr: cMtr && { ...(({ demanda: _d, ...r }) => r)(cMtr), formacion: fMtr },
     });
   }
   return {
@@ -620,7 +647,7 @@ function salidaParticipacion(ac, sistema, anio) {
 }
 
 /* ── Ajuste del modelo: precio estimado contra el componente de energía del PML ─ */
-const VERSION_CURVA = 6;  // súbela al cambiar el método de la curva: se recalcula todo
+const VERSION_CURVA = 7;  // súbela al cambiar el método de la curva: se recalcula todo
 
 // Qué datos tenía el cálculo de un día; si cambian (liquidación nueva), se recalcula
 function firma(estado, fecha, sistema) {
@@ -790,4 +817,7 @@ async function main() {
   if (errores) process.exitCode = 1;
 }
 
-main();
+// Importable para pruebas del modelo (scripts que llaman curvaDia con otros parámetros)
+export async function prepararCatalogos(a) { PART = await cargarParticipantes(a); REG = await registroPlantas(a); return PART; }
+export { curvaDia, tabla, oferta, leerXlsx };
+if (import.meta.url === pathToFileURL(process.argv[1]).href) main();
