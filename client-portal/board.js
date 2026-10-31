@@ -438,8 +438,8 @@ const Board = (() => {
     });
   }
 
-  function barChart(body, { labels, values, color, fmt, axis, total }) {
-    const { plot, tip } = chartShell(body, { labels });
+  function barChart(body, { labels, values, color, fmt, axis, total, ranges = true }) {
+    const { plot, tip } = chartShell(body, { labels, ranges });
     let range = 0;
     const H = 210, pL = 52, pR = 12, pT = 12, pB = 26;
     if (total) body.querySelector('.cp-ch-bar').insertAdjacentHTML('afterbegin', '<div class="cp-ch-total"></div>');

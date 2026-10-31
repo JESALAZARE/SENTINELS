@@ -34,7 +34,7 @@ const InsightsPage = (() => {
     ['Fotovoltaica', 'Solar', '#C89D2A'], ['Biomasa', 'Biomass', '#8A9A3A'], ['Ciclo Combinado', 'Combined cycle', '#2F5D8A'], ['Carboelectrica', 'Coal', '#0B0D0F'],
     ['Termica Convencional', 'Conventional thermal', '#646C75'], ['Turbo Gas', 'Gas turbine', '#B5562F'], ['Combustion Interna', 'Internal combustion', '#9B3B2E']];
   const SEGMENT = { C: 'Qualified supplier', U: 'Qualified user', G: 'Generator', I: 'Legacy contracts' };
-  const VIEWS = [['overview', 'Overview'], ['share', 'Market share'], ['price', 'Price formation'], ['dispatch', 'Dispatch'], ['costs', 'Thermal costs'], ['hydro', 'Hydro'], ['reserves', 'Reserves']];
+  const VIEWS = [['overview', 'Overview'], ['share', 'Market share'], ['price', 'Price formation'], ['dispatch', 'Dispatch'], ['costs', 'Thermal costs'], ['hydro', 'Hydro'], ['reserves', 'Reserves'], ['critical', 'Critical hours']];
   const DAY_VIEWS = ['price', 'dispatch', 'reserves'];
   const DEV = { intermitente: 'Wind / solar', nodespachable: 'Must-run & non-dispatchable', termica: 'Thermal capacity', hidro: 'Hydro capacity' };
   const RES = { rod10: 'Spinning 10 min', nr10: 'Non-spinning 10 min', rsup: 'Spinning supplemental', nrsup: 'Non-spinning supplemental', reg: 'Regulation' };
@@ -153,7 +153,7 @@ const InsightsPage = (() => {
     host.innerHTML = '<div class="cp-card cp-pr-msg">Loading…</div>';
     try {
       serie = serie || await get(`curva/serie_${S.year}_${S.sys}.json`);
-      const html = await ({ overview, share, price, dispatch, costs, hydro, reserves })[S.view](host, serie);
+      const html = await ({ overview, share, price, dispatch, costs, hydro, reserves, critical })[S.view](host, serie);
       if (my !== seq || !box.isConnected) return;
       if (html) host.innerHTML = html;
     } catch (e) {
@@ -620,6 +620,85 @@ const InsightsPage = (() => {
         return `<tr><td>${esc(u.empresa)}<small class="cp-in-sub">${u.tipo === 'hidro' ? 'Hydro' : 'Thermal'} · ${esc(u.unidad)}</small></td><td>${esc(st(x.estatus[0]))}${x.estatus[0] !== x.estatus[1] ? ' → ' + esc(st(x.estatus[1])) : ''}</td>
         <td class="${dm < 0 ? 'cp-in-neg' : dm > 0 ? 'cp-in-pos' : ''}">${fx(x.max[0], 1)} → ${fx(x.max[1], 1)}</td><td>${fx(x.min[0], 1)} → ${fx(x.min[1], 1)}</td><td>${fx(ro(0), 1)} → ${fx(ro(1), 1)}</td></tr>`; }).join('')}
       </tbody></table></div>` : '<div class="cp-widget-empty">No unit changed between day ahead and real time in this hour.</div>';
+    return null;
+  }
+
+  /* ── Critical hours ───────────────────────────── */
+  // Operating reserve of the SIN by hour (available capacity in real time − real generation) and the 100
+  // hours with the least reserve inside the year's calculation window. Grid Code states for the SIN:
+  // Normal ≥ 6 %, Alert 3–6 %, Emergency < 3 % of demand; spinning reserve must be at least half of it.
+  const STATE = p => p == null ? ['—', ''] : p >= 6 ? ['Normal', 'cp-in-st--n'] : p >= 3 ? ['Alert', 'cp-in-st--a'] : ['Emergency', 'cp-in-st--e'];
+  const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const weekday = f => (new Date(f + 'T12:00:00Z').getUTCDay() + 6) % 7;
+  async function critical(host) {
+    if (S.sys !== 'SIN') return msg('Critical hours are defined for the National Interconnected System (SIN).');
+    const d = await get(`criticas/serie_${S.year}_SIN.json`);
+    if (!d || !Object.keys(d.dias).length) return msg('There is no operating-reserve information for this year yet.');
+    const c = Object.fromEntries(d.columnas.map((k, i) => [k, i])), w = d.ventana;
+    const all = Object.entries(d.dias).flatMap(([f, hs]) => hs.map(r => ({ f, h: r[c.hora], ro: r[c.reserva_operativa_mw], pct: r[c.reserva_operativa_pct], dem: r[c.demanda_mw], cap: r[c.capacidad_mw], gen: r[c.generacion_mw],
+      ter: r[c.cap_termica_mw], hid: r[c.cap_hidro_mw], int: r[c.cap_intermitente_mw], nd: r[c.cap_nodespachable_gi_mw], rr: r[c.reserva_rodante_ofrecida_mw], rnr: r[c.reserva_no_rodante_ofrecida_mw] })))
+      .filter(x => x.ro != null).sort((a, b) => a.f.localeCompare(b.f) || a.h - b.h);
+    const win = w ? all.filter(x => x.f >= w.desde && x.f <= w.hasta) : all;
+    if (!win.length) return msg(`There is no operating-reserve information inside the ${S.year} critical-hours window yet.`);
+    const top = [...win].sort((a, b) => a.ro - b.ro).slice(0, 100), rank = new Map(top.map((x, i) => [x, i + 1]));
+    const winDays = w ? Math.round((new Date(w.hasta) - new Date(w.desde)) / 864e5) + 1 : null, haveDays = new Set(win.map(x => x.f)).size;
+    const today = new Date().toISOString().slice(0, 10), final = w && today > w.hasta && haveDays >= winDays;
+    const cnt = (xs, key, n) => { const a = Array(n).fill(0); xs.forEach(x => a[key(x)]++); return a; };
+    const alerts = win.filter(x => x.pct < 6 && x.pct >= 3).length, emerg = win.filter(x => x.pct < 3).length;
+    const spin = mean(top.map(x => x.rr + x.rnr ? (100 * x.rr) / (x.rr + x.rnr) : null));
+    const months = [...new Set(win.map(x => x.f.slice(0, 7)))];
+    host.innerHTML = `
+      ${w ? `<div class="cp-card cp-in-window">
+        <span class="cp-in-window-tag">Critical-hours window ${S.year}</span>
+        <div class="cp-in-window-dates">${esc(long(w.desde))} – ${esc(long(w.hasta))}</div>
+        <div class="cp-in-window-note">From the first (${esc(long(w.base.primera))}) and last (${esc(long(w.base.ultima))}) critical hours of ${w.base.anio}, ${w.dias_margen} days before and after, as the Capacity Balance Market Manual sets the calculation days.</div>
+        <span class="cp-in-st ${final ? 'cp-in-st--n' : 'cp-in-st--a'}">${final ? 'Final' : 'Provisional'} · ${haveDays} of ${winDays} days with data</span>
+      </div>` : ''}
+      <div class="cp-card cp-in-kpis">
+        ${kpi('Tightest hour', fx(top[0].ro), 'MW', esc(`${long(top[0].f)} · H${top[0].h} · ${fx(top[0].pct, 1)}% of demand · ${STATE(top[0].pct)[0]}`))}
+        ${kpi('100th critical hour', fx(top.at(-1).ro), 'MW', 'Least operating reserve that still enters the 100')}
+        ${kpi('Hours in Alert / Emergency', `${alerts} / ${emerg}`, '', esc(`Of ${fx(win.length)} hours in the window (Normal ≥ 6% of demand)`))}
+        ${kpi('Spinning share of offered reserve', fx(spin, 1), '%', 'Average over the 100 hours · Grid Code: spinning ≥ 50%')}
+      </div>
+      <div class="cp-board cp-pr-board">
+        ${widget('in-cr-top', `The ${top.length} critical hours · least operating reserve`, 'cp-w-l')}
+        ${widget('in-cr-hour', 'Frequency by hour of day', 'cp-w-m')}
+        ${widget('in-cr-wd', 'Frequency by day of week', 'cp-w-m')}
+        ${widget('in-cr-heat', 'Hour × day of week', 'cp-w-l')}
+        ${widget('in-cr-month', 'Frequency by month', 'cp-w-m')}
+        ${widget('in-cr-dist', 'Operating reserve of the 100 hours', 'cp-w-m')}
+        ${widget('in-cr-daily', `Daily minimum operating reserve · ${S.year}`, 'cp-w-l')}
+        ${widget('in-cr-mix', 'Average capacity at the critical hours', 'cp-w-l')}
+      </div>
+      <p class="cp-in-foot">Operating reserve = available capacity in real time (thermal and hydro units not declared unavailable, wind and solar forecast, must-run and legacy contracts, the must-run offer counted at 43%) minus real generation of the SIN; % of real demand. Calibrated against the published 2025 critical hours: 90 of the 100 match and the average gap is about 370 MW. Operating states follow the Grid Code for the SIN: Normal ≥ 6%, Alert 3–6%, Emergency &lt; 3%; at least half of the operating reserve must be spinning, shown here with the spinning share of the reserve offered by the units. Critical hours are the 100 hours with the least operating reserve inside the window. Sentinels estimate; it may differ from the official calculation.</p>`;
+    const pctTxt = x => `${fx(x.pct, 1)}%`;
+    body(host, 'in-cr-top').innerHTML = `<div class="cp-pr-scroll cp-in-scroll cp-in-scroll--tall"><table class="cp-mini-table cp-in-table"><thead><tr><th>#</th><th class="cp-in-name">Day</th><th>Hour</th><th>Operating reserve<small>MW</small></th><th>% of demand</th><th class="cp-in-name">State</th><th>Demand<small>MW</small></th><th>Available capacity<small>MW</small></th><th>Spinning share<small>offered</small></th></tr></thead><tbody>
+      ${top.map((x, i) => { const [st, cls] = STATE(x.pct); return `<tr><td>${i + 1}</td><td class="cp-in-name">${esc(long(x.f))}<small class="cp-in-sub">${WEEK[weekday(x.f)]}</small></td><td>H${x.h}</td><td>${fx(x.ro)}</td><td>${pctTxt(x)}</td>
+        <td class="cp-in-name"><span class="cp-in-st ${cls}">${st}</span></td><td>${fx(x.dem)}</td><td>${fx(x.cap)}</td><td>${x.rr + x.rnr ? fx((100 * x.rr) / (x.rr + x.rnr), 0) + '%' : '—'}</td></tr>`; }).join('')}
+      </tbody></table></div>`;
+    const n = v => fx(v) + ' hours';
+    Board.charts.barChart(body(host, 'in-cr-hour'), { ranges: false, labels: Array.from({ length: 24 }, (_, i) => 'H' + (i + 1)), values: cnt(top, x => x.h - 1, 24), color: C.gold, fmt: n, axis: v => fx(v) });
+    Board.charts.barChart(body(host, 'in-cr-wd'), { ranges: false, labels: WEEK, values: cnt(top, x => weekday(x.f), 7), color: C.blue, fmt: n, axis: v => fx(v) });
+    Board.charts.barChart(body(host, 'in-cr-month'), { ranges: false, labels: months.map(monthName), values: months.map(m => top.filter(x => x.f.startsWith(m)).length), color: C.green, fmt: n, axis: v => fx(v) });
+    const bins = [[0, 3000], [3000, 4000], [4000, 5000], [5000, 6000], [6000, 7000], [7000, 8000], [8000, Infinity]];
+    Board.charts.barChart(body(host, 'in-cr-dist'), { ranges: false, labels: bins.map(([a, b]) => b === Infinity ? `${fx(a / 1000)}k+` : `${fx(a / 1000)}–${fx(b / 1000)}k`), values: bins.map(([a, b]) => top.filter(x => x.ro >= a && x.ro < b).length), color: C.steel, fmt: n, axis: v => fx(v) });
+    // Heat map: how many of the 100 hours fall on each hour × weekday
+    const grid = WEEK.map((_, wd) => Array.from({ length: 24 }, (_, h) => top.filter(x => weekday(x.f) === wd && x.h === h + 1).length)), mx = Math.max(1, ...grid.flat());
+    body(host, 'in-cr-heat').innerHTML = `<div class="cp-pr-scroll"><table class="cp-in-heat"><thead><tr><th></th>${Array.from({ length: 24 }, (_, h) => `<th>${h + 1}</th>`).join('')}</tr></thead><tbody>
+      ${grid.map((r, wd) => `<tr><th>${WEEK[wd]}</th>${r.map((v, h) => `<td style="background:rgba(200,157,42,${v ? (0.15 + 0.85 * v / mx).toFixed(2) : 0})" title="${WEEK[wd]} · H${h + 1}: ${v} hours">${v || ''}</td>`).join('')}</tr>`).join('')}
+      </tbody></table></div>`;
+    // On narrow screens the heat map scrolls inside its box: start at the evening, where the critical hours are
+    const heat = body(host, 'in-cr-heat').querySelector('.cp-pr-scroll'); heat.scrollLeft = heat.scrollWidth;
+    const days = [...new Set(all.map(x => x.f))], minOf = f => all.filter(x => x.f === f).reduce((m, x) => (!m || x.ro < m.ro ? x : m), null);
+    const mins = days.map(minOf);
+    Board.charts.lineChart(body(host, 'in-cr-daily'), { labels: days.map(short), series: [
+      { name: 'Daily minimum operating reserve', color: C.ink, values: mins.map(x => x.ro) },
+      { name: 'Alert below (6% of demand)', color: C.gold, values: mins.map(x => x.dem ? 0.06 * x.dem : null) },
+      { name: 'Emergency below (3%)', color: C.red, values: mins.map(x => x.dem ? 0.03 * x.dem : null) },
+      { name: '100th critical hour', color: C.steel, values: mins.map(() => top.at(-1).ro) }],
+    fmt: v => fx(v) + ' MW', axis: v => fx(v / 1000, 1) + 'k', band: false, ranges: [[30, '30D'], [90, '90D']] });
+    const avg = k => mean(top.map(x => x[k]));
+    Board.charts.barChart(body(host, 'in-cr-mix'), { ranges: false, labels: ['Thermal', 'Hydro', 'Wind / solar', 'Must-run & legacy', 'Real generation', 'Operating reserve'], values: [avg('ter'), avg('hid'), avg('int'), avg('nd'), avg('gen'), avg('ro')], color: C.blue, fmt: v => fx(v) + ' MW', axis: v => fx(v / 1000) + 'k' });
     return null;
   }
 

@@ -584,6 +584,55 @@ async function reservasDia(a, fecha, sistema) {
   return { fecha, sistema, horas, unidades };
 }
 
+/* ── 7. Reserva operativa del SIN (horas críticas) ───────────────────────
+   Por hora, con las ofertas del MTR y la operación real: capacidad disponible = límite máximo de
+   térmicas e hidro no indisponibles (ND) + pronóstico de intermitentes + no despachables + generación
+   GI; reserva operativa (RO) = capacidad disponible − generación real del SIN; RO % sobre la demanda
+   real por balance. Estado operativo según el Código de Red (SIN: Normal ≥ 6 %, Alerta 3–6 %,
+   Emergencia < 3 %). La parte rodante (RR ≥ 50 % de la RO) se aproxima con la reserva rodante que
+   ofrecen las unidades (10 min + suplementaria) frente a la no rodante. El portal ordena las horas y
+   toma las 100 de menor RO dentro de la ventana de cálculo del Manual del Balance de Potencia. */
+// Ventana de cálculo de las horas críticas de un año (Manual del Balance de Potencia, 3.2.2): primer día =
+// día de la primera hora crítica del año anterior − 14 días; último día = día de la última + 14 días,
+// llevados al año de producción y acotados al 1 de enero y al 31 de diciembre. Base: horas críticas
+// publicadas del año anterior.
+// Calibración contra las 100 horas críticas oficiales de 2025 (abr–jun 2025, MTR): la RO con toda la oferta
+// no despachable sale ~2,000 MW arriba del valor oficial; contando esa oferta al 43 % el error medio baja a
+// ~370 MW (validación cruzada abr–may → jun: 275 MW), 90 de las 100 horas coinciden y la ventana estimada
+// (1 abr – 18 jun) queda a un día de la oficial. Al cambiar la fórmula, subir VERSION_RO para recalcular.
+const FACTOR_NODESPACHABLE = 0.43, VERSION_RO = 2;
+const HORAS_CRITICAS_PUBLICADAS = { 2025: { primera: '2025-04-02', ultima: '2025-06-19' } };
+function ventanaCriticas(anio) {
+  const base = HORAS_CRITICAS_PUBLICADAS[anio - 1];
+  if (!base) return null;
+  const mover = (d, dias) => { const x = new Date(`${anio}${d.slice(4)}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + dias); return x.toISOString().slice(0, 10); };
+  const desde = mover(base.primera, -14), hasta = mover(base.ultima, 14);
+  return { desde: desde < `${anio}-01-01` ? `${anio}-01-01` : desde, hasta: hasta > `${anio}-12-31` ? `${anio}-12-31` : hasta, base: { anio: anio - 1, ...base }, dias_margen: 14 };
+}
+
+async function reservaOperativaDia(a, fecha, estado) {
+  const sistema = 'SIN', anio = fecha.slice(0, 4);
+  const [termica, hidro, intermit, nodesp, giGen] = await Promise.all(['termica', 'hidro', 'intermitente', 'nodespachable', 'gi_generacion'].map((t) => oferta(a, 'MTR', t, fecha, sistema)));
+  const ultimaLiq = (metodo) => (estado.reportes[`demanda_real|${metodo}`] || []).filter((k) => k.startsWith(fecha + '_L')).sort((x, y) => Number(x.split('_L')[1]) - Number(y.split('_L')[1])).at(-1);
+  const kBal = ultimaLiq('balance'), bal = kBal ? await tabla(a, `demanda_real/balance/${anio}/${kBal}.csv.gz`) : null;
+  const genH = porHora(bal, 'Generacion (MWh)', (f) => f.Sistema === sistema), demH = porHora(bal, 'Estimacion de Demanda por Balance (MWh)', (f) => f.Sistema === sistema);
+  const disp = (f) => f['Estatus asignacion'] !== 'ND';
+  const suma = (filas, H, valor, filtro = () => true) => (filas || []).reduce((s, f) => s + (f.Hora === H && filtro(f) ? valor(f) : 0), 0);
+  const rod = ['Reserva rodante 10 min (MW)', 'Reserva rodante suplementaria (MW)'], noRod = ['Reserva no rodante 10 min (MW)', 'Reserva no rodante suplementaria (MW)'];
+  const horas = [...new Set((termica || []).map((f) => f.Hora))].map(Number).sort((x, y) => x - y);
+  return horas.map((h) => {
+    const H = String(h), gen = genH[H], dem = demH[H];
+    const capTer = suma(termica, H, (f) => num(f['Limite de despacho maximo (MW)']), disp), capHid = suma(hidro, H, (f) => num(f['Limite de despacho maximo (MW)']), disp);
+    const capInt = suma(intermit, H, (f) => num(f['Pronostico en MW'])), capND = suma(nodesp, H, (f) => num(f['Potencia media (MW)'])), capGI = suma(giGen, H, (f) => num(f['Potencia Media (MW)']));
+    const cap = capTer + capHid + capInt + FACTOR_NODESPACHABLE * capND + capGI;
+    const rr = [termica, hidro].reduce((s, t) => s + suma(t, H, (f) => rod.reduce((x, c) => x + num(f[c]), 0), disp), 0);
+    const rnr = [termica, hidro].reduce((s, t) => s + suma(t, H, (f) => noRod.reduce((x, c) => x + num(f[c]), 0), disp), 0);
+    const ro = gen == null ? null : cap - gen;
+    return [h, r1(cap), gen == null ? null : r1(gen), dem == null ? null : r1(dem), ro == null ? null : r1(ro), ro == null || !dem ? null : r2((100 * ro) / dem),
+      r1(capTer), r1(capHid), r1(capInt), r1(FACTOR_NODESPACHABLE * capND + capGI), r1(rr), r1(rnr)];
+  });
+}
+
 /* ── 5. Participación de mercado ──────────────────────────────────────────
    Suministro: solo suministradores calificados (C) y usuarios calificados (U); sin suministro
    básico ni generadores. Se mide con la energía de sus compras del MDA, por mes, zona de carga y
@@ -762,6 +811,23 @@ async function main() {
       if (n) await escribirJson(almacen, kRes, resv);
       console.log(`Reservas ${sistema} ${anio}: ${n} días nuevos`);
 
+      // 7. Reserva operativa del SIN por hora (horas críticas del Balance de Potencia); un día se
+      // recalcula cuando llega una liquidación nueva de la demanda real
+      if (sistema === 'SIN') {
+        const kRO = `resumen/criticas/serie_${anio}_${sistema}.json.gz`;
+        const ro = await serieDe(kRO, { sistema, anio, version: VERSION_RO, dias: {}, firmas: {} });
+        if (ro.version !== VERSION_RO) Object.assign(ro, { version: VERSION_RO, dias: {}, firmas: {} });
+        ro.columnas = ['hora', 'capacidad_mw', 'generacion_mw', 'demanda_mw', 'reserva_operativa_mw', 'reserva_operativa_pct',
+          'cap_termica_mw', 'cap_hidro_mw', 'cap_intermitente_mw', 'cap_nodespachable_gi_mw', 'reserva_rodante_ofrecida_mw', 'reserva_no_rodante_ofrecida_mw'];
+        ro.ventana = ventanaCriticas(Number(anio));
+        n = 0;
+        for (const fecha of delAnio(conMtr).filter((d) => tiene(`MTR|hidro|${sistema}`).has(d) && ro.firmas?.[d] !== firma(estado, d, sistema))) {
+          try { ro.dias[fecha] = await reservaOperativaDia(almacen, fecha, estado); (ro.firmas ??= {})[fecha] = firma(estado, fecha, sistema); n++; } catch (e) { errores++; console.log(`Reserva operativa ${fecha}: ERROR ${e.message}`); }
+        }
+        if (n || !(await almacen.leer(kRO))) await escribirJson(almacen, kRO, ro);
+        console.log(`Reserva operativa ${sistema} ${anio}: ${n} días calculados (${Object.keys(ro.dias).length} en total)`);
+      }
+
       // 3. Costos térmicos por empresa y planta, MDA y MTR
       for (const mercado of ['MDA', 'MTR']) {
         const kCos = `resumen/costos/${anio}_${sistema}_${mercado}.json.gz`;
@@ -819,5 +885,5 @@ async function main() {
 
 // Importable para pruebas del modelo (scripts que llaman curvaDia con otros parámetros)
 export async function prepararCatalogos(a) { PART = await cargarParticipantes(a); REG = await registroPlantas(a); return PART; }
-export { curvaDia, tabla, oferta, leerXlsx };
+export { curvaDia, tabla, oferta, leerXlsx, reservaOperativaDia, ventanaCriticas };
 if (import.meta.url === pathToFileURL(process.argv[1]).href) main();
