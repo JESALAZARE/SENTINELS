@@ -867,6 +867,20 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-in-zone{display:grid;gap:14px}
 .cp-in-zone-k{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .cp-in-bar .cp-pr-row{align-items:flex-end}
+/* Critical hours (insights.js critical): window label, operating states, hour × weekday heat map */
+.cp-in-window{display:grid;grid-template-columns:1fr auto;gap:4px 16px;align-items:center;padding:14px 18px;margin-bottom:16px;border-left:3px solid var(--metal-gold)}
+.cp-in-window-tag{grid-column:1 / -1;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--steel-400)}
+.cp-in-window-dates{font-family:var(--font-mono);font-size:18px;font-weight:600;color:var(--ink-900)}
+.cp-in-window-note{grid-column:1;font-size:12px;line-height:1.5;color:var(--graphite-500)}
+.cp-in-window .cp-in-st{grid-column:2;grid-row:2 / span 2;justify-self:end}
+.cp-in-st{display:inline-block;padding:2px 9px;border-radius:999px;font-family:var(--font-sans);font-size:11px;font-weight:600;white-space:nowrap;background:var(--mist-100,#F2F2F2);color:var(--ink-900)}
+.cp-in-st--n{background:rgba(62,107,83,.14);color:#2C5240}
+.cp-in-st--a{background:rgba(200,157,42,.18);color:#7A5C10}
+.cp-in-st--e{background:rgba(155,59,46,.16);color:#7E2E23}
+.cp-in-heat{border-collapse:separate;border-spacing:2px;font-family:var(--font-mono);font-size:10px;min-width:640px;width:100%}
+.cp-in-heat th{font-weight:500;color:var(--steel-400);padding:2px 4px;text-align:center}
+.cp-in-heat tbody th{text-align:left;padding-right:6px}
+.cp-in-heat td{height:24px;text-align:center;border-radius:3px;color:var(--ink-900);background-clip:padding-box;outline:1px solid var(--border-subtle)}
 /* Day slider under the bar (insights.js daySlider): ‹ track with month marks › and the chosen day */
 .cp-in-days{display:flex;align-items:center;gap:12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border-subtle)}
 .cp-in-step{flex:none;width:32px;height:32px;padding:0;border-radius:50%;border:1px solid var(--border-default);background:var(--white);color:var(--ink-900);display:grid;place-items:center;cursor:pointer;transition:border-color 150ms,background 150ms,color 150ms}
@@ -892,6 +906,9 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
   .cp-in-play{width:44px;height:44px}
   .cp-in-sl input[type=range]{height:44px}
   .cp-in-sl-ticks span:not(.cp-in-sl-major):not(.on){visibility:hidden}
+  .cp-in-window{grid-template-columns:1fr}
+  .cp-in-window .cp-in-st{grid-column:1;grid-row:auto;justify-self:start}
+  .cp-in-window-dates{font-size:16px}
   .cp-in-days{flex-wrap:wrap;gap:6px 10px}
   .cp-in-days-v{order:-1;flex:1 1 100%;min-width:0;text-align:left;font-size:15px}
   .cp-in-step{width:44px;height:44px}
