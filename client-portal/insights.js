@@ -62,6 +62,19 @@ const InsightsPage = (() => {
   const monthName = m => new Date(m + '-15T12:00:00Z').toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
   const mean = a => { const v = a.filter(x => x != null && isFinite(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
   const hourSel = (hrs) => `<label class="cp-pr-f cp-in-hour"><select id="in-hour" aria-label="Hour">${hrs.map(x => `<option value="${x}" ${x === S.hora ? 'selected' : ''}>H${x}</option>`).join('')}</select></label>`;
+  // Day slider of the bar: one step per day with data, a mark at the first day of each month
+  const daySlider = (days) => {
+    const i = Math.max(0, days.indexOf(S.fecha)), last = days.length - 1, cur = S.fecha.slice(0, 7);
+    const arrow = d => `<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    const marks = days.map((f, j) => [f, j]).filter(([f, j]) => j === 0 || f.slice(0, 7) !== days[j - 1].slice(0, 7));
+    return `<div class="cp-in-days" role="group" aria-label="Operating day">
+      <button type="button" class="cp-in-step" data-step="-1" aria-label="Previous day" ${i === 0 ? 'disabled' : ''}>${arrow('M10 3 5 8l5 5')}</button>
+      <div class="cp-in-days-sl"><input type="range" id="in-day" min="0" max="${last}" step="1" value="${i}" aria-label="Operating day" aria-valuetext="${esc(long(S.fecha))}">
+        <div class="cp-in-days-ticks" aria-hidden="true">${marks.map(([f, j]) => `<span class="${f.slice(0, 7) === cur ? 'on' : ''}" data-m="${f.slice(0, 7)}" style="left:calc(8px + (100% - 16px) * ${last ? j / last : 0})">${esc(monthName(f.slice(0, 7)).split(' ')[0])}</span>`).join('')}</div></div>
+      <button type="button" class="cp-in-step" data-step="1" aria-label="Next day" ${i === last ? 'disabled' : ''}>${arrow('M6 3l5 5-5 5')}</button>
+      <div class="cp-in-days-v" aria-live="polite">${esc(long(S.fecha))}</div>
+    </div>`;
+  };
   // Small trend line for tables
   const spark = (vals, color) => {
     const v = vals.filter(x => x != null); if (v.length < 2) return '';
@@ -97,12 +110,33 @@ const InsightsPage = (() => {
           ${day ? `<label class="cp-pr-f"><span>Operating day</span><input type="date" id="in-date" value="${S.fecha || ''}" min="${days[0] || ''}" max="${days.at(-1) || ''}"></label>` : ''}
           <div class="cp-in-views" role="tablist">${VIEWS.map(([v, t]) => `<button class="cp-doc-filter ${v === S.view ? 'active' : ''}" data-view="${v}" role="tab" aria-selected="${v === S.view}">${t}</button>`).join('')}</div>
         </div>
+        ${day && days.length > 1 ? daySlider(days) : ''}
       </div>
       <div id="in-view"></div>
       <p class="cp-in-sign">Sentinels analytics${days.length ? ` · Data through ${esc(long(days.at(-1)))}` : ''}. Estimates from Sentinels market models; for information purposes only.</p>`;
     host.querySelector('#in-sys').onchange = e => { S.sys = e.target.value; S.company = S.plant = S.zone = S.focus = ''; render(); };
-    const dateIn = host.querySelector('#in-date');
-    if (dateIn) dateIn.onchange = e => { if (days.includes(e.target.value)) { S.fecha = e.target.value; view(); } else e.target.value = S.fecha; };
+    const dateIn = host.querySelector('#in-date'), daySl = host.querySelector('#in-day');
+    // The date field and the day slider move together; the section reloads once the slider rests (250 ms)
+    let dayTimer = 0;
+    const showDay = i => {
+      if (!daySl) return;
+      const f = days[i], box = daySl.closest('.cp-in-days');
+      daySl.value = i; daySl.setAttribute('aria-valuetext', long(f));
+      box.querySelector('.cp-in-days-v').textContent = long(f);
+      box.querySelectorAll('.cp-in-step').forEach(b => { b.disabled = +b.dataset.step < 0 ? i === 0 : i === days.length - 1; });
+      box.querySelectorAll('.cp-in-days-ticks span').forEach(s => s.classList.toggle('on', s.dataset.m === f.slice(0, 7)));
+      if (dateIn) dateIn.value = f;
+    };
+    const pickDay = (i, wait) => {
+      i = Math.max(0, Math.min(days.length - 1, i)); showDay(i);
+      clearTimeout(dayTimer);
+      dayTimer = setTimeout(() => { if (days[i] !== S.fecha) { S.fecha = days[i]; view(); } }, wait);
+    };
+    if (dateIn) dateIn.onchange = e => { if (days.includes(e.target.value)) { S.fecha = e.target.value; showDay(days.indexOf(S.fecha)); view(); } else e.target.value = S.fecha; };
+    if (daySl) {
+      daySl.oninput = () => pickDay(+daySl.value, 250);
+      host.querySelectorAll('.cp-in-step').forEach(b => b.onclick = () => pickDay(+daySl.value + +b.dataset.step, 250));
+    }
     host.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { S.view = b.dataset.view; render(); });
     if (err) { host.querySelector('#in-view').innerHTML = msg(err.message || 'MEM Insights is not available right now.'); return; }
     if (!serie) { host.querySelector('#in-view').innerHTML = msg('There is no information for this system yet.'); return; }
@@ -110,16 +144,20 @@ const InsightsPage = (() => {
   }
 
   // Renders the current section below the bar; segmented buttons change S and re-render it
+  // Each call draws into its own box: when a newer call (e.g. the day slider) replaces it, a slower older one only
+  // writes into its detached box and never over the current section.
   async function view(serie) {
-    const host = document.querySelector('#in-view'), my = seq;
+    const box = document.createElement('div'), my = seq;
+    document.querySelector('#in-view').replaceChildren(box);
+    const host = box;
     host.innerHTML = '<div class="cp-card cp-pr-msg">Loading…</div>';
     try {
       serie = serie || await get(`curva/serie_${S.year}_${S.sys}.json`);
       const html = await ({ overview, share, price, dispatch, costs, hydro, reserves })[S.view](host, serie);
-      if (my !== seq) return;
+      if (my !== seq || !box.isConnected) return;
       if (html) host.innerHTML = html;
     } catch (e) {
-      if (my === seq) host.innerHTML = msg('This section could not be loaded. Please try again later.');
+      if (my === seq && box.isConnected) host.innerHTML = msg('This section could not be loaded. Please try again later.');
       console.error(e);
     }
     host.querySelectorAll('.cp-in-seg').forEach(g => g.querySelectorAll('button').forEach(b => b.onclick = () => {
