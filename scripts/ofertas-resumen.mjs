@@ -20,8 +20,8 @@
 //      tecnología, liquidado); sin ese dato, su capacidad a la mediana de los costos de oportunidad.
 //    - Térmicas encendidas: bloques 1..11 a su costo incremental; ND no entra.
 //    - Intermitentes: pronóstico × % de cada bloque a su costo. Importación con bloques a su precio.
-//    - SIN: el precio es el cruce de la energía más el precio publicado de la reserva suplementaria
-//      (escasez de reservas al anochecer); cada hora guarda las dos partes en "formacion".
+//    - SIN: el precio es el cruce de la energía más el precio publicado de la reserva rodante de
+//      10 minutos (escasez de reserva rodante); cada hora guarda las dos partes en "formacion".
 //    resumen/ajuste/<año>.json.gz mide el error contra el PML por sistema, mes y versión.
 //    Aproximación: el MDA real también resuelve arranques, rampas, reservas y la red.
 // 2. Desvío MDA vs MTR (resumen/desvio/…): intermitentes (pronóstico), no despachables
@@ -231,11 +231,14 @@ function bloquesHora(H, t, { precioHidro, hidroReal, conImportacion, encendidas 
 // Las reservas solo se aplican al MDA (donde el CENACE las co-optimiza con la energía); la curva
 // del MTR ex post ya cruza contra la generación real y apartarlas la desvía (BCA junio: 31% → 12%).
 // - precio_reserva: el precio es el cruce de la energía sin apartar reserva más el precio publicado de
-//   la reserva suplementaria de ese mercado. El CENACE co-optimiza energía y reservas: cuando la
+//   la reserva rodante de 10 minutos de ese mercado (incluye el de la suplementaria: los precios son
+//   acumulativos). El CENACE co-optimiza energía y reservas: cuando la
 //   reserva escasea (sobre todo al anochecer, cuando la hidro ya genera y se va la solar) una unidad
 //   que deja de dar reserva para generar cobra ese costo, y pasa al componente de energía del PML
 //   (SIN mayo–junio 2026, MDA: 65% → 76% de horas dentro de ±10%, H21: 26% → 87%; MTR: error medio
-//   92 → 66 MXN/MWh). En BCA y BCS no mejora.
+//   92 → 66 MXN/MWh). En BCA y BCS no mejora. Con la rodante de 10 min en vez de la suplementaria
+//   (versión 8): MDA may–jun error medio 55.6 → 37.3 MXN/MWh y 28 ago 2026 1,154 → 123; MTR 65.5 → 47.6.
+//   El ajuste lineal da coeficiente 1.00 (MDA) y 0.95 (MTR): pasa el precio completo.
 const SIN_RESERVA = { minimo: 'compromiso', margen: 0.05, reserva: 'ninguna', ventana: 0 };
 const PARAMETROS = {
   SIN: { MDA: { minimo: 'compromiso', margen: 0, reserva: 'rodante_ofertada', ventana: 0, perdidas: true, precio_reserva: true }, MTR: { ...SIN_RESERVA, precio_reserva: true } },
@@ -351,10 +354,10 @@ async function curvaDia(a, fecha, sistema, estado) {
   // Reserva rodante (regulación + rodante 10 "Real") que debe estar en unidades encendidas
   const rodante = (sc) => Object.fromEntries((sc || []).map((f) => [f.Hora, num(f['RT Reserva Regulacion (MW)']) + num(f['Reserva Rodante 10 Real'])]));
   const rodMda = rodante(scMda), rodMtr = rodante(scMtr);
-  // Precio publicado de la reserva suplementaria por hora (parámetro precio_reserva)
-  const precioSup = async (mercado) => Object.fromEntries(((await oferta(a, mercado, 'precios_reservas', fecha, sistema)) || [])
-    .filter((f) => f['Tipo de reserva'] === 'Reserva rodante suplementaria').map((f) => [f.Hora, num(f['Precio de la reserva ($/MW por hora)'])]));
-  const [piMda, piMtr] = await Promise.all([precioSup('MDA'), precioSup('MTR')]);
+  // Precio publicado de la reserva rodante de 10 minutos por hora (parámetro precio_reserva)
+  const precioRod = async (mercado) => Object.fromEntries(((await oferta(a, mercado, 'precios_reservas', fecha, sistema)) || [])
+    .filter((f) => f['Tipo de reserva'] === 'Reserva rodante de 10 minutos').map((f) => [f.Hora, num(f['Precio de la reserva ($/MW por hora)'])]));
+  const [piMda, piMtr] = await Promise.all([precioRod('MDA'), precioRod('MTR')]);
 
   // Demanda real: la liquidación más reciente del día (balance trae también la generación del sistema)
   const ultimaLiq = (metodo) => (estado.reportes[`demanda_real|${metodo}`] || []).filter((k) => k.startsWith(fecha + '_L')).sort((x, y) => Number(x.split('_L')[1]) - Number(y.split('_L')[1])).at(-1);
@@ -696,7 +699,7 @@ function salidaParticipacion(ac, sistema, anio) {
 }
 
 /* ── Ajuste del modelo: precio estimado contra el componente de energía del PML ─ */
-const VERSION_CURVA = 7;  // súbela al cambiar el método de la curva: se recalcula todo
+const VERSION_CURVA = 8;  // súbela al cambiar el método de la curva: se recalcula todo
 
 // Qué datos tenía el cálculo de un día; si cambian (liquidación nueva), se recalcula
 function firma(estado, fecha, sistema) {

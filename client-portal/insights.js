@@ -323,7 +323,7 @@ const InsightsPage = (() => {
         ${kpi('Average absolute error', fx(fm.error_abs_prom, 2), 'MXN/MWh')}
         ${kpi('Bias', (fm.sesgo >= 0 ? '+' : '') + fx(fm.sesgo, 2), 'MXN/MWh', fm.sesgo < 0 ? 'Estimate below the PML on average' : 'Estimate above the PML on average')}
         ${kpi('Hourly correlation', fx(fm.correlacion, 2))}
-      </div><p class="cp-in-foot">Sentinels' dispatch model: units in merit order, unit commitment with minimum generation, hydro at its dispatched energy and losses. When reserves run short, mostly in the evening once solar fades and hydro is already generating, the cost of the reserve passes into the energy price; the estimate adds it as reserve scarcity. The system operator also optimizes start-ups, ramps and the transmission network across the 24 hours.</p>`
+      </div><p class="cp-in-foot">Sentinels' dispatch model: units in merit order, unit commitment with minimum generation, hydro at its dispatched energy and losses. When spinning reserve runs short (mostly in the evening once solar fades, and on hot afternoons), the cost of the reserve passes into the energy price; the estimate adds the published price of the 10-minute spinning reserve as reserve scarcity. The system operator also optimizes start-ups, ramps and the transmission network across the 24 hours.</p>`
       : '<div class="cp-widget-empty">No accuracy statistics for this period yet.</div>';
     return null;
   }
