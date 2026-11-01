@@ -313,9 +313,7 @@ const InsightsPage = (() => {
     });
     const day = hrs.map(at), est = day.map(d => d.price), ene = day.map(d => d.pml);
     const pf = v => fx(v, 2) + ' MXN/MWh', ax = v => fx(v);
-    // The energy-only line shows up when part of the day's price came from reserve scarcity
-    const only = day.some(d => d.adder >= 0.5) ? [{ name: 'Energy only (no reserve scarcity)', color: C.silver, values: day.map(d => d.energy) }] : [];
-    Board.charts.lineChart(body(host, 'in-day'), { labels: hrs.map(x => 'H' + x), series: [{ name: 'PML energy component', color: C.ink, values: ene }, { name: 'Sentinels estimate', color: C.gold, values: est }, ...only], fmt: pf, axis: ax, band: false, ranges: false });
+    Board.charts.lineChart(body(host, 'in-day'), { labels: hrs.map(x => 'H' + x), series: [{ name: 'PML energy component', color: C.ink, values: ene }, { name: 'Sentinels estimate', color: C.gold, values: est }], fmt: pf, axis: ax, band: false, ranges: false });
     const ds = Object.keys(serie.dias).sort(), e1 = dailyMean(serie, rt ? 'precio_mtr' : 'precio_mda'), p1 = dailyMean(serie, rt ? 'energia_pml_mtr' : 'energia_pml_mda');
     Board.charts.lineChart(body(host, 'in-year'), { labels: ds.map(short), series: [{ name: 'PML energy component', color: C.ink, values: ds.map(p1) }, { name: 'Sentinels estimate', color: C.gold, values: ds.map(e1) }], fmt: pf, axis: ax, band: false, ranges: [[30, '30D'], [90, '90D']] });
     body(host, 'in-fit').innerHTML = fm.horas ? `<div class="cp-in-fit">
@@ -544,7 +542,7 @@ const InsightsPage = (() => {
     if (!ds.length) { body(host, 'in-cost-unit').innerHTML = body(host, 'in-cost-blocks').innerHTML = '<div class="cp-widget-empty">No information for this plant.</div>'; return null; }
     const pf = v => fx(v, 2) + ' MXN/MWh', ax = v => fx(v), L = ds.map(short), U = ds.map(f => e.dias[f].u);
     Board.charts.lineChart(body(host, 'in-cost-unit'), { labels: L, series: [
-      { name: 'Average', color: C.gold, values: U.map(u => u && u[0]) }, { name: 'Lowest unit', color: C.silver, values: U.map(u => u && u[1]) }, { name: 'Highest unit', color: C.steel, values: U.map(u => u && u[2]) }],
+      { name: 'Average', color: C.gold, values: U.map(u => u && u[0]) }],
     fmt: pf, axis: ax, band: false, ranges: [[30, '30D'], [90, '90D']] });
     const pal = ['#9B3B2E', '#B5562F', '#C89D2A', '#8A9A3A', '#3E6B53', '#2F7A73', '#2F5D8A', '#4F4F9A', '#7C6A9E', '#9A5A86', '#646C75'];
     const blocks = d.bloques.map((b, i) => ({ name: 'Block ' + Number(b), color: pal[i], values: ds.map(f => e.dias[f].b[i]) })).filter(s => s.values.some(v => v != null));
@@ -645,7 +643,6 @@ const InsightsPage = (() => {
     const winDays = w ? Math.round((new Date(w.hasta) - new Date(w.desde)) / 864e5) + 1 : null, haveDays = new Set(win.map(x => x.f)).size;
     const today = new Date().toISOString().slice(0, 10), final = w && today > w.hasta && haveDays >= winDays;
     const cnt = (xs, key, n) => { const a = Array(n).fill(0); xs.forEach(x => a[key(x)]++); return a; };
-    const spin = mean(top.map(x => x.rr + x.rnr ? (100 * x.rr) / (x.rr + x.rnr) : null));
     const months = [...new Set(win.map(x => x.f.slice(0, 7)))];
     host.innerHTML = `
       ${w ? `<div class="cp-card cp-in-window">
@@ -654,9 +651,6 @@ const InsightsPage = (() => {
         <div class="cp-in-window-note">The 100 critical hours of ${w.base.anio} are identified over all the hours of that year; the window runs from the day of the first (${esc(long(w.base.primera))}) minus ${w.dias_margen} days to the day of the last (${esc(long(w.base.ultima))}) plus ${w.dias_margen} days, as the Capacity Balance Market Manual sets the calculation days (3.2).</div>
         <span class="cp-in-st ${final ? 'cp-in-st--n' : 'cp-in-st--a'}">${final ? 'Final' : 'Provisional'} · ${haveDays} of ${winDays} days with data</span>
       </div>` : ''}
-      <div class="cp-card cp-in-kpis">
-        ${kpi('Spinning share of offered reserve', fx(spin, 1), '%', 'Average over the 100 hours · Grid Code: spinning ≥ 50%')}
-      </div>
       <div class="cp-board cp-pr-board">
         ${widget('in-cr-top', `The ${top.length} critical hours · least operating reserve`, 'cp-w-l', `<button class="cp-pr-dl" id="in-cr-xlsx" title="The ${top.length} critical hours as an Excel file">${DL}Excel</button>`)}
         ${widget('in-cr-hour', 'Frequency by hour of day', 'cp-w-m')}
@@ -667,7 +661,7 @@ const InsightsPage = (() => {
         ${widget('in-cr-daily', `Daily minimum operating reserve · ${S.year}`, 'cp-w-l')}
         ${widget('in-cr-mix', 'Average capacity at the critical hours', 'cp-w-l')}
       </div>
-      <p class="cp-in-foot">Operating reserve = available capacity in real time (thermal and hydro units not declared unavailable, wind and solar forecast, must-run and legacy contracts, the must-run offer counted at 43%) minus real generation of the SIN; % of real demand. Calibrated against the published 2025 critical hours: 90 of the 100 match and the average gap is about 370 MW. Operating states follow the Grid Code for the SIN: Normal ≥ 6%, Alert 3–6%, Emergency &lt; 3%; at least half of the operating reserve must be spinning, shown here with the spinning share of the reserve offered by the units. Critical hours are the 100 hours with the least operating reserve inside the window. Sentinels estimate; it may differ from the official calculation.</p>`;
+      <p class="cp-in-foot">Operating reserve = available capacity in real time (thermal and hydro units not declared unavailable, wind and solar forecast, must-run and legacy contracts, the must-run offer counted at 43%) minus real generation of the SIN; % of real demand. Calibrated against the published 2025 critical hours: 90 of the 100 match and the average gap is about 370 MW. Operating states follow the Grid Code for the SIN: Normal ≥ 6%, Alert 3–6%, Emergency &lt; 3%; at least half of the operating reserve must be spinning. Critical hours are the 100 hours with the least operating reserve inside the window. Sentinels estimate; it may differ from the official calculation.</p>`;
     const pctTxt = x => `${fx(x.pct, 1)}%`;
     body(host, 'in-cr-top').innerHTML = `<div class="cp-pr-scroll cp-in-scroll cp-in-scroll--tall"><table class="cp-mini-table cp-in-table"><thead><tr><th>#</th><th class="cp-in-name">Day</th><th>Hour</th><th>Operating reserve<small>MW</small></th><th>% of demand</th><th class="cp-in-name">State</th><th>Demand<small>MW</small></th><th>Available capacity<small>MW</small></th></tr></thead><tbody>
       ${top.map((x, i) => { const [st, cls] = STATE(x.pct); return `<tr><td>${i + 1}</td><td class="cp-in-name">${esc(long(x.f))}<small class="cp-in-sub">${WEEK[weekday(x.f)]}</small></td><td>H${x.h}</td><td>${fx(x.ro)}</td><td>${pctTxt(x)}</td>
