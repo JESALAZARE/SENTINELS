@@ -595,16 +595,19 @@ async function reservasDia(a, fecha, sistema) {
    Emergencia < 3 %). La parte rodante (RR ≥ 50 % de la RO) se aproxima con la reserva rodante que
    ofrecen las unidades (10 min + suplementaria) frente a la no rodante. El portal ordena las horas y
    toma las 100 de menor RO dentro de la ventana de cálculo del Manual del Balance de Potencia. */
-// Ventana de cálculo de las horas críticas de un año (Manual del Balance de Potencia, 3.2.2): primer día =
-// día de la primera hora crítica del año anterior − 14 días; último día = día de la última + 14 días,
-// llevados al año de producción y acotados al 1 de enero y al 31 de diciembre. Base: horas críticas
-// publicadas del año anterior.
+// Ventana de cálculo de las horas críticas de un año (Manual del Balance de Potencia, 3.2): Paso 1 (3.2.1) =
+// las 100 horas críticas del año anterior identificadas sobre TODAS sus horas (8,760), no la lista oficial de
+// ese año, que sólo busca dentro de su propia ventana; Paso 2 (3.2.2) = primer día = día de la primera − 14
+// días, último día = día de la última + 14 días, llevados al año de producción y acotados al año.
+// 2025 (Paso 1): 7 mar – 25 sep 2025 → ventana 2026: 21 feb – 9 oct. Con la RO calibrada sobre las 8,760 horas
+// de 2025 sale 4 mar – 25 sep (las horas del 4 mar quedan a ~150 MW del corte de la hora 100, dentro del error
+// del modelo); se adopta el 7 mar, consistente con la ventana publicada del 21 feb.
 // Calibración contra las 100 horas críticas oficiales de 2025 (abr–jun 2025, MTR): la RO con toda la oferta
 // no despachable sale ~2,000 MW arriba del valor oficial; contando esa oferta al 43 % el error medio baja a
 // ~370 MW (validación cruzada abr–may → jun: 275 MW), 90 de las 100 horas coinciden y la ventana estimada
 // (1 abr – 18 jun) queda a un día de la oficial. Al cambiar la fórmula, subir VERSION_RO para recalcular.
 const FACTOR_NODESPACHABLE = 0.43, VERSION_RO = 2;
-const HORAS_CRITICAS_PUBLICADAS = { 2025: { primera: '2025-04-02', ultima: '2025-06-19' } };
+const HORAS_CRITICAS_PUBLICADAS = { 2025: { primera: '2025-03-07', ultima: '2025-09-25' } };
 function ventanaCriticas(anio) {
   const base = HORAS_CRITICAS_PUBLICADAS[anio - 1];
   if (!base) return null;
@@ -822,12 +825,13 @@ async function main() {
         if (ro.version !== VERSION_RO) Object.assign(ro, { version: VERSION_RO, dias: {}, firmas: {} });
         ro.columnas = ['hora', 'capacidad_mw', 'generacion_mw', 'demanda_mw', 'reserva_operativa_mw', 'reserva_operativa_pct',
           'cap_termica_mw', 'cap_hidro_mw', 'cap_intermitente_mw', 'cap_nodespachable_gi_mw', 'reserva_rodante_ofrecida_mw', 'reserva_no_rodante_ofrecida_mw'];
+        const ventanaAntes = JSON.stringify(ro.ventana ?? null);
         ro.ventana = ventanaCriticas(Number(anio));
         n = 0;
         for (const fecha of delAnio(conMtr).filter((d) => tiene(`MTR|hidro|${sistema}`).has(d) && ro.firmas?.[d] !== firma(estado, d, sistema))) {
           try { ro.dias[fecha] = await reservaOperativaDia(almacen, fecha, estado); (ro.firmas ??= {})[fecha] = firma(estado, fecha, sistema); n++; } catch (e) { errores++; console.log(`Reserva operativa ${fecha}: ERROR ${e.message}`); }
         }
-        if (n || !(await almacen.leer(kRO))) await escribirJson(almacen, kRO, ro);
+        if (n || JSON.stringify(ro.ventana) !== ventanaAntes || !(await almacen.leer(kRO))) await escribirJson(almacen, kRO, ro);
         console.log(`Reserva operativa ${sistema} ${anio}: ${n} días calculados (${Object.keys(ro.dias).length} en total)`);
       }
 
