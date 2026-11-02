@@ -25,7 +25,7 @@
                                region, from CENACE's "Operación del SEN" page; cached 1 minute,
                                &fresh=1 accepts at most 15 seconds;
                                previa = hour 24 of the previous day when CENACE sends it)
-     GET /datos/<path>.json   (a stored file of the R2 bucket: pml/…, resumen/…, nodos/…, fx/…, demanda/…)
+     GET /datos/<path>.json   (a stored file of the R2 bucket: pml/…, resumen/…, nodos/…, fx/…, demanda/…, contratos/…)
      GET /ofertas/<path>.json (MEM Insights: a summary of the private offers bucket, resumen/<path>.json.gz,
                                written by scripts/ofertas-resumen.mjs; only summaries, never the raw offers)
      GET /health              (public; ?cenace=1 also checks that CENACE answers)
@@ -45,7 +45,7 @@ const MAX_DAYS = 31;
 // bulk downloads with one pass). History files have their own, smaller daily budget.
 // An "Excel + hourly" of the whole history is ~170 requests; the SEN demand widget makes 30 an hour.
 const LIMITS = { hour: 400, day: 2000, historyDay: 150 };
-const DATA_PATH = /^(pml|resumen|nodos|fx|demanda)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*\.json$/;
+const DATA_PATH = /^(pml|resumen|nodos|fx|demanda|contratos)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*\.json$/;
 // MEM Insights summaries: /ofertas/<curva|desvio|costos|hidro|participacion|reservas|criticas|ajuste>/….json
 const OFFERS_PATH = /^(curva|desvio|costos|hidro|participacion|reservas|criticas|ajuste)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*\.json$/;
 // SW-PML: NodosP by key (06CDU-400). SW-PEND: load zones by name; spaces go as "-" in the URL.

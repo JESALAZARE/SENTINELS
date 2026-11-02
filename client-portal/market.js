@@ -1,11 +1,11 @@
 /* ── Sentinels Client Portal · market data access ───────────────────
    Every market file (stored prices, long-term history, NodoP catalog,
-   exchange rate, SEN demand) and every CENACE query goes through the
+   exchange rate, SEN demand, hedge contracts) and every CENACE query goes through the
    sentinels-pml Worker (pml-worker/worker.js), which keeps the files in a
    private R2 bucket and only answers a signed-in client presenting their
    market pass: "<clientId>.<token>", issued by the admin panel into the
    client's encrypted vault (ME.market). Nothing is public on the site.
-   Used by prices.js, history.js, nodos.js and board.js. */
+   Used by prices.js, history.js, nodos.js, hedges.js and board.js. */
 const Market = (() => {
   const API = 'https://sentinels-pml.shy-wood-119b.workers.dev';  // sentinels-pml Worker (pml-worker/LEEME.md)
 
