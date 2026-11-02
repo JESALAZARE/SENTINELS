@@ -120,7 +120,8 @@ volver a cargar el histórico.
   - `resumen/…`: histórico mensual y avance del Robot;
   - `nodos/catalogo.json`: catálogo de NodosP;
   - `fx/usd-mxn.json`: tipo de cambio;
-  - `demanda/…`: demanda del SEN por día.
+  - `demanda/…`: demanda del SEN por día;
+  - `contratos/contratos.json`: Contratos de Cobertura Eléctrica del CENACE.
 - `GET /ofertas/<ruta>.json`: un resumen de la pestaña MEM Insights, del bucket `OFERTAS`
   (`resumen/<ruta>.json.gz`, descomprimido por el Worker). Solo resúmenes, nunca las ofertas
   crudas: `curva/…`, `desvio/…`, `costos/…`, `hidro/…`, `participacion/…`, `reservas/…`, `ajuste/…`.

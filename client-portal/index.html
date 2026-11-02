@@ -977,6 +977,14 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-nd-nop{font-size:12px;color:var(--steel-400)}
 .cp-nd-none{text-align:center;color:var(--steel-400);padding:28px 8px !important}
 .cp-nd-more{align-self:center;margin-top:10px}
+/* Hedge Contracts (hedges.js): same filters, bar and table as the NodoP catalog */
+.cp-hc{padding:16px 18px}
+.cp-hc-meta{margin:0 0 14px}
+.cp-hc .cp-nd-filters input{width:100%;min-width:0;box-sizing:border-box}
+.cp-hc-scroll{max-height:68vh}
+@supports (height:100dvh){.cp-hc-scroll{max-height:68dvh}}
+.cp-nd-table td.cp-hc-co{white-space:normal;min-width:210px}
+.cp-hc-more{text-align:center;margin-top:10px}
 @media (max-width:1180px) and (min-width:601px){
   .cp-pr-board .cp-pr-ext{grid-column:span 1}
 }
@@ -1021,6 +1029,8 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
   .cp-nd-actions{margin-left:0;width:100%}
   .cp-nd-actions .cp-btn-sm,.cp-nd-actions .cp-pr-dl{height:40px}
   .cp-nd-src{margin-left:auto}
+  .cp-hc{padding:14px}
+  .cp-hc-more .cp-btn-sm{width:100%;height:44px}
 }
 
 /* ── Boards: tablet & phone ───────────────────────────── */
@@ -1126,6 +1136,10 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
       <button class="cp-nav-item" data-section="insights">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21v-4h3v4"/><path d="M10.5 21v-8h3v8"/><path d="M16 21V9h3v12"/><path d="M4 11l5-5 4 3 7-6"/></svg>
         MEM Insights
+      </button>
+      <button class="cp-nav-item" data-section="hedges">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.500-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>
+        Hedge Contracts
       </button>
       <button class="cp-nav-item" data-section="contract">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
@@ -1309,6 +1323,19 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
           </div>
         </div>
         <div id="insights-root"></div>
+      </section>
+
+      <!-- ╔══════════════════════════════════════════╗
+           ║  HEDGE CONTRACTS                         ║
+           ╚══════════════════════════════════════════╝ -->
+      <section id="sec-hedges" class="cp-section">
+        <div class="cp-page-head">
+          <div>
+            <h1 class="cp-page-title">Hedge Contracts</h1>
+            <p class="cp-page-sub">Electricity hedge contracts accepted in Mexico's wholesale market: search by issuer, buyer, end date and status</p>
+          </div>
+        </div>
+        <div id="hedges-root"></div>
       </section>
 
       <!-- ╔══════════════════════════════════════════╗
@@ -1746,6 +1773,7 @@ const SECTION_TITLES = {
   intelligence: 'Market Intelligence',
   prices: 'Market Prices',
   insights: 'MEM Insights',
+  hedges: 'Hedge Contracts',
   assistant: 'Sentinel One',
   sites: 'My Sites',
   contract: 'My Contract',
@@ -1776,6 +1804,7 @@ function goTo(id) {
   if (id === 'sites') SitesPage.render();
   if (id === 'prices') PricesPage.show();
   if (id === 'insights') InsightsPage.show();
+  if (id === 'hedges') HedgesPage.show();
 }
 
 // Nav button clicks
@@ -1935,6 +1964,7 @@ function filterDocs(btn, type) {
 <script src="history.js"></script>
 <script src="prices.js"></script>
 <script src="insights.js"></script>
+<script src="hedges.js"></script>
 <script src="sentinel-one.js"></script>
 <!-- ═══════════════════════════════════════════════════
      BECOME A CLIENT MODAL
