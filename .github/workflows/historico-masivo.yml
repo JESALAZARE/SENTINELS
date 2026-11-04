@@ -18,6 +18,9 @@ on:
       llamadas:
         description: 'Llamadas máximas al CENACE'
         default: '20000'
+      resumen:
+        description: 'Minutos máximos para recalcular resúmenes en Azure (lo demás sigue mañana)'
+        default: '50'
 
 permissions:
   contents: read
@@ -77,6 +80,7 @@ jobs:
           node scripts/historico-masivo.mjs
           --minutos-cenace "${{ github.event.inputs.minutos || '240' }}"
           --llamadas "${{ github.event.inputs.llamadas || '20000' }}"
+          --minutos-resumen "${{ github.event.inputs.resumen || '50' }}"
 
       # Solo si la carga en Azure terminó; estado.json va al final para que el avance
       # nunca quede adelante de los resúmenes publicados

@@ -9,7 +9,8 @@ quedan **Views SQL** listas para analizar con Excel, Power BI o cualquier herram
    10 zonas por llamada. Primero baja los días nuevos y después el histórico, de lo más
    reciente hacia 2020.
 2. Abre la base **una sola vez**: carga todo en bloque y recalcula los resúmenes solo de los
-   meses que tocó. La base gratuita gasta cómputo mientras está despierta, por eso se abre una
+   meses que tocó, por lotes de 2,000 meses (lo más reciente primero) y con un tope de 50 minutos.
+   Los meses que no alcanzan quedan en la tabla `agg_pendientes` y siguen la noche siguiente. La base gratuita gasta cómputo mientras está despierta, por eso se abre una
    vez al día y no en cada consulta.
 3. Publica en el bucket privado de Cloudflare R2 un resumen mensual pequeño por NodoP o zona
    (`resumen/`; ver `pml-worker/LEEME.md`), que
@@ -113,7 +114,8 @@ En la base `sentinels-historico` → **Settings → Compute + storage**:
 1. En GitHub abre **Actions → "Histórico masivo (Azure SQL)" → Run workflow**.
 2. Tarda hasta ~5 horas: unas 4 horas de descarga del CENACE y luego la carga en Azure.
 3. Abre la corrida → paso **"Descargar, cargar en Azure y resumir"**. Al final debe decir
-   `Azure: … horas nuevas`, `Portal: … resúmenes actualizados` y `Avance: …%`.
+   `Azure: … horas nuevas`, `Azure: resúmenes recalculados para … meses` (con `quedan …` si el
+   tope de tiempo no alcanzó), `Portal: … resúmenes actualizados` y `Avance: …%`.
 
 Desde ahí corre sola todos los días a las 02:10 (hora centro de México). En unos 10 días termina
 la carga desde 2020; después cada corrida solo agrega los días nuevos.

@@ -138,6 +138,18 @@ CREATE TABLE dbo.agg_hora_mes (
 );
 GO
 
+-- Meses con horas cargadas cuyo resumen aún no se recalcula. La carga los anota en la misma
+-- transacción que las horas y el Robot los recalcula por lotes (lo más reciente primero), así
+-- que un recálculo que no alcanza a terminar sigue en la corrida siguiente sin perder nada.
+IF OBJECT_ID('dbo.agg_pendientes') IS NULL
+CREATE TABLE dbo.agg_pendientes (
+  entidad_id smallint NOT NULL,
+  proceso    char(3)  NOT NULL,
+  mes        date     NOT NULL,
+  CONSTRAINT pk_agg_pendientes PRIMARY KEY (entidad_id, proceso, mes)
+);
+GO
+
 -- Views rápidas sobre los resúmenes (para Excel / Power BI con todo el catálogo)
 CREATE OR ALTER VIEW dbo.v_resumen_mensual AS
 SELECT e.tipo, e.sistema, e.clave, a.proceso, a.mes, a.horas,
