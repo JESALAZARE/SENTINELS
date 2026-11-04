@@ -4,19 +4,21 @@
 // publica para el portal un resumen por NodoP / zona en data/resumen. Lo ejecuta
 // .github/workflows/historico-masivo.yml una vez al día; guía: azure/LEEME.md.
 //
-//   node scripts/historico-masivo.mjs [--minutos-cenace 240] [--llamadas 20000]
+//   node scripts/historico-masivo.mjs [--minutos-cenace 240] [--llamadas 20000] [--minutos-resumen 50]
 //
 // La base gratuita gasta cómputo todo el tiempo que está despierta, así que el Robot:
 //   1. CENACE → disco: baja hasta 20 NodosP / 10 zonas por llamada y por semana, sin tocar
 //      Azure. Primero los días nuevos de todos; después el histórico, de lo reciente hacia 2020.
-//   2. Una sola sesión en Azure: carga masiva (solo horas que no estén), recalcula los
-//      resúmenes (agg_mensual, agg_hora_mes) de los meses tocados y lee lo que se exporta.
+//   2. Una sola sesión en Azure: carga masiva (solo horas que no estén), recalcula por lotes
+//      los resúmenes (agg_mensual, agg_hora_mes) de los meses pendientes y lee lo que se exporta.
 //   3. data/resumen/<nodo|zona>/<sistema>/<clave>.json: meses cerrados (que ya tienen MTR,
 //      7 días después de terminar) con promedio, componentes, máximo y mínimo con su fecha y
 //      hora, y el perfil horario por año. Se reescriben solo al cerrar un mes o al cargar
 //      historia nueva, para que el repositorio no crezca de más.
 // El avance vive en data/resumen/estado.json y solo se guarda si la carga en Azure terminó;
 // si algo falla, la siguiente corrida repite esas semanas (la carga ignora horas repetidas).
+// Los meses cargados quedan en dbo.agg_pendientes hasta que su resumen se recalcula, por
+// lotes y con tope de tiempo (--minutos-resumen): lo que no alcanza sigue la noche siguiente.
 
 import { createWriteStream, createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -28,7 +30,8 @@ const OUT = path.resolve('data/resumen');
 const ESTADO = path.join(OUT, 'estado.json');
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? Number(process.argv[i + 1]) || d : d; };
 const MIN_CENACE = arg('--minutos-cenace', 240), MAX_LLAMADAS = arg('--llamadas', 20000);
-const PARALELO = 3, LOTE = 100000, VACIOS_FIN = 8;
+const MIN_AZURE = arg('--minutos-resumen', 50);  // tope para recalcular resúmenes (el resto sigue mañana)
+const PARALELO = 3, LOTE = 100000, VACIOS_FIN = 8, LOTE_RESUMEN = 2000;
 const DESDE = '2020-01-01';  // alcance del histórico
 
 const SERVICIO = {
@@ -200,10 +203,8 @@ async function cargarAzure(sql, pool, ents, archivo) {
 
   await pool.request().batch(`
     IF OBJECT_ID('tempdb..#stg') IS NOT NULL DROP TABLE #stg;
-    IF OBJECT_ID('tempdb..#tocados') IS NOT NULL DROP TABLE #tocados;
     CREATE TABLE #stg (entidad_id smallint NOT NULL, mercado tinyint NOT NULL, fecha date NOT NULL, hora tinyint NOT NULL,
-      precio decimal(12,2) NOT NULL, energia decimal(12,2) NULL, perdidas decimal(12,2) NULL, congestion decimal(12,2) NULL);
-    CREATE TABLE #tocados (entidad_id smallint NOT NULL, proceso char(3) NOT NULL, mes date NOT NULL, PRIMARY KEY (entidad_id, proceso, mes));`);
+      precio decimal(12,2) NOT NULL, energia decimal(12,2) NULL, perdidas decimal(12,2) NULL, congestion decimal(12,2) NULL);`);
 
   let insertadas = 0, leidas = 0;
   const subir = async (filas) => {
@@ -216,18 +217,25 @@ async function cargarAzure(sql, pool, ents, archivo) {
     for (const c of ['precio', 'energia', 'perdidas', 'congestion']) t.columns.add(c, sql.Decimal(12, 2), { nullable: c !== 'precio' });
     for (const f of filas) t.rows.add(...f);
     await pool.request().bulk(t);
+    // Horas y meses pendientes en una sola transacción: nunca queda una hora sin su resumen pendiente
     const q = await pool.request().query(`
+      SET XACT_ABORT ON;
+      BEGIN TRAN;
       INSERT dbo.precios_hora (entidad_id, proceso, fecha, hora, precio, energia, perdidas, congestion)
       SELECT s.entidad_id, CASE s.mercado WHEN 1 THEN 'MDA' ELSE 'MTR' END, s.fecha, s.hora, s.precio, s.energia, s.perdidas, s.congestion
       FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY entidad_id, mercado, fecha, hora ORDER BY (SELECT 0)) AS rn FROM #stg) s
       WHERE s.rn = 1 AND NOT EXISTS (SELECT 1 FROM dbo.precios_hora p WHERE p.entidad_id = s.entidad_id
         AND p.proceso = CASE s.mercado WHEN 1 THEN 'MDA' ELSE 'MTR' END AND p.fecha = s.fecha AND p.hora = s.hora);
-      SELECT @@ROWCOUNT AS n;
-      INSERT #tocados (entidad_id, proceso, mes)
-      SELECT DISTINCT s.entidad_id, CASE s.mercado WHEN 1 THEN 'MDA' ELSE 'MTR' END, DATEFROMPARTS(YEAR(s.fecha), MONTH(s.fecha), 1)
-      FROM #stg s WHERE NOT EXISTS (SELECT 1 FROM #tocados t WHERE t.entidad_id = s.entidad_id
-        AND t.proceso = CASE s.mercado WHEN 1 THEN 'MDA' ELSE 'MTR' END AND t.mes = DATEFROMPARTS(YEAR(s.fecha), MONTH(s.fecha), 1));
-      TRUNCATE TABLE #stg;`);
+      DECLARE @n int = @@ROWCOUNT;
+      -- Todo mes bajado queda pendiente aunque sus horas ya estuvieran: así se repara el resumen
+      -- de una corrida anterior que cargó las horas pero no alcanzó a recalcular
+      INSERT dbo.agg_pendientes (entidad_id, proceso, mes)
+      SELECT DISTINCT m.entidad_id, m.proceso, m.mes
+      FROM (SELECT entidad_id, CASE mercado WHEN 1 THEN 'MDA' ELSE 'MTR' END AS proceso, DATEFROMPARTS(YEAR(fecha), MONTH(fecha), 1) AS mes FROM #stg) m
+      WHERE NOT EXISTS (SELECT 1 FROM dbo.agg_pendientes t WHERE t.entidad_id = m.entidad_id AND t.proceso = m.proceso AND t.mes = m.mes);
+      COMMIT;
+      TRUNCATE TABLE #stg;
+      SELECT @n AS n;`);
     insertadas += q.recordset[0].n;
   };
 
@@ -245,34 +253,60 @@ async function cargarAzure(sql, pool, ents, archivo) {
   if (buf.length) await subir(buf);
   console.log(`Azure: ${leidas.toLocaleString('en-US')} horas leídas, ${insertadas.toLocaleString('en-US')} nuevas`);
 
-  // Resúmenes: se recalculan solo los meses tocados (lo materializado de las Views)
-  await pool.request().batch(`
-    DELETE a FROM dbo.agg_mensual a JOIN #tocados t ON a.entidad_id = t.entidad_id AND a.proceso = t.proceso AND a.mes = t.mes;
-    WITH base AS (
-      SELECT p.entidad_id, p.proceso, t.mes, p.fecha, p.hora, p.precio, p.energia, p.perdidas, p.congestion
-      FROM #tocados t JOIN dbo.precios_hora p
-        ON p.entidad_id = t.entidad_id AND p.proceso = t.proceso AND p.fecha >= t.mes AND p.fecha < DATEADD(month, 1, t.mes)
-    ), r AS (
-      SELECT *, ROW_NUMBER() OVER (PARTITION BY entidad_id, proceso, mes ORDER BY precio DESC, fecha, hora) AS rmax,
-                ROW_NUMBER() OVER (PARTITION BY entidad_id, proceso, mes ORDER BY precio ASC, fecha, hora) AS rmin
-      FROM base
-    )
-    INSERT dbo.agg_mensual (entidad_id, proceso, mes, horas, suma_precio, suma_energia, suma_perdidas, suma_congestion,
-                            max_precio, max_fecha, max_hora, min_precio, min_fecha, min_hora)
-    SELECT entidad_id, proceso, mes, COUNT(*), SUM(precio), SUM(energia), SUM(perdidas), SUM(congestion),
-           MAX(CASE WHEN rmax = 1 THEN precio END), MAX(CASE WHEN rmax = 1 THEN fecha END), MAX(CASE WHEN rmax = 1 THEN hora END),
-           MAX(CASE WHEN rmin = 1 THEN precio END), MAX(CASE WHEN rmin = 1 THEN fecha END), MAX(CASE WHEN rmin = 1 THEN hora END)
-    FROM r GROUP BY entidad_id, proceso, mes;
+  return { ids, insertadas };
+}
 
-    DELETE a FROM dbo.agg_hora_mes a JOIN #tocados t ON a.entidad_id = t.entidad_id AND a.proceso = t.proceso AND a.mes = t.mes;
-    INSERT dbo.agg_hora_mes (entidad_id, proceso, mes, hora, dias, suma_precio)
-    SELECT p.entidad_id, p.proceso, t.mes, p.hora, COUNT(*), SUM(p.precio)
-    FROM #tocados t JOIN dbo.precios_hora p
-      ON p.entidad_id = t.entidad_id AND p.proceso = t.proceso AND p.fecha >= t.mes AND p.fecha < DATEADD(month, 1, t.mes)
-    GROUP BY p.entidad_id, p.proceso, t.mes, p.hora;`);
-  const tocados = (await pool.request().query('SELECT entidad_id, CONVERT(char(7), mes, 120) AS mes FROM #tocados')).recordset;
-  console.log(`Azure: resúmenes recalculados para ${tocados.length.toLocaleString('en-US')} meses`);
-  return { ids, tocados, insertadas };
+// Resúmenes (lo materializado de las Views): se recalculan los meses pendientes por lotes, lo
+// más reciente primero, cada lote en su propia transacción. Al acabarse el tiempo los que
+// faltan quedan en dbo.agg_pendientes para la corrida siguiente. Devuelve los meses hechos.
+async function recalcular(sql, pool) {
+  const t0 = Date.now(), hechos = [];
+  let lotes = 0;
+  while (Date.now() - t0 < MIN_AZURE * 60000) {
+    let r;
+    // Un lote que falla se deshace solo (XACT_ABORT) y sus meses siguen pendientes
+    try { r = await pool.request().input('n', sql.Int, LOTE_RESUMEN).query(`
+      SET XACT_ABORT ON;
+      CREATE TABLE #lote (entidad_id smallint NOT NULL, proceso char(3) NOT NULL, mes date NOT NULL, PRIMARY KEY (entidad_id, proceso, mes));
+      INSERT #lote SELECT TOP (@n) entidad_id, proceso, mes FROM dbo.agg_pendientes ORDER BY mes DESC, entidad_id, proceso;
+      BEGIN TRAN;
+      DELETE a FROM dbo.agg_mensual a JOIN #lote t ON a.entidad_id = t.entidad_id AND a.proceso = t.proceso AND a.mes = t.mes;
+      WITH base AS (
+        SELECT p.entidad_id, p.proceso, t.mes, p.fecha, p.hora, p.precio, p.energia, p.perdidas, p.congestion
+        FROM #lote t JOIN dbo.precios_hora p
+          ON p.entidad_id = t.entidad_id AND p.proceso = t.proceso AND p.fecha >= t.mes AND p.fecha < DATEADD(month, 1, t.mes)
+      ), r AS (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY entidad_id, proceso, mes ORDER BY precio DESC, fecha, hora) AS rmax,
+                  ROW_NUMBER() OVER (PARTITION BY entidad_id, proceso, mes ORDER BY precio ASC, fecha, hora) AS rmin
+        FROM base
+      )
+      INSERT dbo.agg_mensual (entidad_id, proceso, mes, horas, suma_precio, suma_energia, suma_perdidas, suma_congestion,
+                              max_precio, max_fecha, max_hora, min_precio, min_fecha, min_hora)
+      SELECT entidad_id, proceso, mes, COUNT(*), SUM(precio), SUM(energia), SUM(perdidas), SUM(congestion),
+             MAX(CASE WHEN rmax = 1 THEN precio END), MAX(CASE WHEN rmax = 1 THEN fecha END), MAX(CASE WHEN rmax = 1 THEN hora END),
+             MAX(CASE WHEN rmin = 1 THEN precio END), MAX(CASE WHEN rmin = 1 THEN fecha END), MAX(CASE WHEN rmin = 1 THEN hora END)
+      FROM r GROUP BY entidad_id, proceso, mes;
+
+      DELETE a FROM dbo.agg_hora_mes a JOIN #lote t ON a.entidad_id = t.entidad_id AND a.proceso = t.proceso AND a.mes = t.mes;
+      INSERT dbo.agg_hora_mes (entidad_id, proceso, mes, hora, dias, suma_precio)
+      SELECT p.entidad_id, p.proceso, t.mes, p.hora, COUNT(*), SUM(p.precio)
+      FROM #lote t JOIN dbo.precios_hora p
+        ON p.entidad_id = t.entidad_id AND p.proceso = t.proceso AND p.fecha >= t.mes AND p.fecha < DATEADD(month, 1, t.mes)
+      GROUP BY p.entidad_id, p.proceso, t.mes, p.hora;
+
+      DELETE p FROM dbo.agg_pendientes p JOIN #lote t ON p.entidad_id = t.entidad_id AND p.proceso = t.proceso AND p.mes = t.mes;
+      COMMIT;
+      SELECT entidad_id, CONVERT(char(7), mes, 120) AS mes FROM #lote;`); }
+    catch (e) { console.log(`::warning::Recálculo de resúmenes interrumpido (${e.message}); sigue en la siguiente corrida`); break; }
+    const lote = r.recordset;
+    if (!lote.length) break;
+    hechos.push(...lote);
+    if (++lotes % 5 === 0) console.log(`… resúmenes: ${hechos.length.toLocaleString('en-US')} meses, ${Math.round((Date.now() - t0) / 60000)} min`);
+  }
+  const quedan = (await pool.request().query('SELECT COUNT(*) AS n FROM dbo.agg_pendientes')).recordset[0].n;
+  console.log(`Azure: resúmenes recalculados para ${hechos.length.toLocaleString('en-US')} meses en ${Math.round((Date.now() - t0) / 60000)} min`
+    + (quedan ? `; quedan ${quedan.toLocaleString('en-US')} para la siguiente corrida` : ''));
+  return { hechos, quedan };
 }
 
 /* ── Fase 3: resúmenes para el portal ─────────── */
@@ -338,18 +372,22 @@ async function main() {
 
   const sql = (await import('mssql')).default;
   const pool = await conectar(sql);
+  let quedan = 0;
   try {
-    const { ids, tocados } = await cargarAzure(sql, pool, ents, archivo);
-    // Se exporta: todo cuando cierra un mes; si no, solo quien recibió historia de meses cerrados
+    const { ids } = await cargarAzure(sql, pool, ents, archivo);
+    const r = await recalcular(sql, pool), hechos = r.hechos;
+    quedan = r.quedan;
+    // Se exporta: todo cuando cierra un mes; si no, solo quien recibió resúmenes de meses cerrados
     const idsExportar = new Set(exportarTodo ? [...ents.keys()].map((k) => ids.get(k)).filter(Boolean)
-      : tocados.filter((t) => t.mes <= hastaMes).map((t) => t.entidad_id));
+      : hechos.filter((t) => t.mes <= hastaMes).map((t) => t.entidad_id));
     await exportar(sql, pool, ents, ids, idsExportar, hastaMes);
   } finally {
     await pool.close();
     await rm(archivo, { force: true });
   }
 
-  // Guardar el avance (solo si Azure terminó bien) e índice para el portal
+  // Guardar el avance (solo si la carga en Azure y la exportación terminaron; los resúmenes que
+  // no alcanzaron a recalcularse quedan anotados en dbo.agg_pendientes) e índice para el portal
   const ent = {};
   for (const s of st.values()) (ent[s.key] ??= {})[s.p] = [s.desde, s.hasta, s.completo ? 1 : 0, s.vacios];
   const cargadas = [...st.values()].filter((s) => s.completo || (s.desde && s.desde <= DESDE)).length;
@@ -359,7 +397,7 @@ async function main() {
   const comun = (p) => [...st.values()].filter((s) => s.p === p && s.desde && !s.completo).reduce((m, s) => mayor(m, s.desde), DESDE);
   await writeFile(path.join(OUT, 'index.json'), JSON.stringify({
     actualizado: new Date().toISOString(), desde: DESDE, hasta_mes: hastaMes, entidades: ents.size,
-    avance: Math.floor(cargadas / st.size * 100), cargado_desde: { MDA: comun('MDA'), MTR: comun('MTR') },
+    avance: Math.floor(cargadas / st.size * 100), cargado_desde: { MDA: comun('MDA'), MTR: comun('MTR') }, resumenes_pendientes: quedan,
   }, null, 1) + '\n');
   console.log(`Avance: ${cargadas} de ${st.size} entidad-mercado completas desde ${DESDE} (${Math.floor(cargadas / st.size * 100)}%); ${llamadas} llamadas${errores ? `, ${errores} con error` : ''}`);
 }
