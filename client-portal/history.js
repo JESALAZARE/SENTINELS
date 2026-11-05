@@ -37,6 +37,8 @@ const PriceHistory = (() => {
   const cache = {};  // path → Promise(json | null | { error }); errors are asked again next time
   const get = path => cache[path] || (cache[path] = Market.file(path).catch(e => { delete cache[path]; return { error: e.status ? e.message : 'The history is not available right now. Please try again later.' }; }));
   const fileOf = n => `${DATA}${n.kind === 'zone' ? 'zona' : 'nodo'}/${encodeURIComponent(n.sistema)}/${encodeURIComponent(n.nodo.replace(/ /g, '-'))}.json`;
+  // Hourly profile as 24 values: the 2022 clock change left a 25th hour in that year's file
+  const hours24 = v => v.slice(0, 24);
   let range = { from: null, to: null };  // chosen months (kept while the client switches NodoP)
   const MARKETS = ['MDA', 'MTR'];
   let shown = MARKETS;  // markets left on in the monthly chart's legend = markets of the Excel
@@ -148,7 +150,7 @@ const PriceHistory = (() => {
       if (!yrs.length) { el.innerHTML = `<div class="cp-widget-empty">No ${p} history in this range.</div>`; return; }
       Board.charts.lineChart(el, {
         labels: Array.from({ length: 24 }, (_, i) => 'H' + (i + 1)), fmt, axis, band: false, ranges: false,
-        series: yrs.map((yr, i) => ({ name: yr, color: YEAR_COLORS[(yrs.length - 1 - i) % YEAR_COLORS.length], values: pf[yr] })),
+        series: yrs.map((yr, i) => ({ name: yr, color: YEAR_COLORS[(yrs.length - 1 - i) % YEAR_COLORS.length], values: hours24(pf[yr]) })),
         off: yrs.map((_, i) => i).filter(i => i < yrs.length - 3)
       });
       el.insertAdjacentHTML('beforeend', `<div class="cp-ch-foot">Average of each hour by year · ${yrs[0]}${yrs.length > 1 ? ` – ${yrs.at(-1)}` : ''} · each line uses all closed months of its year, even if the range covers only part of it</div>`);
@@ -168,10 +170,14 @@ const PriceHistory = (() => {
       { name: 'Annual', columns: [{ title: 'Market', width: 8 }, { title: 'Year', width: 7 }, { title: `${P} avg`, ...n2 }, ...ext('Hour'), { title: 'Hours', width: 8, fmt: '0' }],
         rows: ps.flatMap(p => [...y[p].values()].sort((a, b) => a.y < b.y ? -1 : 1).map(r => [p, r.y, r.avg, r.max.v, r.max.f, r.max.h, r.min.v, r.min.f, r.min.h, r.horas])) },
       { name: 'Hourly profile', columns: [{ title: 'Market', width: 8 }, { title: 'Year', width: 7 }, ...Array.from({ length: 24 }, (_, i) => ({ title: 'H' + (i + 1), width: 9, fmt: '0.00' }))],
-        rows: ps.flatMap(p => Object.entries((doc[p] && doc[p].perfil) || {}).filter(([yr]) => yr >= yFrom && yr <= yTo).sort().map(([yr, v]) => [p, yr, ...v])) }
+        rows: ps.flatMap(p => Object.entries((doc[p] && doc[p].perfil) || {}).filter(([yr]) => yr >= yFrom && yr <= yTo).sort().map(([yr, v]) => [p, yr, ...hours24(v)])) }
     ];
     const fname = (ps, extra) => `${P}_history_${doc.sistema}_${doc.clave.replace(/ /g, '-')}_${from}_${to}${ps.length === 1 ? '_' + ps[0] : ''}${extra}.xlsx`;
-    body.querySelector('#hi-xlsx').onclick = () => Xlsx.download(fname(shown, ''), sheets(shown));
+    body.querySelector('#hi-xlsx').onclick = async () => {
+      const msg = body.querySelector('.cp-hi-dlmsg');
+      try { await Xlsx.download(fname(shown, ''), sheets(shown)); msg.hidden = true; }
+      catch (e) { console.error(e); msg.hidden = false; msg.innerHTML = '<div class="cp-hi-dltxt">The Excel file could not be built. Please try again later.</div>'; }
+    };
     const hb = body.querySelector('#hi-xlsx-h');
     if (hb) hb.onclick = () => hourly(body, sheets, fname, P, from, to, ctx, shown);
   }
@@ -240,6 +246,7 @@ const PriceHistory = (() => {
     const where = { title: zone ? 'Load zone' : 'NodoP', width: zone ? 22 : 13 };
     const n2 = { width: 14, fmt: '0.00' };
     show(`Building the Excel file (${rows.length.toLocaleString('en-US')} hours)…`, 0, 0);
+    try {
     await Xlsx.download(fname(ps, '_hourly'), [...sheets(ps), {
       name: 'Daily', columns: [{ title: 'Market', width: 8 }, where, { title: 'Date', width: 11 }, { title: `${P} avg`, ...n2 }, { title: 'Energy avg', ...n2 }, { title: 'Losses avg', ...n2 }, { title: 'Congestion avg', ...n2 },
         { title: `${P} max`, ...n2 }, { title: 'Max hour', width: 9, fmt: '0' }, { title: `${P} min`, ...n2 }, { title: 'Min hour', width: 9, fmt: '0' }, { title: 'Hours', width: 8, fmt: '0' }],
@@ -249,6 +256,7 @@ const PriceHistory = (() => {
         { title: `${P} (MXN/MWh)`, width: 16, fmt: '0.00' }, { title: 'Energy', width: 12, fmt: '0.00' }, { title: 'Losses', width: 12, fmt: '0.00' }, { title: 'Congestion', width: 12, fmt: '0.00' }],
       rows
     }]);
+    } catch (e) { console.error(e); return finish('The Excel file could not be built. Please try again later.'); }
     finish(`Excel ready: ${ps.join(' and ')}, ${daily.length.toLocaleString('en-US')} days and ${rows.length.toLocaleString('en-US')} hours from ${mlong(from)} to ${mlong(to)}.`);
   }
 
