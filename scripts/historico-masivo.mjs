@@ -344,6 +344,7 @@ async function exportar(sql, pool, ents, ids, idsExportar, hastaMes) {
     }
     for (const x of perfil) {
       if (!porId.has(x.entidad_id) || !ents.has(porId.get(x.entidad_id))) continue;
+      if (x.hora > 24) continue;  // hora 25 del cambio de horario de 2022: una sola hora, no entra al perfil de 24
       const pf = doc(x.entidad_id)[x.proceso].perfil;
       (pf[x.anio] ??= Array(24).fill(null))[x.hora - 1] = N(x.p);
     }

@@ -20,7 +20,7 @@ const Xlsx = (() => {
       return `<c r="${ref}" s="${s}" t="inlineStr"><is><t>${xml(v)}</t></is></c>`;
     };
     const head = `<row r="1">${columns.map((c, i) => cell(c.title, 1, i, 1)).join('')}</row>`;
-    const body = rows.map((row, k) => `<row r="${k + 2}">${row.map((v, i) => cell(v, k + 2, i, FMT[columns[i].fmt] || 0)).join('')}</row>`).join('');
+    const body = rows.map((row, k) => `<row r="${k + 2}">${row.map((v, i) => cell(v, k + 2, i, FMT[columns[i]?.fmt] || 0)).join('')}</row>`).join('');
     return HEAD + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
       '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
       `<cols>${columns.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${c.width || 12}" customWidth="1"/>`).join('')}</cols>` +
