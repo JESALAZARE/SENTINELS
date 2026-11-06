@@ -16,7 +16,8 @@
    KV namespace binding: S1
    R2 bucket binding: RED (optional) — CFE medium-voltage grid for the "Grid"
      page: red/indice.json + red/red_NN.bin, plus the national Transmission and
-     Natural Gas layers capas/transmision.json.gz and capas/gas.json.gz
+     Natural Gas layers and power plants: capas/transmision.json.gz,
+     capas/gas.json.gz and capas/generacion.json.gz
      (see sentinel-one/LEEME.md)
    ESRI_KEY          secret (optional) — ArcGIS Location Platform API key for the
      Grid page's address search (Esri World Geocoding Service)
@@ -207,7 +208,7 @@ async function gridArea(env, body, json, cors) {
 
 /* ── Grid: national Transmission / Natural Gas layers ── */
 // Small gzip JSON packs, returned as stored; the browser decompresses them.
-const GRID_LAYERS = ['transmision', 'gas'];
+const GRID_LAYERS = ['transmision', 'gas', 'generacion'];
 async function gridLayer(env, body, json, cors) {
   if (!env.RED) return json({ error: 'not_configured', message: 'The grid map is not configured yet.' }, 503);
   if (!GRID_LAYERS.includes(body.name)) return json({ error: 'bad_request', message: 'Unknown map layer.' }, 400);
