@@ -8,10 +8,11 @@
                                 (0.1° cells fetched for the chosen radius).
      Natural Gas  SISTRANGAS, private and US border pipelines and LNG
                   terminals, nearest ones listed by distance.
-   In Power, the Generation switch overlays power plants (capas/generacion,
-   one entry per plant with its units) as points sized by MW, filled when the
-   location is exact and translucent with a border when it is approximate,
-   with a filterable plant table under the nearby table.
+   The Generation switch (Power and Natural Gas) overlays power plants
+   (capas/generacion, one entry per plant with its units) as points sized by
+   MW, filled when the location is exact and translucent with a border when it
+   is approximate, with a filterable plant table under the nearby table. In
+   Natural Gas each plant also shows its nearest pipeline and distance.
    All layers are private: they sit in Cloudflare R2 behind the Sentinel One
    Worker, which checks the client's signed pass (ME.ai). Distribution comes
    from /red (only the cells around the point); Transmission and Natural Gas
@@ -74,7 +75,8 @@ const GridPage = (() => {
   ];
   const GEN_PRIORITY = ['Operating', 'Construction', 'Pre-construction', 'Announced', 'Mothballed', 'Shelved', 'Retired', 'Cancelled'];
   const genColor = st => (GEN_STATUS.find(x => x.key === st) || { color: GREY }).color;
-  const GEN_FILTERS = { q: '', min: '', max: '', tech: '', status: '', fuel: '', state: '', acc: '' };
+  const GEN_FILTERS = { q: '', min: '', max: '', tech: '', status: '', fuel: '', state: '', acc: '', pipe: '' };
+  const PIPE_KM = [1, 5, 10, 25, 50];   // "Pipeline within" filter (Natural Gas)
   const MODES = {
     tx: { section: 'power', title: 'Nearby transmission', what: 'transmission lines and substations', cols: ['Name', 'Type', 'kV', 'Distance km'] },
     dist: { section: 'power', title: 'Nearby circuits', what: 'CFE medium-voltage circuits', cols: ['Circuit', 'Substation', 'Zone', 'kV'].concat(SHOW_CAPACITY ? ['Avail. MW', 'Avail.'] : [], ['Nearest line km']) },
@@ -97,7 +99,7 @@ const GridPage = (() => {
   const packs = {};                     // tx / gas: { feats, group, sub: { key: layerGroup }, on: Set }
   let near = [];                        // tx / gas rows within the radius
   let sugs = [], sugActive = -1, picked = null, sugTimer = 0, sugSeq = 0;
-  let genOn = false, gen = null, genF = { ...GEN_FILTERS }, genFocus = null;  // power plants overlay
+  let genOn = false, gen = null, genF = { ...GEN_FILTERS }, genFocus = null, genPipe = null;  // power plants overlay
 
   function loadLeaflet() {
     return _leaflet || (_leaflet = new Promise((res, rej) => {
@@ -237,7 +239,6 @@ const GridPage = (() => {
     const m = MODES[mode];
     $('grid-root').querySelectorAll('.cp-gr-tab').forEach(b => { const on = b.dataset.section === m.section; b.classList.toggle('is-on', on); b.setAttribute('aria-selected', String(on)); });
     $('gr-seg').hidden = m.section !== 'power';
-    $('gr-gen-wrap').hidden = m.section !== 'power';
     $('gr-seg').querySelectorAll('button').forEach(b => { const on = b.dataset.mode === mode; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
     $('gr-km').innerHTML = kmOptions();
     $('gr-title').textContent = m.title;
@@ -269,7 +270,7 @@ const GridPage = (() => {
         chip('gnl', GAS.gnl.label, `<i class="cp-gr-lng"></i>`, on('gnl')) + '<span><i class="cp-gr-dash"></i>Project / construction</span>';
     }
     // Power plants: status colours and exact / approximate location
-    if (genOn && MODES[mode].section === 'power') {
+    if (genOn) {
       const dot = (c, approx) => `<i class="cp-gr-pt${approx ? ' cp-gr-pt--approx' : ''}" style="--c:${c}"></i>`;
       html += `<span class="cp-gr-legsep"></span>` + [['Operating', '#2B6CB0'], ['Construction', '#D69E2E'], ['Planned', '#805AD5'], ['Shelved / mothballed', '#8A94A0'], ['Cancelled / retired', '#C53030']]
         .map(([l, c]) => `<span>${dot(c)}${l}</span>`).join('') + `<span>${dot('#2B6CB0')}Exact</span><span>${dot('#2B6CB0', true)}Approximate location</span>`;
@@ -703,7 +704,8 @@ const GridPage = (() => {
   }
 
   /* ── Generation: power plants overlay (Power section) ── */
-  const genVisible = () => genOn && MODES[mode].section === 'power';
+  const genVisible = () => genOn;
+  const gasMode = () => mode === 'gas' && !!packs.gas;
   async function applyGen() {
     const vis = genVisible();
     $('gr-plants').hidden = !vis; $('gr-right').classList.toggle('has-plants', vis); legend();
@@ -712,7 +714,7 @@ const GridPage = (() => {
     try { await ensureGen(); } catch (e) { $('gr-gcount').textContent = e.message; $('gr-gcount').classList.add('cp-gr-err'); return; }
     if (!genVisible()) return;
     $('gr-gcount').classList.remove('cp-gr-err');
-    gen.group.addTo(map); genRows();
+    gen.group.addTo(map); genFilters(); filterGen();
   }
 
   let _genLoad = null;
@@ -748,7 +750,8 @@ const GridPage = (() => {
       <label class="cp-pr-f"><span>Max MW</span><input type="number" inputmode="decimal" min="0" data-f="max" value="${_esc(genF.max)}"></label>
       ${sel('tech', 'Technology', gen.opt.tech)}${sel('status', 'Status', gen.opt.status)}
       ${sel('fuel', 'Fuel', gen.opt.fuel)}${sel('state', 'State', gen.opt.state)}
-      ${sel('acc', 'Location', ['Exact', 'Approximate'])}`;
+      ${sel('acc', 'Location', ['Exact', 'Approximate'])}
+      ${gasMode() ? `<label class="cp-pr-f"><span>Pipeline within</span><select data-f="pipe"><option value="">Any</option>${PIPE_KM.map(k => `<option value="${k}" ${String(genF.pipe) === String(k) ? 'selected' : ''}>${k} km</option>`).join('')}</select></label>` : ''}`;
     $('gr-gfilters').querySelectorAll('[data-f]').forEach(el => el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => { genF[el.dataset.f] = el.value; filterGen(); }));
   }
 
@@ -762,6 +765,7 @@ const GridPage = (() => {
       p.shown = placeOk ? p.units.filter(u => (!f.tech || u.tech === f.tech) && (!f.status || u.status === f.status) && (!f.fuel || u.fuel === f.fuel)) : [];
       p.mw = p.shown.reduce((a, u) => a + (u.mw || 0), 0);
       if (p.shown.length && ((min != null && p.mw < min) || (max != null && p.mw > max))) p.shown = [];
+      if (p.shown.length && f.pipe && gasMode()) { const np = nearestPipe(p); if (!np || np.d > Number(f.pipe)) p.shown = []; }
       // Plant status: the most advanced among the shown units (any operating unit makes it Operating)
       p.status = (GEN_PRIORITY.find(k => p.shown.some(u => u.status === k)) || (p.shown[0] && p.shown[0].status)) || '';
       const color = genColor(p.status), radius = 4 + Math.min(10, Math.sqrt(p.mw || 0) / 3.2);
@@ -782,20 +786,48 @@ const GridPage = (() => {
     list.sort(point ? (a, b) => a.d - b.d : (a, b) => b.mw - a.mw);
     const mw = list.reduce((a, p) => a + p.mw, 0);
     $('gr-gcount').textContent = `${list.length} plant${list.length === 1 ? '' : 's'} · ${fmt(mw)} MW${point ? ' · sorted by distance' : ''}`;
-    const cols = ['Plant', 'State', 'Technology', 'MW', 'Status'].concat(point ? ['Dist. km'] : []);
+    const gas = gasMode();
+    const cols = ['Plant', 'State', 'Technology', 'MW', 'Status'].concat(gas ? ['Nearest pipeline', 'Pipe km'] : [], point ? ['Dist. km'] : []);
     $('gr-ghead').innerHTML = `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
     if (!list.length) { $('gr-grows').innerHTML = `<tr><td colspan="${cols.length}" class="cp-gr-empty">No plants match these filters.</td></tr>`; return; }
     const techOf = p => { const t = [...new Set(p.shown.map(u => u.tech))]; return t.length > 1 ? 'Mixed' : t[0]; };
     $('gr-grows').innerHTML = list.map(p => `<tr data-g="${p.id}" class="${genFocus === p.id ? 'is-sel' : ''}">
       <td title="${_esc(p.name)}"><i class="cp-gr-dot ${p.exact ? '' : 'cp-gr-dot--approx'}" style="--c:${genColor(p.status)}"></i>${_esc(p.name)}</td>
       <td>${_esc(p.state || '—')}</td><td>${_esc(techOf(p) || '—')}</td><td>${fmt(p.mw)}</td><td>${_esc(p.status)}</td>
+      ${gas ? (np => np ? `<td title="${_esc(pipeName(np.f))}">${_esc(pipeName(np.f))}</td><td>${fmt(np.d, 1)}</td>` : `<td>None within ${PIPE_MAX} km</td><td>—</td>`)(nearestPipe(p)) : ''}
       ${point ? `<td>${fmt(p.d, 1)}</td>` : ''}</tr>`).join('');
+  }
+
+  // Nearest pipeline to a plant (any gas line layer), searched within PIPE_MAX km; cached per plant
+  const PIPE_MAX = 50;
+  function nearestPipe(p) {
+    const pk = packs.gas; if (!pk) return null;
+    if (p.pipe !== undefined) return p.pipe;
+    const dLat = PIPE_MAX / 111.32, dLon = PIPE_MAX / (111.32 * Math.cos(p.lat * Math.PI / 180));
+    let best = null;
+    for (const f of pk.feats) {
+      if (!f.pts) continue;
+      const [a, b, c, e] = f.bbox;
+      if (a > p.lat + dLat || b < p.lat - dLat || c > p.lon + dLon || e < p.lon - dLon) continue;
+      const d = lineDist(p.lat, p.lon, f.pts);
+      if (d <= PIPE_MAX && (!best || d < best.d)) best = { d, f };
+    }
+    return (p.pipe = best);
+  }
+  function pipeName(f) {
+    const p = f.p;
+    if (f.kind === 'sng') return 'SISTRANGAS' + (p.diam ? ' ' + p.diam + '"' : '');
+    if (f.kind === 'priv') return p.name || 'Private pipeline';
+    return (p.operator || 'US pipeline') + ' (US)';
   }
 
   function focusPlant(id, fit) {
     const p = gen && gen.plants[id]; if (!p) return;
     unfocusPlant(); genFocus = id;
     p.layer.setStyle({ color: INK, weight: 3 }); p.layer.bringToFront();
+    // In Natural Gas, highlight the pipeline that reaches it
+    const np = gasMode() && nearestPipe(p);
+    if (np) { genPipe = np.f; np.f.layer.setStyle({ color: INK, weight: 4.5, opacity: 1 }); np.f.layer.bringToFront(); }
     const yrs = [...new Set(p.shown.map(u => u.start).filter(Boolean))].sort();
     const units = p.shown.map(u => `<tr><td>${_esc(u.unit || '—')}</td><td>${fmt(u.mw)}</td><td>${_esc(u.tech)}</td><td>${_esc(u.status)}</td><td>${u.start || '—'}</td></tr>`).join('');
     const line = (k, v) => v ? `${k}: ${_esc(String(v))}<br>` : '';
@@ -805,6 +837,7 @@ const GridPage = (() => {
       ${line('Start', yrs.length ? (yrs.length > 1 ? yrs[0] + '–' + yrs[yrs.length - 1] : yrs[0]) : '')}
       ${line('Owner', p.owner)}${p.parent && p.parent !== p.owner ? line('Parent', p.parent) : ''}${line('Operator', p.operator)}
       ${line('Location', [p.city, p.state].filter(Boolean).join(', ') + (p.exact ? '' : ' (approximate)'))}
+      ${packs.gas ? (np => np ? `Nearest pipeline: <b>${_esc(pipeName(np.f))}</b>, ${fmt(np.d, 1)} km<br>` : `No pipeline within ${PIPE_MAX} km<br>`)(nearestPipe(p)) : ''}
       ${point ? `Distance: <b>${fmt(distKm(point.lat, point.lon, p.lat, p.lon), 1)} km</b><br>` : ''}
       <table class="cp-gr-units"><tr><th>Unit</th><th>MW</th><th>Technology</th><th>Status</th><th>Start</th></tr>${units}</table></div>`;
     L.popup({ maxWidth: 360 }).setLatLng([p.lat, p.lon]).setContent(html).openOn(map);
@@ -815,6 +848,7 @@ const GridPage = (() => {
   function unfocusPlant() {
     const p = gen && genFocus != null && gen.plants[genFocus];
     if (p) p.layer.setStyle(p.layer.options.base);
+    if (genPipe) { genPipe.layer.setStyle(genPipe.layer.options.base); genPipe = null; }
     genFocus = null;
   }
 
