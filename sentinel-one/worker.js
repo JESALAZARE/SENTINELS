@@ -15,7 +15,9 @@
      MONTHLY_LIMIT_USD  text    — 1
    KV namespace binding: S1
    R2 bucket binding: RED (optional) — CFE medium-voltage grid for the "Grid"
-     page: red/indice.json + red/red_NN.bin (see sentinel-one/LEEME.md)
+     page: red/indice.json + red/red_NN.bin, plus the national Transmission and
+     Natural Gas layers capas/transmision.json.gz and capas/gas.json.gz
+     (see sentinel-one/LEEME.md)
    ESRI_KEY          secret (optional) — ArcGIS Location Platform API key for the
      Grid page's address search (Esri World Geocoding Service)
 
@@ -102,6 +104,7 @@ export default {
       }
       if (url.pathname === '/chat') return chat(env, ctx, body, clientId, json, cors);
       if (url.pathname === '/red') return gridArea(env, body, json, cors);
+      if (url.pathname === '/capa') return gridLayer(env, body, json, cors);
       if (url.pathname === '/geo/suggest' || url.pathname === '/geo/find') return geocode(env, url.pathname.slice(5), body, json);
       return json({ error: 'not_found' }, 404);
     } catch (e) {
@@ -200,6 +203,17 @@ async function gridArea(env, body, json, cors) {
     for (const n of r.sizes) { dv.setUint32(o, n); o += 4; out.set(parts[i].subarray(p, p + n), o); o += n; p += n; }
   });
   return new Response(out, { headers: { ...cors, 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Grid-Updated': idx.actualizado || '', 'Access-Control-Expose-Headers': 'X-Grid-Updated' } });
+}
+
+/* ── Grid: national Transmission / Natural Gas layers ── */
+// Small gzip JSON packs, returned as stored; the browser decompresses them.
+const GRID_LAYERS = ['transmision', 'gas'];
+async function gridLayer(env, body, json, cors) {
+  if (!env.RED) return json({ error: 'not_configured', message: 'The grid map is not configured yet.' }, 503);
+  if (!GRID_LAYERS.includes(body.name)) return json({ error: 'bad_request', message: 'Unknown map layer.' }, 400);
+  const o = await env.RED.get(`capas/${body.name}.json.gz`);
+  if (!o) return json({ error: 'not_configured', message: 'This map layer is not loaded yet.' }, 503);
+  return new Response(o.body, { headers: { ...cors, 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' } });
 }
 
 /* ── Grid: address search (Esri World Geocoding Service) ── */

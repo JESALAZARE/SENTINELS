@@ -1059,6 +1059,17 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 }
 @media (hover:none){ .cp-widget-grip{display:none} }
 /* ── Grid Map ── */
+.cp-gr-modes{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.cp-gr-tabs{display:inline-flex;gap:6px}
+.cp-gr-tab{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 16px;border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--white);font-family:var(--font-sans);font-size:13px;font-weight:600;color:var(--steel-400);cursor:pointer}
+.cp-gr-tab svg{width:16px;height:16px}
+.cp-gr-tab:hover{color:var(--ink-900);border-color:var(--ink-900)}
+.cp-gr-tab.is-on{background:var(--ink-900);border-color:var(--ink-900);color:#fff}
+.cp-gr-seg{display:inline-flex;border:1px solid var(--border-default);border-radius:var(--radius-md);overflow:hidden;background:var(--white)}
+.cp-gr-seg[hidden]{display:none}
+.cp-gr-seg button{height:34px;padding:0 16px;border:0;background:none;font-family:var(--font-sans);font-size:12px;font-weight:600;color:var(--steel-400);cursor:pointer}
+.cp-gr-seg button+button{border-left:1px solid var(--border-default)}
+.cp-gr-seg button.is-on{background:#ECEFF2;color:var(--ink-900)}
 .cp-gr-card{padding:16px;margin-bottom:16px}
 .cp-gr-search{position:relative}
 .cp-gr-search input{width:100%}
@@ -1077,6 +1088,10 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-gr-map{height:calc(100vh - 330px);height:calc(100dvh - 330px);min-height:420px;background:#EEF0F2}
 .cp-gr-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:10px 14px;border-top:1px solid var(--border-subtle);font-size:11px;color:var(--steel-400)}
 .cp-gr-legend span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.cp-gr-legend-items{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;flex:1;min-width:0}
+.cp-gr-chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border:1px solid var(--border-default);border-radius:999px;background:var(--white);font-family:var(--font-sans);font-size:11px;color:var(--ink-900);cursor:pointer;white-space:nowrap}
+.cp-gr-chip.is-off{opacity:.45;text-decoration:line-through}
+.cp-gr-legend i.cp-gr-lng{width:10px;height:10px;border-radius:50%;background:#0F766E}
 .cp-gr-legend i{display:inline-block;width:16px;height:3px;border-radius:2px}
 .cp-gr-legend i.cp-gr-dash{height:0;border-top:2px dashed var(--steel-400);background:none}
 .cp-gr-legend i.cp-gr-sub{width:9px;height:9px;border-radius:50%;border:2px solid var(--ink-900);background:#fff}
@@ -1087,6 +1102,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 .cp-gr-table tbody tr{cursor:pointer}
 .cp-gr-table tbody tr:hover td{background:#F6F7F8}
 .cp-gr-table tbody tr.is-sel td{background:#ECEFF2}
+.cp-gr-table td:first-child{max-width:200px;overflow:hidden;text-overflow:ellipsis}
 .cp-gr-table td:nth-child(2){max-width:118px;overflow:hidden;text-overflow:ellipsis;font-family:var(--font-sans)}
 .cp-gr-table td.cp-gr-empty{font-family:var(--font-sans);font-weight:400;color:var(--steel-400);white-space:normal;cursor:default}
 .cp-gr-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
@@ -1100,6 +1116,12 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 }
 @media (max-width:600px){
   .cp-gr-card{padding:14px 12px}
+  .cp-gr-modes{flex-direction:column;align-items:stretch}
+  .cp-gr-tabs,.cp-gr-seg{display:flex}
+  .cp-gr-tab{flex:1;justify-content:center;height:44px;font-size:14px}
+  .cp-gr-seg button{flex:1;height:40px;font-size:13px}
+  .cp-gr-chip{height:32px;font-size:12px}
+  .cp-gr-table td:first-child{max-width:150px}
   .cp-gr-coord{grid-column:1 / -1}
   .cp-gr-coord input{width:100%}
   .cp-gr-go{grid-column:1 / -1;width:100%;height:44px;font-size:16px;order:3}
@@ -1376,7 +1398,7 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
         <div class="cp-page-head">
           <div>
             <h1 class="cp-page-title">Grid Map</h1>
-            <p class="cp-page-sub">CFE medium-voltage circuits around a site: substation, zone, voltage and distance to the nearest line</p>
+            <p class="cp-page-sub">Power transmission and distribution networks and natural gas infrastructure around a site</p>
           </div>
         </div>
         <div id="grid-root"></div>
