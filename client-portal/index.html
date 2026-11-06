@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; worker-src 'self' blob: https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://sentinels.com.mx; connect-src 'self' https://formspree.io https://cdnjs.cloudflare.com https://*.workers.dev; form-action 'self' https://formspree.io; base-uri 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; worker-src 'self' blob: https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://sentinels.com.mx https://server.arcgisonline.com; connect-src 'self' https://formspree.io https://cdnjs.cloudflare.com https://*.workers.dev; form-action 'self' https://formspree.io; base-uri 'self'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <script>
 // Always use HTTPS and never render inside another site's frame
@@ -1058,6 +1058,52 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
   .cp-gal-grid{grid-template-columns:1fr}
 }
 @media (hover:none){ .cp-widget-grip{display:none} }
+/* ── Grid Map ── */
+.cp-gr-card{padding:16px;margin-bottom:16px}
+.cp-gr-coord input{width:240px}
+.cp-gr-go{height:36px;font-size:13px;padding:0 18px}
+.cp-gr-loc{height:36px}
+.cp-gr-hint{margin-top:10px}
+.cp-gr-hint.cp-gr-err{color:var(--signal-negative)}
+.cp-gr-hint b{color:var(--ink-900);font-weight:600}
+.cp-gr-main{display:grid;grid-template-columns:minmax(0,1fr) 450px;gap:16px;align-items:start}
+.cp-gr-mapcard{overflow:hidden}
+.cp-gr-map{height:calc(100vh - 330px);height:calc(100dvh - 330px);min-height:420px;background:#EEF0F2}
+.cp-gr-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:10px 14px;border-top:1px solid var(--border-subtle);font-size:11px;color:var(--steel-400)}
+.cp-gr-legend span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.cp-gr-legend i{display:inline-block;width:16px;height:3px;border-radius:2px}
+.cp-gr-legend i.cp-gr-dash{height:0;border-top:2px dashed var(--steel-400);background:none}
+.cp-gr-legend i.cp-gr-sub{width:9px;height:9px;border-radius:50%;border:2px solid var(--ink-900);background:#fff}
+.cp-gr-base{margin-left:auto}
+.cp-gr-side{padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.cp-gr-sidehead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.cp-gr-scroll{max-height:calc(100vh - 380px);max-height:calc(100dvh - 380px);min-height:300px}
+.cp-gr-table tbody tr{cursor:pointer}
+.cp-gr-table tbody tr:hover td{background:#F6F7F8}
+.cp-gr-table tbody tr.is-sel td{background:#ECEFF2}
+.cp-gr-table td:nth-child(2){max-width:118px;overflow:hidden;text-overflow:ellipsis;font-family:var(--font-sans)}
+.cp-gr-table td.cp-gr-empty{font-family:var(--font-sans);font-weight:400;color:var(--steel-400);white-space:normal;cursor:default}
+.cp-gr-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.cp-gr-src{font-size:10px}
+.cp-gr-pop{font-family:var(--font-sans);font-size:12px;line-height:1.55}
+.cp-gr-map .leaflet-container,.cp-gr-map{font-family:var(--font-sans)}
+@media (max-width:1180px){
+  .cp-gr-main{grid-template-columns:1fr}
+  .cp-gr-map{height:60vh;height:60dvh}
+  .cp-gr-scroll{max-height:420px}
+}
+@media (max-width:600px){
+  .cp-gr-card{padding:14px 12px}
+  .cp-gr-coord{grid-column:1 / -1}
+  .cp-gr-coord input{width:100%}
+  .cp-gr-go{grid-column:1 / -1;width:100%;height:44px;font-size:16px;order:3}
+  .cp-gr-loc{height:44px;justify-content:center;order:2}
+  .cp-gr-map{height:55vh;height:55dvh;min-height:320px}
+  .cp-gr-legend{gap:6px 10px}
+  .cp-gr-base{height:36px}
+  .cp-gr-side{padding:12px}
+  .cp-gr-scroll{max-height:60vh;max-height:60dvh}
+}
 </style>
 </head>
 <body>
@@ -1140,6 +1186,10 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
       <button class="cp-nav-item" data-section="hedges">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.500-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>
         Hedge Contracts
+      </button>
+      <button class="cp-nav-item" data-section="grid" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 5h-6z"/><path d="M12 7v15"/><path d="M5 11h14"/><path d="M7 16h10"/><path d="M5 11l-2 4M19 11l2 4"/></svg>
+        Grid Map
       </button>
       <button class="cp-nav-item" data-section="contract">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
@@ -1310,6 +1360,17 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
           </div>
         </div>
         <div id="prices-root"></div>
+      </section>
+
+      <!-- GRID MAP -->
+      <section id="sec-grid" class="cp-section">
+        <div class="cp-page-head">
+          <div>
+            <h1 class="cp-page-title">Grid Map</h1>
+            <p class="cp-page-sub">CFE medium-voltage circuits around a site and the distributed generation capacity each one still has available</p>
+          </div>
+        </div>
+        <div id="grid-root"></div>
       </section>
 
       <!-- ╔══════════════════════════════════════════╗
@@ -1522,6 +1583,7 @@ async function _openVault(vault, raw, id) {
   _renderIntel(intel);
   Board.renderAll();
   S1.init();
+  GridPage.init();
   SitesPage.init();
   // CFE (basic service) clients without contracts have nothing to show under My Contract
   document.querySelector('.cp-nav-item[data-section="contract"]').style.display = Energy.isQualified() || Energy.contracts().length ? '' : 'none';
@@ -1774,6 +1836,7 @@ const SECTION_TITLES = {
   prices: 'Market Prices',
   insights: 'MEM Insights',
   hedges: 'Hedge Contracts',
+  grid: 'Grid Map',
   assistant: 'Sentinel One',
   sites: 'My Sites',
   contract: 'My Contract',
@@ -1805,6 +1868,7 @@ function goTo(id) {
   if (id === 'prices') PricesPage.show();
   if (id === 'insights') InsightsPage.show();
   if (id === 'hedges') HedgesPage.show();
+  if (id === 'grid') GridPage.show();
 }
 
 // Nav button clicks
@@ -1966,6 +2030,7 @@ function filterDocs(btn, type) {
 <script src="insights.js"></script>
 <script src="hedges.js"></script>
 <script src="sentinel-one.js"></script>
+<script src="grid.js"></script>
 <!-- ═══════════════════════════════════════════════════
      BECOME A CLIENT MODAL
 ═══════════════════════════════════════════════════ -->

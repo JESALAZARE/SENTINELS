@@ -68,3 +68,30 @@ En 1–2 minutos le aparece la pestaña **Sentinel One** en su portal.
   "Panel admin · lectura de recibos" (no cuenta contra el tope de los clientes).
 - **Plan gratuito de Cloudflare KV:** 1,000 escrituras al día (cada pregunta usa ~1–2). Si creces
   mucho, el plan de pago de Workers cuesta $5 USD al mes.
+
+---
+
+## 5. Mapa de red CFE (página "Grid Map" del portal)
+
+El portal muestra las líneas de media tensión de CFE y la capacidad disponible para generación
+distribuida de cada circuito alrededor de las coordenadas que el usuario escribe. La red nacional
+**no está en el repositorio** (es público): vive en un bucket privado de Cloudflare R2 y solo la
+entrega este mismo Worker a clientes con pase válido, en pedazos de ~10 km alrededor del punto
+(radio máximo 15 km).
+
+Los archivos se generan en la carpeta local de la red (`Downloads\CFE_Red_MT_Nacional`) con
+`node a_celdas.js` → carpeta `celdas\`: `indice.json` (~0.4 MB) y `red_00.bin` (~77 MB).
+
+1. Cloudflare → **Storage & Databases → R2** → activa R2 (plan gratis: 10 GB) → **Create bucket**,
+   nómbralo `sentinels-red`. Déjalo **privado** (no actives "Public access").
+2. En el bucket, **Upload** → crea la carpeta `red` y sube ahí `indice.json` y `red_00.bin`
+   (quedan como `red/indice.json` y `red/red_00.bin`). Si `a_celdas.js` generó más paquetes
+   (`red_01.bin`…), súbelos también.
+3. En el Worker `sentinel-one`: **Settings → Bindings → Add → R2 bucket**: nombre de variable
+   `RED`, bucket `sentinels-red`. Guarda.
+4. Vuelve a pegar `sentinel-one/worker.js` (Edit code → Deploy).
+5. Prueba: abre `https://sentinel-one.TU-CUENTA.workers.dev/health`; debe decir `"grid":true`.
+
+La pestaña **Grid Map** aparece a los clientes *Supply* y *Comercializador* que tienen activado
+Sentinel One (usa el mismo pase). Para actualizar la red, vuelve a generar las celdas y reemplaza
+los archivos en R2 y vuelve a hacer **Deploy** del Worker (el índice se guarda en memoria hasta una hora).
