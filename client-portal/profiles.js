@@ -3,7 +3,7 @@
    and each type gets its own portal experience: navigation, dashboard
    widgets, default layout, look and Sentinel One wording.
      supply  Supply client (CFE basic service or Qualified Supply): full portal.
-     trader  Comercializador: Dashboard, Sentinel One, Market Intelligence, Market Prices, MEM Insights, Hedge Contracts, Documents.
+     trader  Comercializador: Dashboard, Sentinel One, Market Intelligence, Market Prices, MEM Insights, Hedge Contracts, Grid Map, Documents.
      guest   Invitado: same experience as a trader, for trials with external users.
    To add a feature for traders in a later stage, add its section to `nav`
    and its widgets to `cats` / `widgets` / `layout` below.
@@ -12,13 +12,13 @@ const Profiles = (() => {
   const TYPES = {
     supply: {
       label: 'Supply client', tag: 'Client Portal', theme: '',
-      nav: ['dashboard', 'sites', 'assistant', 'intelligence', 'prices', 'contract', 'documents', 'support'],
+      nav: ['dashboard', 'sites', 'assistant', 'intelligence', 'prices', 'grid', 'contract', 'documents', 'support'],
       cats: ['Plants & bills', 'Key figures', 'Charts', 'Market', 'Contract', 'Updates'], widgets: [],
       title: 'Your dashboard', sub: 'Add, arrange and resize the widgets you care about'
     },
     trader: {
       label: 'Trader', tag: 'Trader Portal', theme: 'cp-theme-trader',
-      nav: ['dashboard', 'assistant', 'intelligence', 'prices', 'insights', 'hedges', 'documents', 'support'],
+      nav: ['dashboard', 'assistant', 'intelligence', 'prices', 'insights', 'hedges', 'grid', 'documents', 'support'],
       cats: ['Workspace', 'Market', 'Updates'], widgets: ['advisor'], recat: { advisor: 'Workspace' },
       title: 'Trading desk', sub: 'Market intelligence, documents and Sentinel One in one place',
       layout: [['ws_welcome', 'l'], ['kpi_intel_count', 's'], ['kpi_latest_update', 'm'], ['kpi_docs_count', 's'], ['ws_ask', 'w'], ['advisor', 's'], ['intel_list', 'w'], ['docs_recent', 'w']]

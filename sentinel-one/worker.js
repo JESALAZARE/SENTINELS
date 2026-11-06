@@ -14,6 +14,8 @@
      SITE_URL           text    — https://sentinels.com.mx
      MONTHLY_LIMIT_USD  text    — 1
    KV namespace binding: S1
+   R2 bucket binding: RED (optional) — CFE medium-voltage grid for the "Grid"
+     page: red/indice.json + red/red_NN.bin (see sentinel-one/LEEME.md)
 
    Plain fetch() is used (not the SDK) so the Worker can be pasted into the
    Cloudflare dashboard editor without a build step. */
@@ -57,7 +59,7 @@ export default {
 
     try {
       if (url.pathname === '/health') {
-        return json({ ok: true, model: MODEL, configured: !!(env.ANTHROPIC_API_KEY && env.AI_SECRET && env.S1), limitUsd: limitOf(env) });
+        return json({ ok: true, model: MODEL, configured: !!(env.ANTHROPIC_API_KEY && env.AI_SECRET && env.S1), grid: !!env.RED, limitUsd: limitOf(env) });
       }
       if (!allowed.includes(origin)) return json({ error: 'forbidden', message: 'Origin not allowed.' }, 403);
       if (!env.ANTHROPIC_API_KEY || !env.AI_SECRET || !env.S1) return json({ error: 'not_configured', message: 'Sentinel One is not configured yet.' }, 503);
@@ -97,6 +99,7 @@ export default {
         return json({ ok: true });
       }
       if (url.pathname === '/chat') return chat(env, ctx, body, clientId, json, cors);
+      if (url.pathname === '/red') return gridArea(env, body, json, cors);
       return json({ error: 'not_found' }, 404);
     } catch (e) {
       if (e.status) return json({ error: e.code || 'error', message: e.message }, e.status);
@@ -149,6 +152,51 @@ function costOf(u) {
   const r = totalIn > RATES.threshold ? RATES.large : RATES.small;
   return ((u.input_tokens || 0) * r.in + (u.cache_creation_input_tokens || 0) * r.in * 1.25 +
           (u.cache_read_input_tokens || 0) * r.in * 0.1 + (u.output_tokens || 0) * r.out) / 1e6;
+}
+
+/* ── Grid: CFE medium-voltage lines around a point ── */
+// The national grid is cut into 0.1° cells (gzip JSON each), stored back to back in R2
+// sorted by latitude row then longitude, so each row of neighbouring cells is one ranged read.
+// The Worker only slices bytes (no parsing of cells) and the browser decompresses them.
+// Response: for each cell, a 4-byte big-endian length followed by that cell's gzip bytes.
+const GRID_MAX_KM = 15;
+let GRID_INDEX = null, GRID_INDEX_AT = 0;
+async function gridIndex(env) {
+  if (GRID_INDEX && Date.now() - GRID_INDEX_AT < 3600e3) return GRID_INDEX;
+  const o = await env.RED.get('red/indice.json');
+  if (!o) throw fail(503, 'not_configured', 'The grid map is not loaded yet.');
+  GRID_INDEX = await o.json(); GRID_INDEX_AT = Date.now();
+  return GRID_INDEX;
+}
+async function gridArea(env, body, json, cors) {
+  if (!env.RED) return json({ error: 'not_configured', message: 'The grid map is not configured yet.' }, 503);
+  const lat = Number(body.lat), lon = Number(body.lon), km = Number(body.km);
+  if (!(lat >= 14 && lat <= 33.5 && lon >= -118.5 && lon <= -86)) return json({ error: 'bad_request', message: 'The point must be inside Mexico.' }, 400);
+  if (!(km > 0 && km <= GRID_MAX_KM)) return json({ error: 'bad_request', message: `Radius must be between 0 and ${GRID_MAX_KM} km.` }, 400);
+  const idx = await gridIndex(env), C = idx.cell;
+  const dLat = km / 111.32, dLon = km / (111.32 * Math.cos(lat * Math.PI / 180));
+  const x0 = Math.floor((lon - dLon) / C), x1 = Math.floor((lon + dLon) / C), y0 = Math.floor((lat - dLat) / C), y1 = Math.floor((lat + dLat) / C);
+  // Byte ranges: cells next to each other in a row are contiguous in the pack, so they merge
+  const ranges = [];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const e = idx.cells[x + '_' + y]; if (!e) continue;
+    const last = ranges[ranges.length - 1];
+    if (last && last.pack === e[0] && last.offset + last.length === e[1]) { last.length += e[2]; last.sizes.push(e[2]); }
+    else ranges.push({ pack: e[0], offset: e[1], length: e[2], sizes: [e[2]] });
+  }
+  const parts = await Promise.all(ranges.map(async r => {
+    const o = await env.RED.get(`red/red_${String(r.pack).padStart(2, '0')}.bin`, { range: { offset: r.offset, length: r.length } });
+    if (!o) throw fail(503, 'unavailable', 'The grid map is temporarily unavailable.');
+    return new Uint8Array(await o.arrayBuffer());
+  }));
+  const total = ranges.reduce((s, r) => s + r.length + 4 * r.sizes.length, 0);
+  const out = new Uint8Array(total), dv = new DataView(out.buffer);
+  let o = 0;
+  ranges.forEach((r, i) => {
+    let p = 0;
+    for (const n of r.sizes) { dv.setUint32(o, n); o += 4; out.set(parts[i].subarray(p, p + n), o); o += n; p += n; }
+  });
+  return new Response(out, { headers: { ...cors, 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Grid-Updated': idx.actualizado || '', 'Access-Control-Expose-Headers': 'X-Grid-Updated' } });
 }
 
 /* ── Admin: read a CFE bill PDF ───────────────────── */
