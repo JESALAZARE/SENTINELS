@@ -96,6 +96,23 @@ La pestaña **Grid Map** aparece a los clientes *Supply*, *Comercializador* e *I
 Sentinel One (usa el mismo pase). Para actualizar la red, vuelve a generar las celdas y reemplaza
 los archivos en R2 y vuelve a hacer **Deploy** del Worker (el índice se guarda en memoria hasta una hora).
 
+### Transmisión y Gas Natural (capas nacionales)
+
+Grid Map tiene dos secciones: **Power** (con el selector *Transmission | Distribution*) y
+**Natural Gas**. Transmisión (líneas por kV y subestaciones) y gas natural (SISTRANGAS,
+gasoductos privados, gasoductos de EE. UU. cercanos a la frontera y terminales de GNL) son
+dos paquetes pequeños que el portal carga completos con la ruta `/capa` de este Worker.
+
+Se generan desde los GeoJSON de `D:\0. Historia del MEM\Base de Datos MEM\MAPA SEN ELECTRICO`
+con `node capas_portal\a_capas.js` → `capas_portal\transmision.json.gz` y `capas_portal\gas.json.gz`
+(~0.4 MB cada uno).
+
+1. En el bucket `sentinels-red` crea la carpeta `capas` (junto a `red`).
+2. Sube ahí `transmision.json.gz` y `gas.json.gz` → `capas/transmision.json.gz` y `capas/gas.json.gz`.
+3. Vuelve a pegar `sentinel-one/worker.js` (Edit code → Deploy).
+
+Para actualizar una capa, vuelve a correr `a_capas.js` y reemplaza el archivo en R2.
+
 ### Buscador de direcciones (Esri)
 
 En Grid Map el usuario puede escribir una dirección, colonia, parque industrial o empresa en lugar
