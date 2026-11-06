@@ -1,6 +1,7 @@
 /* ── Sentinels Client Portal · Grid Map ──────────────────────────────
    CFE medium-voltage distribution lines around a point the user types
-   (latitude, longitude) with each circuit's distributed-generation hosting
+   (an address or place found with Esri's geocoder through the Worker, or
+   latitude, longitude) with each circuit's distributed-generation hosting
    capacity. The national grid is private: it sits in Cloudflare R2 behind
    the Sentinel One Worker, which checks the client's signed pass (ME.ai)
    and returns only the 0.1° cells around the point (gzip JSON each, see
@@ -37,6 +38,7 @@ const GridPage = (() => {
 
   let L = null, _leaflet = null, map = null, base = null, layers = null, renderer = null;
   let data = null, selected = null, built = false, busy = false, baseKind = 'map';
+  let sugs = [], sugActive = -1, picked = null, sugTimer = 0, sugSeq = 0;
 
   function loadLeaflet() {
     return _leaflet || (_leaflet = new Promise((res, rej) => {
@@ -62,15 +64,21 @@ const GridPage = (() => {
     $('grid-root').innerHTML = `
       <div class="cp-card cp-gr-card">
         <form class="cp-pr-row" id="gr-form" autocomplete="off">
-          <label class="cp-pr-f cp-gr-coord"><span>Latitude, longitude</span>
-            <input id="gr-coord" inputmode="decimal" placeholder="25.6866, -100.3161" value="${_esc(last.coord || '')}"></label>
+          <div class="cp-pr-f cp-gr-coord"><label for="gr-coord"><span>Address, place or coordinates</span></label>
+            <div class="cp-gr-search">
+              <input id="gr-coord" type="search" enterkeyhint="search" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="gr-sug"
+                placeholder="Parque Industrial Stiva, Apodaca · 25.6866, -100.3161" value="${_esc(last.coord || '')}">
+              <ul class="cp-gr-sug" id="gr-sug" role="listbox" hidden></ul>
+            </div></div>
           <label class="cp-pr-f"><span>Radius</span>
             <select id="gr-km">${RADII.map(k => `<option value="${k}" ${k === (last.km || 5) ? 'selected' : ''}>${k} km</option>`).join('')}</select></label>
           <button type="submit" class="cp-btn-dark cp-gr-go" id="gr-go">Load area</button>
           <button type="button" class="cp-pr-dl cp-gr-loc" id="gr-loc" title="Use this device's location">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>My location</button>
+          <button type="button" class="cp-pr-dl cp-gr-clear" id="gr-clear" title="Clear the search, the map and the table">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>Clear</button>
         </form>
-        <div class="cp-pr-note cp-gr-hint" id="gr-msg">Type the client's coordinates (you can paste them from Google Maps) and choose a radius. You can also click the map to pick a point.</div>
+        <div class="cp-pr-note cp-gr-hint" id="gr-msg">Search an address, industrial park or company, or type coordinates (you can paste a Google Maps link), and choose a radius. You can also click the map to pick a point.</div>
       </div>
       <div class="cp-gr-main">
         <div class="cp-card cp-gr-mapcard">
@@ -95,8 +103,18 @@ const GridPage = (() => {
           <div class="cp-pr-note cp-gr-src" id="gr-src">Source: CFE distributed generation map. Capacity per circuit as published by CFE; it is indicative and CFE confirms it in the interconnection study.</div>
         </div>
       </div>`;
-    $('gr-form').addEventListener('submit', e => { e.preventDefault(); load(); });
+    $('gr-form').addEventListener('submit', e => { e.preventDefault(); if (sugActive >= 0) pick(sugActive); else { hideSug(); load(); } });
     $('gr-loc').addEventListener('click', locate);
+    $('gr-clear').addEventListener('click', clear);
+    const inp = $('gr-coord');
+    inp.addEventListener('input', () => { picked = null; clearTimeout(sugTimer); sugTimer = setTimeout(suggest, 250); });
+    inp.addEventListener('keydown', e => {
+      if ($('gr-sug').hidden) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sugActive = (sugActive + (e.key === 'ArrowDown' ? 1 : -1) + sugs.length) % sugs.length; drawSug(); }
+      else if (e.key === 'Escape') hideSug();
+    });
+    inp.addEventListener('blur', () => setTimeout(hideSug, 150));
+    $('gr-sug').addEventListener('mousedown', e => { const li = e.target.closest('li[data-i]'); if (li) { e.preventDefault(); pick(Number(li.dataset.i)); } });
     $('gr-base').addEventListener('click', toggleBase);
     $('gr-xlsx').addEventListener('click', download);
     $('gr-rows').addEventListener('click', e => { const tr = e.target.closest('tr[data-c]'); if (tr) select(tr.dataset.c, true); });
@@ -113,10 +131,10 @@ const GridPage = (() => {
       layers = L.layerGroup().addTo(map);
       map.on('click', e => {
         if (busy) return;
-        $('gr-coord').value = e.latlng.lat.toFixed(6) + ', ' + e.latlng.lng.toFixed(6);
+        $('gr-coord').value = e.latlng.lat.toFixed(6) + ', ' + e.latlng.lng.toFixed(6); picked = null; hideSug();
         msg('Point selected. Press <b>Load area</b> to see the circuits around it.');
       });
-      if (store.get().coord && parse(store.get().coord)) load();
+      if (store.get().coord) load();
     }
     setTimeout(() => map.invalidateSize(), 0);
   }
@@ -154,11 +172,64 @@ const GridPage = (() => {
       { enableHighAccuracy: true, timeout: 15000 });
   }
 
+  /* ── Clear ────────────────────────────────────── */
+  function clear() {
+    if (busy) return;
+    $('gr-coord').value = ''; picked = null; hideSug();
+    store.set({ km: Number($('gr-km').value) });
+    data = null; selected = null;
+    if (map) { map.closePopup(); layers.clearLayers(); map.setView([23.6, -102.5], 5); }
+    $('gr-rows').innerHTML = '<tr><td colspan="6" class="cp-gr-empty">Load an area to see its circuits.</td></tr>';
+    $('gr-count').textContent = '—'; $('gr-xlsx').disabled = true;
+    msg('Search an address, industrial park or company, or type coordinates, and choose a radius.');
+    $('gr-coord').focus();
+  }
+
+  /* ── Address search (Esri, through the Worker) ── */
+  const post = (path, body) => { const c = cfg();
+    return fetch(c.url + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: MY_ID, token: c.token, ...body }) }); };
+  // Bias results toward what the map shows once it has a point
+  const near = () => data ? { lat: data.lat, lon: data.lon } : {};
+
+  async function suggest() {
+    const text = $('gr-coord').value.trim(), seq = ++sugSeq;
+    if (!cfg() || text.length < 3 || parse(text)) { hideSug(); return; }
+    try {
+      const r = await post('/geo/suggest', { text, ...near() });
+      if (seq !== sugSeq) return;
+      if (!r.ok) { hideSug(); return; }
+      sugs = (await r.json()).suggestions || []; sugActive = -1; drawSug();
+    } catch { if (seq === sugSeq) hideSug(); }
+  }
+  function drawSug() {
+    const ul = $('gr-sug'), inp = $('gr-coord'), open = sugs.length > 0 && document.activeElement === inp;
+    ul.innerHTML = sugs.map((x, i) => `<li role="option" data-i="${i}" id="gr-sug-${i}" aria-selected="${i === sugActive}" class="${i === sugActive ? 'is-act' : ''}">${_esc(x.text)}</li>`).join('');
+    ul.hidden = !open; inp.setAttribute('aria-expanded', String(open));
+    if (sugActive >= 0) inp.setAttribute('aria-activedescendant', 'gr-sug-' + sugActive); else inp.removeAttribute('aria-activedescendant');
+  }
+  function hideSug() {
+    sugs = []; sugActive = -1; sugSeq++;
+    const ul = $('gr-sug'); if (!ul) return;
+    ul.hidden = true; ul.innerHTML = ''; $('gr-coord').setAttribute('aria-expanded', 'false'); $('gr-coord').removeAttribute('aria-activedescendant');
+  }
+  function pick(i) { const x = sugs[i]; if (!x) return; $('gr-coord').value = x.text; picked = x; hideSug(); load(); }
+
+  // Text → point: coordinates or a Google Maps link directly, anything else through the geocoder
+  async function resolve(text) {
+    const p = parse(text);
+    if (p) return { ...p, label: '' };
+    if (text.length < 3) throw new Error('Type an address or place, or coordinates as latitude, longitude.');
+    const r = await post('/geo/find', { text, magicKey: picked && picked.text === text ? picked.magicKey : undefined, ...near() });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 503) throw new Error('Address search is not enabled yet. Type the coordinates as latitude, longitude.');
+    if (!r.ok) throw new Error(d.message || 'Address search is temporarily unavailable.');
+    if (!(d.lat >= 14 && d.lat <= 33.5 && d.lon >= -118.5 && d.lon <= -86)) throw new Error('That place is outside Mexico.');
+    return { lat: d.lat, lon: d.lon, label: d.label || text };
+  }
+
   /* ── Data ─────────────────────────────────────── */
   async function fetchArea(lat, lon, km) {
-    const c = cfg();
-    const r = await fetch(c.url + '/red', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientId: MY_ID, token: c.token, lat, lon, km }) });
+    const r = await post('/red', { lat, lon, km });
     if (!r.ok) { let m = ''; try { m = (await r.json()).message; } catch {} throw new Error(m || 'The grid map is temporarily unavailable.'); }
     const buf = new Uint8Array(await r.arrayBuffer()), dv = new DataView(buf.buffer), cells = [];
     for (let o = 0; o + 4 <= buf.length;) {
@@ -214,17 +285,19 @@ const GridPage = (() => {
   async function load() {
     if (busy) return;
     if (!cfg()) { msg('The grid map is not enabled for your account. Contact your Sentinel advisor.', true); return; }
-    const p = parse($('gr-coord').value), km = Number($('gr-km').value);
-    if (!p) { msg('Enter a point in Mexico as <b>latitude, longitude</b>, e.g. 25.6866, -100.3161.', true); return; }
-    store.set({ coord: $('gr-coord').value.trim(), km });
+    const text = $('gr-coord').value.trim(), km = Number($('gr-km').value);
+    if (!text) { msg('Search an address or place, or type coordinates as <b>latitude, longitude</b>, e.g. 25.6866, -100.3161.', true); return; }
+    store.set({ coord: text, km });
     busy = true; $('gr-go').disabled = true; $('gr-go').textContent = 'Loading…';
-    msg(`Loading the grid within ${km} km…`);
+    msg(parse(text) ? `Loading the grid within ${km} km…` : 'Finding the place…');
     try {
+      const p = await resolve(text);
+      if (p.label) msg(`Loading the grid within ${km} km of <b>${_esc(p.label)}</b>…`);
       const { cells, updated } = await fetchArea(p.lat, p.lon, km);
-      data = { ...assemble(cells, p.lat, p.lon, km), lat: p.lat, lon: p.lon, km, updated };
+      data = { ...assemble(cells, p.lat, p.lon, km), lat: p.lat, lon: p.lon, km, updated, label: p.label };
       draw();
-      const n = data.list.length;
-      msg(n ? `<b>${n}</b> circuit${n === 1 ? '' : 's'} within ${km} km of ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}. Click a line or a row to highlight its circuit.`
+      const n = data.list.length, where = p.label ? `<b>${_esc(p.label)}</b> (${p.lat.toFixed(5)}, ${p.lon.toFixed(5)})` : `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
+      msg(n ? `<b>${n}</b> circuit${n === 1 ? '' : 's'} within ${km} km of ${where}. Click a line or a row to highlight its circuit.`
         : `No CFE medium-voltage lines within ${km} km of this point. Try a larger radius.`);
     } catch (e) {
       msg(_esc(e.message || 'The grid map could not be loaded.'), true);
@@ -249,7 +322,7 @@ const GridPage = (() => {
         .bindTooltip(`<b>${_esc(s.code)}</b> ${_esc(s.name || '')}`).addTo(layers);
     }
     L.circleMarker([lat, lon], { renderer, radius: 7, color: '#fff', weight: 2, fillColor: '#0F1B2D', fillOpacity: 1 })
-      .bindTooltip('Selected point').addTo(layers);
+      .bindTooltip(data.label ? _esc(data.label) : 'Selected point').addTo(layers);
     map.fitBounds(L.latLng(lat, lon).toBounds(km * 2000), { padding: [10, 10] });
     rows();
   }

@@ -16,6 +16,8 @@
    KV namespace binding: S1
    R2 bucket binding: RED (optional) — CFE medium-voltage grid for the "Grid"
      page: red/indice.json + red/red_NN.bin (see sentinel-one/LEEME.md)
+   ESRI_KEY          secret (optional) — ArcGIS Location Platform API key for the
+     Grid page's address search (Esri World Geocoding Service)
 
    Plain fetch() is used (not the SDK) so the Worker can be pasted into the
    Cloudflare dashboard editor without a build step. */
@@ -59,7 +61,7 @@ export default {
 
     try {
       if (url.pathname === '/health') {
-        return json({ ok: true, model: MODEL, configured: !!(env.ANTHROPIC_API_KEY && env.AI_SECRET && env.S1), grid: !!env.RED, limitUsd: limitOf(env) });
+        return json({ ok: true, model: MODEL, configured: !!(env.ANTHROPIC_API_KEY && env.AI_SECRET && env.S1), grid: !!env.RED, geocode: !!env.ESRI_KEY, limitUsd: limitOf(env) });
       }
       if (!allowed.includes(origin)) return json({ error: 'forbidden', message: 'Origin not allowed.' }, 403);
       if (!env.ANTHROPIC_API_KEY || !env.AI_SECRET || !env.S1) return json({ error: 'not_configured', message: 'Sentinel One is not configured yet.' }, 503);
@@ -100,6 +102,7 @@ export default {
       }
       if (url.pathname === '/chat') return chat(env, ctx, body, clientId, json, cors);
       if (url.pathname === '/red') return gridArea(env, body, json, cors);
+      if (url.pathname === '/geo/suggest' || url.pathname === '/geo/find') return geocode(env, url.pathname.slice(5), body, json);
       return json({ error: 'not_found' }, 404);
     } catch (e) {
       if (e.status) return json({ error: e.code || 'error', message: e.message }, e.status);
@@ -197,6 +200,32 @@ async function gridArea(env, body, json, cors) {
     for (const n of r.sizes) { dv.setUint32(o, n); o += 4; out.set(parts[i].subarray(p, p + n), o); o += n; p += n; }
   });
   return new Response(out, { headers: { ...cors, 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Grid-Updated': idx.actualizado || '', 'Access-Control-Expose-Headers': 'X-Grid-Updated' } });
+}
+
+/* ── Grid: address search (Esri World Geocoding Service) ── */
+// The ArcGIS key stays here; the portal sends no referrer, so a browser-side key couldn't be restricted.
+// Results are only shown, never stored, and only on the Esri basemap (Esri's terms).
+const GEOCODER = 'https://geocode-api.arcgis.com/arcgis/rest/services/World/GeocodeServer/';
+async function geocode(env, op, body, json) {
+  if (!env.ESRI_KEY) return json({ error: 'not_configured', message: 'Address search is not configured yet.' }, 503);
+  const text = String(body.text || '').trim().slice(0, 200);
+  if (text.length < 3) return json(op === 'suggest' ? { suggestions: [] } : { error: 'bad_request', message: 'Type at least 3 characters.' }, op === 'suggest' ? 200 : 400);
+  const q = new URLSearchParams({ f: 'json', countryCode: 'MEX', langCode: 'es', token: env.ESRI_KEY });
+  // Bias suggestions toward the point the map is showing, when there is one
+  const lat = Number(body.lat), lon = Number(body.lon);
+  if (isFinite(lat) && isFinite(lon) && body.lat != null && body.lon != null) q.set('location', `${lon},${lat}`);
+  if (op === 'suggest') { q.set('text', text); q.set('maxSuggestions', '6'); }
+  else {
+    q.set('singleLine', text); q.set('maxLocations', '1'); q.set('outFields', 'Match_addr');
+    if (typeof body.magicKey === 'string' && body.magicKey.length < 500) q.set('magicKey', body.magicKey);
+  }
+  const r = await fetch(GEOCODER + (op === 'suggest' ? 'suggest' : 'findAddressCandidates') + '?' + q);
+  const d = await r.json().catch(() => null);
+  if (!r.ok || !d || d.error) { console.error('geocode', r.status, d && d.error); return json({ error: 'unavailable', message: 'Address search is temporarily unavailable.' }, 502); }
+  if (op === 'suggest') return json({ suggestions: (d.suggestions || []).map(x => ({ text: x.text, magicKey: x.magicKey })) });
+  const c = (d.candidates || [])[0];
+  if (!c || !c.location) return json({ error: 'not_found', message: 'No place found for that search.' }, 404);
+  return json({ label: c.address, lat: c.location.y, lon: c.location.x, score: c.score });
 }
 
 /* ── Admin: read a CFE bill PDF ───────────────────── */

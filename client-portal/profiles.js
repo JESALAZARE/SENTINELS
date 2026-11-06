@@ -4,7 +4,7 @@
    widgets, default layout, look and Sentinel One wording.
      supply  Supply client (CFE basic service or Qualified Supply): full portal.
      trader  Comercializador: Dashboard, Sentinel One, Market Intelligence, Market Prices, MEM Insights, Hedge Contracts, Grid Map, Documents.
-     guest   Invitado: same experience as a trader, for trials with external users.
+     guest   Invitado: same experience as a trader (Grid Map included), for trials with external users.
    To add a feature for traders in a later stage, add its section to `nav`
    and its widgets to `cats` / `widgets` / `layout` below.
    Uses the global ME (index.html). */
@@ -25,7 +25,7 @@ const Profiles = (() => {
     },
     guest: {
       label: 'Guest', tag: 'Guest Access', theme: 'cp-theme-trader cp-theme-guest',
-      nav: ['dashboard', 'assistant', 'intelligence', 'prices', 'insights', 'hedges', 'documents', 'support'],
+      nav: ['dashboard', 'assistant', 'intelligence', 'prices', 'insights', 'hedges', 'grid', 'documents', 'support'],
       cats: ['Workspace', 'Market', 'Updates'], widgets: ['advisor'], recat: { advisor: 'Workspace' },
       title: 'Welcome to Sentinels', sub: 'Explore market intelligence, documents and Sentinel One',
       banner: 'You are using a guest account to explore the Sentinels platform. Contact your Sentinel advisor for full access.',

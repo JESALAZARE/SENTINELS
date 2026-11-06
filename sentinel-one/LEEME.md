@@ -92,6 +92,26 @@ Los archivos se generan en la carpeta local de la red (`Downloads\CFE_Red_MT_Nac
 4. Vuelve a pegar `sentinel-one/worker.js` (Edit code → Deploy).
 5. Prueba: abre `https://sentinel-one.TU-CUENTA.workers.dev/health`; debe decir `"grid":true`.
 
-La pestaña **Grid Map** aparece a los clientes *Supply* y *Comercializador* que tienen activado
+La pestaña **Grid Map** aparece a los clientes *Supply*, *Comercializador* e *Invitado* que tienen activado
 Sentinel One (usa el mismo pase). Para actualizar la red, vuelve a generar las celdas y reemplaza
 los archivos en R2 y vuelve a hacer **Deploy** del Worker (el índice se guarda en memoria hasta una hora).
+
+### Buscador de direcciones (Esri)
+
+En Grid Map el usuario puede escribir una dirección, colonia, parque industrial o empresa en lugar
+de coordenadas. La búsqueda usa el **World Geocoding Service de Esri** a través de este Worker
+(la llave queda oculta aquí). Plan gratis: 20,000 búsquedas al mes.
+
+1. Crea una cuenta gratis de **ArcGIS Location Platform** en <https://location.arcgis.com/sign-up/>.
+2. En el portal de desarrollador: **Content → New item → Developer credentials → API key credentials**.
+   Nómbrala `Sentinels Grid`. En **Privileges** marca solo **Location services → Geocoding**
+   (no marques "stored" / almacenamiento). Fecha de expiración: la más lejana que permita
+   (anota cuándo vence para renovarla).
+3. Genera y **copia** la llave (empieza con `AAPT`).
+4. En el Worker `sentinel-one`: **Settings → Variables and Secrets → Add** → tipo **Secret**,
+   nombre `ESRI_KEY`, valor la llave. Guarda.
+5. Vuelve a pegar `sentinel-one/worker.js` (Edit code → Deploy).
+6. Prueba: `/health` debe decir `"geocode":true`.
+
+Sin la llave, Grid Map sigue funcionando con coordenadas y enlaces de Google Maps; solo la
+búsqueda por dirección muestra "Address search is not enabled yet".

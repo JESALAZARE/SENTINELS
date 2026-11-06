@@ -1060,7 +1060,13 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
 @media (hover:none){ .cp-widget-grip{display:none} }
 /* ── Grid Map ── */
 .cp-gr-card{padding:16px;margin-bottom:16px}
-.cp-gr-coord input{width:240px}
+.cp-gr-search{position:relative}
+.cp-gr-search input{width:100%}
+.cp-gr-coord{flex:1 1 240px;max-width:520px}
+.cp-gr-sug{position:absolute;z-index:1200;left:0;right:0;top:calc(100% + 4px);margin:0;padding:4px 0;list-style:none;background:var(--white);border:1px solid var(--border-default);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);max-height:280px;overflow-y:auto}
+.cp-gr-sug li{padding:9px 12px;font-size:13px;line-height:1.35;color:var(--ink-900);cursor:pointer}
+.cp-gr-sug li:hover,.cp-gr-sug li.is-act{background:#ECEFF2}
+.cp-gr-clear{height:36px}
 .cp-gr-go{height:36px;font-size:13px;padding:0 18px}
 .cp-gr-loc{height:36px}
 .cp-gr-hint{margin-top:10px}
@@ -1098,6 +1104,9 @@ body{font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--ink
   .cp-gr-coord input{width:100%}
   .cp-gr-go{grid-column:1 / -1;width:100%;height:44px;font-size:16px;order:3}
   .cp-gr-loc{height:44px;justify-content:center;order:2}
+  .cp-gr-clear{height:44px;justify-content:center;order:4;grid-column:1 / -1;width:100%;margin-left:0}
+  .cp-gr-coord{max-width:none}
+  .cp-gr-sug li{padding:12px;font-size:15px}
   .cp-gr-map{height:55vh;height:55dvh;min-height:320px}
   .cp-gr-legend{gap:6px 10px}
   .cp-gr-base{height:36px}
