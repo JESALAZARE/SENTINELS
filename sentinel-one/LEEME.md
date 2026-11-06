@@ -113,10 +113,16 @@ con `node capas_portal\a_capas.js` → `capas_portal\transmision.json.gz` y `cap
 
 Para actualizar una capa, vuelve a correr `a_capas.js` y reemplaza el archivo en R2.
 
-**Centrales (switch Generation en Power).** Se generan desde
-`CENTRALES ELECTRICAS\PERMISOS MEXICO 2026.xlsx` con `node capas_portal\a_generacion.js`
-→ `capas_portal\generacion.json.gz` (~10 KB). Súbelo a `capas/` como `capas/generacion.json.gz`
-y vuelve a pegar el Worker (la ruta `/capa` ya acepta `generacion`).
+**Centrales (switch Generation en Power y Natural Gas).** Juntan dos fuentes:
+`CENTRALES ELECTRICAS\PERMISOS MEXICO 2026.xlsx` (Global Energy Monitor, gas y petróleo) y los
+permisos vigentes de generación de la CNE (`CNE_Permisos_RAW.csv`). Desde `capas_portal`:
+
+1. `node cne_ubicar.js "ruta\CNE_Permisos_RAW.csv"`: ubica cada permiso (coordenadas escritas en la
+   dirección = exacta; si no, centro del municipio o del estado con OpenStreetMap; guarda caché en
+   `geocache.json`, así que repetirlo es rápido).
+2. `node a_generacion.js "ruta\CNE_Permisos_RAW.csv"` → `generacion.json.gz`. Los permisos que ya
+   están en GEM no se duplican; la lista de cruces queda en `cruces_gem_cne.csv` para revisarla.
+3. Sube `generacion.json.gz` a `capas/` (reemplaza el anterior). El Worker no cambia.
 
 ### Buscador de direcciones (Esri)
 
