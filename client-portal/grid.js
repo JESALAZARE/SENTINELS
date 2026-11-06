@@ -292,7 +292,7 @@ const GridPage = (() => {
     if (m !== 'dist') {
       try { await ensurePack(m); } catch (e) { msg(_esc(e.message), true); return; }
       if (mode !== m) return;
-      packs[m].group.addTo(map); legend(); scaleSubs();
+      packs[m].group.addTo(map); legend(); scaleSubs(); plantsToFront();
     }
     applyGen();
     if (point) {
@@ -404,7 +404,7 @@ const GridPage = (() => {
         if (p.label) msg(`Loading the grid within ${km} km of <b>${_esc(p.label)}</b>…`);
         const { cells, updated } = await fetchArea(p.lat, p.lon, km);
         data = { ...assemble(cells, p.lat, p.lon, km), lat: p.lat, lon: p.lon, km, updated };
-        drawPin(); draw(); msgResult();
+        drawPin(); draw(); msgResult(); plantsToFront();
         if (gen) genRows();
       } else {
         await ensurePack(mode);
@@ -607,7 +607,7 @@ const GridPage = (() => {
   function toggleLayer(key) {
     const pk = packs[mode]; if (!pk || !pk.sub[key]) return;
     if (pk.on.has(key)) { pk.on.delete(key); pk.group.removeLayer(pk.sub[key]); }
-    else { pk.on.add(key); pk.sub[key].addTo(pk.group); for (const k of ['se', 'gnl']) if (k !== key && pk.on.has(k)) pk.sub[k].eachLayer(l => l.bringToFront()); }
+    else { pk.on.add(key); pk.sub[key].addTo(pk.group); for (const k of ['se', 'gnl']) if (k !== key && pk.on.has(k)) pk.sub[k].eachLayer(l => l.bringToFront()); plantsToFront(); }
     legend();
     if (point) nearby();
   }
@@ -699,9 +699,11 @@ const GridPage = (() => {
   }
   function unfocus() {
     const pk = packs[mode], f = pk && focused != null && pk.feats[focused];
-    if (f) f.layer.setStyle(f.layer.options.base);
+    if (f) { f.layer.setStyle(f.layer.options.base); plantsToFront(); }
     focused = null;
   }
+  // Power plants above every line and point on the shared canvas
+  function plantsToFront() { if (gen && map && map.hasLayer(gen.group)) gen.group.eachLayer(l => l.bringToFront()); }
 
   /* ── Generation: power plants overlay (Power section) ── */
   const genVisible = () => genOn;
@@ -714,7 +716,7 @@ const GridPage = (() => {
     try { await ensureGen(); } catch (e) { $('gr-gcount').textContent = e.message; $('gr-gcount').classList.add('cp-gr-err'); return; }
     if (!genVisible()) return;
     $('gr-gcount').classList.remove('cp-gr-err');
-    gen.group.addTo(map); genFilters(); filterGen();
+    gen.group.addTo(map); genFilters(); filterGen(); plantsToFront();
   }
 
   let _genLoad = null;
@@ -724,11 +726,11 @@ const GridPage = (() => {
       const r = await post('/capa', { name: 'generacion' });
       if (!r.ok) { let t = ''; try { t = (await r.json()).message; } catch {} throw new Error(t || 'The power plant layer is temporarily unavailable.'); }
       const pack = JSON.parse(await gunzip(new Uint8Array(await r.arrayBuffer())));
-      // Plants draw on their own canvas above every network layer
-      if (!map.getPane('plants')) map.createPane('plants').style.zIndex = 450;
-      const rend = L.canvas({ pane: 'plants', padding: 0.3, tolerance: 4 }), group = L.layerGroup();
+      // Plants share the map's canvas with the network layers (a canvas of their own would swallow every
+      // click meant for the pipelines and lines underneath) and are kept on top with plantsToFront()
+      const group = L.layerGroup();
       const plants = pack.plants.map((p, id) => {
-        const layer = L.circleMarker([p.lat, p.lon], { renderer: rend, pane: 'plants' })
+        const layer = L.circleMarker([p.lat, p.lon], { renderer })
           .on('click', ev => { L.DomEvent.stopPropagation(ev); focusPlant(id, false); });
         layer.bindTooltip(_esc(p.name));
         return { ...p, id, layer, shown: [], mw: 0 };
@@ -827,7 +829,7 @@ const GridPage = (() => {
     p.layer.setStyle({ color: INK, weight: 3 }); p.layer.bringToFront();
     // In Natural Gas, highlight the pipeline that reaches it
     const np = gasMode() && nearestPipe(p);
-    if (np) { genPipe = np.f; np.f.layer.setStyle({ color: INK, weight: 4.5, opacity: 1 }); np.f.layer.bringToFront(); }
+    if (np) { genPipe = np.f; np.f.layer.setStyle({ color: INK, weight: 4.5, opacity: 1 }); np.f.layer.bringToFront(); p.layer.bringToFront(); }
     const yrs = [...new Set(p.shown.map(u => u.start).filter(Boolean))].sort();
     const units = p.shown.map(u => `<tr><td>${_esc(u.unit || '—')}</td><td>${fmt(u.mw)}</td><td>${_esc(u.tech)}</td><td>${_esc(u.status)}</td><td>${u.start || '—'}</td></tr>`).join('');
     const line = (k, v) => v ? `${k}: ${_esc(String(v))}<br>` : '';
@@ -848,7 +850,7 @@ const GridPage = (() => {
   function unfocusPlant() {
     const p = gen && genFocus != null && gen.plants[genFocus];
     if (p) p.layer.setStyle(p.layer.options.base);
-    if (genPipe) { genPipe.layer.setStyle(genPipe.layer.options.base); genPipe = null; }
+    if (genPipe) { genPipe.layer.setStyle(genPipe.layer.options.base); genPipe = null; plantsToFront(); }
     genFocus = null;
   }
 
