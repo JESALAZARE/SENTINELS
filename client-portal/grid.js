@@ -6,7 +6,9 @@
    the Sentinel One Worker, which checks the client's signed pass (ME.ai)
    and returns only the 0.1° cells around the point (gzip JSON each, see
    the Worker's gridArea). Leaflet is loaded on first use, pinned with SRI.
-   Uses the globals ME, MY_ID, _esc (index.html) and Xlsx (xlsx.js). */
+   Hosting capacity figures are kept in the data (they drive the line
+   colours) but hidden from the page while SHOW_CAPACITY is false.
+   Uses the globals ME, MY_ID and _esc (index.html). */
 const GridPage = (() => {
   const LEAFLET = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
   const SRI = {
@@ -20,6 +22,9 @@ const GridPage = (() => {
       'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}']
   };
   const RADII = [1, 2, 5, 10, 15], CELL = 0.1, Q = 1e5;
+  // Capacity figures (MW, %, CRE limit) stay hidden; set to true to show them again
+  const SHOW_CAPACITY = false;
+  const COLS = SHOW_CAPACITY ? 6 : 4;
   // Colour by share of hosting capacity still available
   const BANDS = [
     { min: 50, color: '#1F9D55', label: '≥ 50% available' },
@@ -93,14 +98,11 @@ const GridPage = (() => {
         <div class="cp-card cp-gr-side">
           <div class="cp-gr-sidehead">
             <div><div class="cp-widget-title">Nearby circuits</div><div class="cp-pr-note" id="gr-count">—</div></div>
-            <button type="button" class="cp-pr-dl" id="gr-xlsx" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>Excel</button>
           </div>
           <div class="cp-pr-scroll cp-gr-scroll"><table class="cp-mini-table cp-gr-table">
-            <thead><tr><th>Circuit</th><th>Substation</th><th>kV</th><th>Avail. MW</th><th>Avail.</th><th>Dist. km</th></tr></thead>
-            <tbody id="gr-rows"><tr><td colspan="6" class="cp-gr-empty">Load an area to see its circuits.</td></tr></tbody>
+            <thead><tr><th>Circuit</th><th>Zone</th><th>kV</th>${SHOW_CAPACITY ? '<th>Avail. MW</th><th>Avail.</th>' : ''}<th>Nearest line km</th></tr></thead>
+            <tbody id="gr-rows"><tr><td colspan="${COLS}" class="cp-gr-empty">Load an area to see its circuits.</td></tr></tbody>
           </table></div>
-          <div class="cp-pr-note cp-gr-src" id="gr-src">Source: CFE distributed generation map. Capacity per circuit as published by CFE; it is indicative and CFE confirms it in the interconnection study.</div>
         </div>
       </div>`;
     $('gr-form').addEventListener('submit', e => { e.preventDefault(); if (sugActive >= 0) pick(sugActive); else { hideSug(); load(); } });
@@ -116,7 +118,6 @@ const GridPage = (() => {
     inp.addEventListener('blur', () => setTimeout(hideSug, 150));
     $('gr-sug').addEventListener('mousedown', e => { const li = e.target.closest('li[data-i]'); if (li) { e.preventDefault(); pick(Number(li.dataset.i)); } });
     $('gr-base').addEventListener('click', toggleBase);
-    $('gr-xlsx').addEventListener('click', download);
     $('gr-rows').addEventListener('click', e => { const tr = e.target.closest('tr[data-c]'); if (tr) select(tr.dataset.c, true); });
     built = true;
   }
@@ -179,8 +180,8 @@ const GridPage = (() => {
     store.set({ km: Number($('gr-km').value) });
     data = null; selected = null;
     if (map) { map.closePopup(); layers.clearLayers(); map.setView([23.6, -102.5], 5); }
-    $('gr-rows').innerHTML = '<tr><td colspan="6" class="cp-gr-empty">Load an area to see its circuits.</td></tr>';
-    $('gr-count').textContent = '—'; $('gr-xlsx').disabled = true;
+    $('gr-rows').innerHTML = `<tr><td colspan="${COLS}" class="cp-gr-empty">Load an area to see its circuits.</td></tr>`;
+    $('gr-count').textContent = '—';
     msg('Search an address, industrial park or company, or type coordinates, and choose a radius.');
     $('gr-coord').focus();
   }
@@ -329,15 +330,14 @@ const GridPage = (() => {
 
   function rows() {
     const list = data.list;
-    $('gr-count').textContent = list.length ? `${list.length} circuits · ${fmt(list.reduce((s, c) => s + (c.out ? 0 : c.avail || 0), 0) / 1000, 1)} MW available` : 'No circuits';
+    const mw = SHOW_CAPACITY ? ` · ${fmt(list.reduce((s, c) => s + (c.out ? 0 : c.avail || 0), 0) / 1000, 1)} MW available` : '';
+    $('gr-count').textContent = list.length ? `${list.length} circuit${list.length === 1 ? '' : 's'}${mw}` : 'No circuits';
     $('gr-rows').innerHTML = list.length ? list.map(c => `<tr data-c="${_esc(c.code)}" class="${selected === c.code ? 'is-sel' : ''}">
         <td><i class="cp-gr-dot" style="background:${colorOf(c)}"></i>${_esc(c.code)}</td>
-        <td title="${_esc(c.subName)}">${_esc(c.sub || '')}${c.subName ? ' · ' + _esc(c.subName) : ''}</td>
-        <td>${fmt(c.kv, 1)}</td><td>${c.out ? 'Out' : fmt(c.avail / 1000, 2)}</td>
-        <td>${c.pct == null ? '—' : fmt(c.pct) + '%'}</td><td>${fmt(c.near, 2)}</td></tr>`).join('')
-      : '<tr><td colspan="6" class="cp-gr-empty">No circuits in this area.</td></tr>';
-    $('gr-xlsx').disabled = !list.length;
-    $('gr-src').textContent = `Source: CFE distributed generation map${data.updated ? ' (' + data.updated + ')' : ''}. Capacity per circuit as published by CFE; it is indicative and CFE confirms it in the interconnection study.`;
+        <td>${_esc(c.division || '—')}</td><td>${fmt(c.kv, 1)}</td>
+        ${SHOW_CAPACITY ? `<td>${c.out ? 'Out' : fmt(c.avail / 1000, 2)}</td><td>${c.pct == null ? '—' : fmt(c.pct) + '%'}</td>` : ''}
+        <td>${fmt(c.near, 2)}</td></tr>`).join('')
+      : `<tr><td colspan="${COLS}" class="cp-gr-empty">No circuits in this area.</td></tr>`;
   }
 
   function select(code, fit, at) {
@@ -345,12 +345,13 @@ const GridPage = (() => {
     selected = code;
     for (const x of data.list) x.layers.forEach(l => l.setStyle({ ...l.options.base, opacity: x === c ? 1 : .35 }));
     c.layers.forEach(l => { l.setStyle({ color: '#0F1B2D', weight: 4.5 }); l.bringToFront(); });
-    const html = `<div class="cp-gr-pop"><b>${_esc(c.code)}</b><br>
-      Substation: ${_esc(c.sub || '—')}${c.subName ? ' · ' + _esc(c.subName) : ''}<br>
-      ${_esc(c.division || '')}${c.kv ? ' · ' + fmt(c.kv, 1) + ' kV' : ''}<br>
-      Total capacity: ${fmt(c.total / 1000, 2)} MW<br>Installed DG: ${fmt(c.inst / 1000, 2)} MW<br>
+    const cap = SHOW_CAPACITY ? `Total capacity: ${fmt(c.total / 1000, 2)} MW<br>Installed DG: ${fmt(c.inst / 1000, 2)} MW<br>
       Available: <b>${c.out ? 'out of service' : fmt(c.avail / 1000, 2) + ' MW'}</b>${c.pct == null ? '' : ' (' + fmt(c.pct) + '%)'}<br>
-      CRE limit per project: ${fmt(c.cre)} kW<br>Nearest line: ${fmt(c.near, 2)} km</div>`;
+      CRE limit per project: ${fmt(c.cre)} kW<br>` : '';
+    const html = `<div class="cp-gr-pop"><b>${_esc(c.code)}</b><br>
+      Zone: ${_esc(c.division || '—')}<br>
+      Voltage: ${c.kv ? fmt(c.kv, 1) + ' kV' : '—'}<br>
+      ${cap}Nearest line: <b>${fmt(c.near, 2)} km</b></div>`;
     const b = L.latLngBounds(c.layers.flatMap(l => l.getLatLngs().flat(2)));
     L.popup({ maxWidth: 280 }).setLatLng(at || b.getCenter()).setContent(html).openOn(map);
     if (fit) map.fitBounds(b, { padding: [30, 30], maxZoom: 16 });
@@ -362,19 +363,6 @@ const GridPage = (() => {
     selected = null;
     for (const x of data.list) x.layers.forEach(l => l.setStyle(l.options.base));
     rows();
-  }
-
-  function download() {
-    if (!data || !data.list.length) return;
-    const n = v => v == null ? '' : v;
-    Xlsx.download(`grid_${data.lat.toFixed(4)}_${data.lon.toFixed(4)}_${data.km}km.xlsx`, [{
-      name: 'Circuits',
-      columns: [{ title: 'Circuit', width: 12 }, { title: 'Substation', width: 10 }, { title: 'Substation name', width: 26 }, { title: 'Division', width: 16 },
-        { title: 'kV', width: 7, fmt: '0.00' }, { title: 'Total capacity kW', width: 16, fmt: '0' }, { title: 'Installed DG kW', width: 15, fmt: '0' },
-        { title: 'Available kW', width: 13, fmt: '0' }, { title: 'Available %', width: 11, fmt: '0.00' }, { title: 'CRE limit kW', width: 12, fmt: '0' },
-        { title: 'Out of service', width: 13 }, { title: 'Distance km', width: 11, fmt: '0.00' }],
-      rows: data.list.map(c => [c.code, c.sub, c.subName, c.division, n(c.kv), n(c.total), n(c.inst), n(c.avail), c.pct == null ? '' : Math.round(c.pct * 100) / 100, n(c.cre), c.out ? 'Yes' : 'No', Math.round(c.near * 100) / 100])
-    }]);
   }
 
   return { init, show };
