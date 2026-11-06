@@ -24,7 +24,7 @@ const GridPage = (() => {
   const RADII = [1, 2, 5, 10, 15], CELL = 0.1, Q = 1e5;
   // Capacity figures (MW, %, CRE limit) stay hidden; set to true to show them again
   const SHOW_CAPACITY = false;
-  const COLS = SHOW_CAPACITY ? 6 : 4;
+  const COLS = SHOW_CAPACITY ? 7 : 5;
   // Colour by share of hosting capacity still available
   const BANDS = [
     { min: 50, color: '#1F9D55', label: '≥ 50% available' },
@@ -100,7 +100,7 @@ const GridPage = (() => {
             <div><div class="cp-widget-title">Nearby circuits</div><div class="cp-pr-note" id="gr-count">—</div></div>
           </div>
           <div class="cp-pr-scroll cp-gr-scroll"><table class="cp-mini-table cp-gr-table">
-            <thead><tr><th>Circuit</th><th>Zone</th><th>kV</th>${SHOW_CAPACITY ? '<th>Avail. MW</th><th>Avail.</th>' : ''}<th>Nearest line km</th></tr></thead>
+            <thead><tr><th>Circuit</th><th>Substation</th><th>Zone</th><th>kV</th>${SHOW_CAPACITY ? '<th>Avail. MW</th><th>Avail.</th>' : ''}<th>Nearest line km</th></tr></thead>
             <tbody id="gr-rows"><tr><td colspan="${COLS}" class="cp-gr-empty">Load an area to see its circuits.</td></tr></tbody>
           </table></div>
         </div>
@@ -334,6 +334,7 @@ const GridPage = (() => {
     $('gr-count').textContent = list.length ? `${list.length} circuit${list.length === 1 ? '' : 's'}${mw}` : 'No circuits';
     $('gr-rows').innerHTML = list.length ? list.map(c => `<tr data-c="${_esc(c.code)}" class="${selected === c.code ? 'is-sel' : ''}">
         <td><i class="cp-gr-dot" style="background:${colorOf(c)}"></i>${_esc(c.code)}</td>
+        <td title="${_esc(c.subName)}">${_esc(c.sub || '')}${c.subName ? ' · ' + _esc(c.subName) : ''}</td>
         <td>${_esc(c.division || '—')}</td><td>${fmt(c.kv, 1)}</td>
         ${SHOW_CAPACITY ? `<td>${c.out ? 'Out' : fmt(c.avail / 1000, 2)}</td><td>${c.pct == null ? '—' : fmt(c.pct) + '%'}</td>` : ''}
         <td>${fmt(c.near, 2)}</td></tr>`).join('')
@@ -349,6 +350,7 @@ const GridPage = (() => {
       Available: <b>${c.out ? 'out of service' : fmt(c.avail / 1000, 2) + ' MW'}</b>${c.pct == null ? '' : ' (' + fmt(c.pct) + '%)'}<br>
       CRE limit per project: ${fmt(c.cre)} kW<br>` : '';
     const html = `<div class="cp-gr-pop"><b>${_esc(c.code)}</b><br>
+      Substation: ${_esc(c.sub || '—')}${c.subName ? ' · ' + _esc(c.subName) : ''}<br>
       Zone: ${_esc(c.division || '—')}<br>
       Voltage: ${c.kv ? fmt(c.kv, 1) + ' kV' : '—'}<br>
       ${cap}Nearest line: <b>${fmt(c.near, 2)} km</b></div>`;
